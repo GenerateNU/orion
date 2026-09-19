@@ -1,9 +1,7 @@
 """MetricService -- computes derived metrics over completed VehicleState sequences."""
  
-from __future__ import annotations
-
-from models.metrics import AnalysisResult
-from models.vehicle import VehicleState
+from backend.models.metrics import AnalysisResult
+from backend.models.vehicle import VehicleState
  
  
 class MetricService:

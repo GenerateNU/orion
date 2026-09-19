@@ -3,9 +3,8 @@
 CleanService -- normalizes raw, ambiguously-labeled sensors and gives them common names.
 """
  
-from __future__ import annotations
  
-from models.sensor import CleanedReading, RawSensorReading
+from backend.models.sensor import CleanedReading, RawSensorReading
  
 class CleanService:
     def clean(self, raw_readings: list[RawSensorReading]) -> list[CleanedReading]:
