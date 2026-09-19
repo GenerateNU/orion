@@ -15,4 +15,4 @@ class DataPoint(BaseModel):
     dataTypeName: str
     time: datetime
     runId: str
-    values: list[float]
+    values: list[float]  
