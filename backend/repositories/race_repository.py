@@ -1,12 +1,11 @@
 class RaceRepository:
 
-    # Get races
+    # Get all races
     def get_races(self, date):
         return [
             {
-                "race_id": 1,
-                "name": "Example Race",
-                "date": date or "2026-05-14",
+                "name": "Northeastern Electric Racing",
+                "dates": date or "2026-05-14",
             }
         ]
 
@@ -103,4 +102,23 @@ class RaceRepository:
             "race_id": race_id,
             "lap_number": lap_number,
             "average_speed": 42.0,
+        }
+    
+    # Get a specific race as well 
+
+    def get_specific_race(self, race_id):
+        return {
+            "race_id": race_id, 
+            "name": "Sample Race",
+            "date": "2026-09-10"
+        }
+    
+    #energy consumption per lap 
+    def get_lap_energy(self, race_id, lap_number):
+        return {
+            "race_id": race_id,
+            "lap_number": lap_number,
+            "energy_consumption": 1.82,
+            "energy_regenerated": 0.34,
+            "net_energy": 1.48
         }

@@ -6,7 +6,10 @@ class RaceService:
     '''
         intermediate layer between controller and repository.
         this is where you can add logic, validation,
-        or any other processing before sending the data to the controller
+        or any other processing before sending the data to the controller. 
+
+        If we end up doing math in between our data and what needs to get pulled 
+        (if we put in two specific positions get the data between that)
     '''
 
     def __init__(self):
@@ -44,6 +47,9 @@ class RaceService:
             max_lon
         )
 
+    def get_energy(self, race_id, lap_number):
+        return self.repository.get_lap_energy(race_id, lap_number)
+    
     def get_average_speed(self, race_id: int, lap_number: int):
         # Ask the repository for average speed.
         return self.repository.get_average_speed(
@@ -84,3 +90,6 @@ class RaceService:
             end_latitude,
             end_longitude
         )
+
+    def get_race(self, race_id):
+        return self.repository.get_race(race_id)
