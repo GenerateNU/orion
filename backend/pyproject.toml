@@ -18,5 +18,8 @@ dev = [
 [tool.ruff]
 line-length = 88
 
+[tool.ruff.lint]
+ignore = ["EXE002"]
+
 [tool.pytest.ini_options]
 pythonpath = ["."]

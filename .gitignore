@@ -3,6 +3,11 @@ dist/
 coverage/
 __pycache__/
 *.pyc
+.venv/
+.pytest_cache/
+.ruff_cache/
+.coverage
+htmlcov/
 .env
 .DS_Store
 .claude
