@@ -24,7 +24,7 @@ class RaceService:
         # Ask the repository for all laps in a race.
         return self.repository.get_laps(race_id)
 
-    def get_lap(self, race_id: int, lap_number: int):
+    def get_specific_lap(self, race_id: int, lap_number: int):
         # Ask the repository for one specific lap.
         return self.repository.get_lap(race_id, lap_number)
 
