@@ -51,11 +51,8 @@ class OrionSchemaError(OrionError):
 class OrionValidationError(OrionError):
     """A record was rejected rather than written.
 
-    Raised in both directions. On write, the record did not satisfy the
-    repository's model and the whole batch was abandoned before any
-    connection was opened. On verify, a row already stored in OrionDB would
-    not parse back into the model, which means the table has drifted from the
-    code.
+    The record did not satisfy the repository's model and the whole batch was
+    abandoned before any connection was opened.
 
     Also covers a constraint the database enforces but the model does not: the
     row passed validation here and was still refused by Postgres, so the two

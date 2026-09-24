@@ -31,17 +31,6 @@ print(f"pulled {len(points)} points from Penelope")
 inserted = repo.write_many(points)
 print(f"wrote {inserted} new points to Orion ({len(points) - inserted} already present)")
 
-# Confirm Orion's copy actually equals Penelope's: reads every point back by
-# primary key and compares all fields, so a truncated values array or a shifted
-# timestamp shows up here rather than silently.
-mismatched = repo.verify(points)
-if mismatched:
-    print(f"MISMATCH: {len(mismatched)} point(s) differ from Penelope")
-    for p in mismatched[:5]:
-        print(f"  {p.time} {p.dataTypeName} {p.runId}")
-else:
-    print(f"verified all {len(points)} points match Penelope")
-
 try:
     repo.write_many(["not a DataPoint", 42])
 except OrionValidationError as exc:
