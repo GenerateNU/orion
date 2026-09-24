@@ -1,5 +1,6 @@
 import os
 from datetime import datetime
+import numpy as np 
 
 from pydantic import ValidationError
 from sqlalchemy import MetaData, create_engine, select
@@ -83,31 +84,31 @@ class PenelopeClient:
         )
         return cls(create_engine(url))
 
-    def _to_datapoints(self, rows) -> list[DataPoint]:
-        """Convert raw `data` rows into DataPoint models.
+    def _to_array(self, rows) -> np.ndarray:
+        """Convert raw `data` rows into a NumPy 2D array.
+
+        Columns: [time, dataTypeName, runId, values]
 
         Raises:
-            PenelopeValidationError: A row did not match the DataPoint model.
+            PenelopeValidationError: A row did not match the expected shape.
         """
-        points = []
-        # A loop rather than a comprehension so a failing row can be named.
-        # Pydantic reports which field broke, but across millions of rows that
-        # alone is not enough to track down the bad record.
+
+        validated_rows = []
         for index, row in enumerate(rows):
             mapping = dict(row._mapping)
             try:
-                points.append(DataPoint(**mapping))
+                point = DataPoint(**mapping)
             except ValidationError as exc:
-                # .get() rather than [] -- the field worth naming in the error
-                # may be exactly the one that is missing.
                 raise PenelopeValidationError(
                     f"Row {index} did not match DataPoint "
                     f"(runId={mapping.get('runId')!r}, time={mapping.get('time')!r}). "
                     "Penelope's schema may have changed."
                 ) from exc
-        return points
+            validated_rows.append([point.time, point.dataTypeName, point.runId, point.values])
+            
+        return np.array(validated_rows, dtype=object)
 
-    def _fetch(self, stmt) -> list[DataPoint]:
+    def _fetch(self, stmt) -> np.ndarray:
         """Run a SELECT against Penelope and convert the rows to DataPoints.
 
         Shared by every query method so the connection handling lives in one
@@ -135,9 +136,9 @@ class PenelopeClient:
                 "Query against PenelopeDB failed. Check that the connecting role "
                 "has SELECT on `data`."
             ) from exc
-        return self._to_datapoints(rows)
+        return self._to_array(rows)
 
-    def get_all(self) -> list[DataPoint]:
+    def get_all(self) -> np.ndarray:
         """Fetch every row in `data`.
 
         Raises:
@@ -147,7 +148,7 @@ class PenelopeClient:
         """
         return self._fetch(select(self.data_table))
 
-    def get_by_run_id(self, run_id: str) -> list[DataPoint]:
+    def get_by_run_id(self, run_id: str) -> np.ndarray:
         """Fetch all `data` rows for a single run.
 
         Raises:
@@ -158,7 +159,7 @@ class PenelopeClient:
         stmt = select(self.data_table).where(self.data_table.c.runId == run_id)
         return self._fetch(stmt)
 
-    def get_by_time_bounds(self, start: datetime, end: datetime) -> list[DataPoint]:
+    def get_by_time_bounds(self, start: datetime, end: datetime) -> np.ndarray:
         """Fetch all `data` rows with `time` between start and end (inclusive).
 
         Raises:
@@ -170,3 +171,26 @@ class PenelopeClient:
             self.data_table.c.time >= start, self.data_table.c.time <= end
         )
         return self._fetch(stmt)
+
+    def get_all_paginated(self, batch_size: int = 5000):
+
+      """Yields batches of rows as NumPy arrays, using cursor pagination on `time`."""
+      last_time = None
+      while True:
+
+            # LIMIT keeps each page a fixed, bounded size.
+            stmt = select(self.data_table).order_by(self.data_table.c.time).limit(batch_size)
+
+            # First page has no cursor yet. Every page after that starts after last row is yielded
+            if last_time is not None:
+                stmt = stmt.where(self.data_table.c.time > last_time)
+
+            with self.engine.connect() as conn:
+                rows = conn.execute(stmt).fetchall()
+
+            if not rows: 
+                break
+
+            # hand this page off before fetching the next one so the whole table is never held in memory at once.
+            yield self._to_array(rows)
+            last_time = rows[-1].time
