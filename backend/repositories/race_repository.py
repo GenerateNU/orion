@@ -24,7 +24,7 @@ class RaceRepository:
         ]
 
     # Get one lap
-    def get_lap(self, race_id, lap_number):
+    def get_specific_lap(self, race_id, lap_number):
         return {
             "race_id": race_id,
             "lap_number": lap_number,
