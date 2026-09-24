@@ -3,7 +3,6 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from controllers.race_controller import router as race_router
 
-
 app = FastAPI(title="orion")
 
 app.add_middleware(
