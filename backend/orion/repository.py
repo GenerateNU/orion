@@ -8,40 +8,55 @@ from sqlalchemy.engine import Engine
 from .schema import data_table
 from penelope.models import DataPoint
 
-ModelT = TypeVar("ModelT", bound=BaseModel)
+import numpy as np
 
-
-class Repository(Generic[ModelT]):
-    """Generic write-only repository: one Pydantic model <-> one Table."""
-
-    def __init__(self, engine: Engine, model: Type[ModelT], table: Table):
-        self.engine = engine
-        self.model = model
-        self.table = table
-
-    def write(self, record: ModelT) -> int:
-        return self.write_many([record])
-
-    def write_many(self, records: list[ModelT]) -> int:
-        """Insert records, skipping any whose primary key is already stored.
-
-        Returns the number of rows actually inserted.
-        """
-        if not records:
-            return 0
-        for r in records:
-            if not isinstance(r, self.model):
-                raise TypeError(f"expected {self.model.__name__}, got {type(r).__name__}")
-        rows =[r.model_dump(by_alias=True) for r in records]
-        # ON CONFLICT DO NOTHING lets overlapping pulls be re-written without
-        # erroring or duplicating rows. Existing rows are kept as-is.
-        stmt = insert(self.table).on_conflict_do_nothing()
-        with self.engine.begin() as conn:
-            return conn.execute(stmt, rows).rowcount
-
-
-class DataPointRepository(Repository[DataPoint]):
-    """Write-only repository for the `data` table."""
+class DataPointRepository:
+    """Generic write-only repository: np array <-> one Table."""
 
     def __init__(self, engine: Engine):
-        super().__init__(engine, DataPoint, data_table)
+        self.engine = engine
+        self.table = data_table
+
+    def write(self, rows: np.ndarray) -> int:
+        return self.write_many(rows.reshape(1, -1))
+
+    def write_many(self, rows: np.ndarray) -> int:
+        """Insert multiple rows from a 2D NumPy array.
+
+        Each row must be [time, dataTypeName, runId, values], matching
+        PenelopeClient's array output.
+
+        Returns:
+            The number of rows actually inserted (rows already present,
+            per the primary key, are silently skipped).
+        """
+        if rows.size == 0:
+            return 0
+
+        # Convert each array row into a dict matching the table's columns,
+        # since SQLAlchemy's insert() needs dicts, not raw array rows.
+        dicts = [
+            {
+                "time": row[0],
+                "dataTypeName": row[1],
+                "runId": row[2],
+                "values": row[3],
+            }
+            for row in rows
+        ]
+
+        # ON CONFLICT DO NOTHING makes re-writing the same window a no-op
+        # instead of an error, since (time, dataTypeName, runId) is the
+        # table's primary key.
+        #
+        # RETURNING is what keeps this fast: SQLAlchemy won't batch an
+        # ON CONFLICT insert into multi-row VALUES without it, and falls back
+        # to one network round trip per row. It also gives an accurate insert
+        # count, since skipped rows return nothing.
+        stmt = (
+            insert(self.table)
+            .on_conflict_do_nothing()
+            .returning(self.table.c.time)
+        )
+        with self.engine.begin() as conn:
+            return len(conn.execute(stmt, dicts).all())

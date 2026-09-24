@@ -4,10 +4,10 @@ load_dotenv()
 import os
 from datetime import datetime, timezone
 
+import numpy as np
 from sqlalchemy import create_engine
 
 from penelope.client import PenelopeClient
-from orion.exceptions import OrionValidationError
 from orion.repository import DataPointRepository
 
 url = os.environ.get("NEON_DB_URL")
@@ -31,9 +31,7 @@ print(f"pulled {len(points)} points from Penelope")
 inserted = repo.write_many(points)
 print(f"wrote {inserted} new points to Orion ({len(points) - inserted} already present)")
 
-try:
-    repo.write_many(["not a DataPoint", 42])
-except OrionValidationError as exc:
-    # The message names the offending index, so a bad record in a batch of
-    # thousands is findable.
-    print(f"correctly rejected invalid records: {str(exc).splitlines()[0]}")
+# An empty batch should short-circuit without touching the database.
+empty = np.empty((0, 4), dtype=object)
+assert repo.write_many(empty) == 0
+print("empty array correctly wrote 0 points")
