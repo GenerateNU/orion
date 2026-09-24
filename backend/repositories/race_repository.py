@@ -66,13 +66,6 @@ class RaceRepository:
             },
         ]
 
-    # Get average speed for a lap
-    def get_average_speed(self, race_id, lap_number):
-        return {
-            "race_id": race_id,
-            "lap_number": lap_number,
-            "average_speed": 45.2,
-        }
 
     # Get velocity at a position
     def get_velocity_at_position(
@@ -86,22 +79,6 @@ class RaceRepository:
             "latitude": latitude,
             "longitude": longitude,
             "speed": 40.0,
-        }
-
-    # Get average speed between two positions
-    def get_average_speed_between(
-        self,
-        race_id,
-        lap_number,
-        start_latitude,
-        start_longitude,
-        end_latitude,
-        end_longitude,
-    ):
-        return {
-            "race_id": race_id,
-            "lap_number": lap_number,
-            "average_speed": 42.0,
         }
     
     # Get a specific race as well 

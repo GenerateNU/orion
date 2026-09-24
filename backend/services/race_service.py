@@ -26,7 +26,21 @@ class RaceService:
 
     def get_lap(self, race_id: int, lap_number: int):
         # Ask the repository for one specific lap.
-        return self.repository.get_lap(race_id, lap_number)
+        lap = self.repository.get_lap(race_id, lap_number)
+        
+        positions = self.repository.get_positions(race_id, lap_number)
+        
+        #calculate average speed for the lap based on positions if available
+        if positions:
+            lap["average_speed"] = sum(p["speed"] for p in positions) / len(positions)
+        else:
+            lap["average_speed"] = None
+
+        #Include positions in the lap data
+        lap["positions"] = positions
+
+        return lap
+
 
     def get_positions(
         self,
@@ -47,15 +61,9 @@ class RaceService:
             max_lon
         )
 
-    def get_energy(self, race_id, lap_number):
+    def get_lap_energy(self, race_id, lap_number):
         return self.repository.get_lap_energy(race_id, lap_number)
     
-    def get_average_speed(self, race_id: int, lap_number: int):
-        # Ask the repository for average speed.
-        return self.repository.get_average_speed(
-            race_id,
-            lap_number
-        )
 
     def get_velocity_at_position(
         self,
@@ -72,24 +80,5 @@ class RaceService:
             longitude
         )
 
-    def get_average_speed_between(
-        self,
-        race_id: int,
-        lap_number: int,
-        start_latitude: float,
-        start_longitude: float,
-        end_latitude: float,
-        end_longitude: float
-    ):
-        # Ask the repository for average speed between two positions.
-        return self.repository.get_average_speed_between(
-            race_id,
-            lap_number,
-            start_latitude,
-            start_longitude,
-            end_latitude,
-            end_longitude
-        )
-
-    def get_race(self, race_id):
-        return self.repository.get_race(race_id)
+    def get_specific_race(self, race_id):
+        return self.repository.get_specific_race(race_id)

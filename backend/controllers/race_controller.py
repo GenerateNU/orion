@@ -60,11 +60,11 @@ def get_positions(
 
 # Get all lap information 
 @router.get("/{race_id}/laps/{lap_number}/energy")
-def get_energy(
+def get_lap_energy(
      race_id: int,
      lap_number: int,
 ): 
-    return service.get_energy(
+    return service.get_lap_energy(
         race_id,
         lap_number, 
 
@@ -86,31 +86,5 @@ def get_velocity_at_position(
     )
 
 """
-Endpoints for in between 2 positions 
-"""
-# Get average speed between two positions
-@router.get("/{race_id}/laps/{lap_number}/average-speed-between")
-def get_average_speed_between(
-    race_id: int,
-    lap_number: int,
-    start_latitude: float,
-    start_longitude: float,
-    end_latitude: float,
-    end_longitude: float,
-):
-    return service.get_average_speed_between(
-        race_id,
-        lap_number,
-        start_latitude,
-        start_longitude,
-        end_latitude,
-        end_longitude,
-    )
-"""
 General lap information
 """
-
-# Get average speed for a lap
-@router.get("/{race_id}/laps/{lap_number}/average-speed")
-def get_average_speed(race_id: int, lap_number: int):
-    return service.get_average_speed(race_id, lap_number)
