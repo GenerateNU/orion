@@ -4,12 +4,11 @@ Vehicle states: fixed-cadence rows out of the estimation pipeline. Based on CTRA
 to put into some fancy physics equation
 """
 from dataclasses import dataclass
-from typing import Optional
 
 import numpy as np
 import pandas as pd
 
-from backend.models.frames import validate_frame
+from models.frames import validate_frame
 
 VEHICLE_STATE_SCHEMA = {
     "timestamp": "datetime64[ns, UTC]",
@@ -38,7 +37,7 @@ class StateEstimate:
     TODO: exact n isn't decided yet -- position-only (2x2) or the full CTRA state covariance.
     """
     states: pd.DataFrame
-    covariance: Optional[np.ndarray] = None
+    covariance: np.ndarray | None = None
 
     # Set true after smoothing has happened. Applies to the whole run, so it lives here instead of on every row.
     is_smoothed: bool = False

@@ -8,6 +8,7 @@ fail loudly on missing or null required columns, fill in optional ones, and coer
 """
 import pandas as pd
 
+
 def validate_frame(df: pd.DataFrame, schema: dict[str, str], required: set[str]) -> pd.DataFrame:
     """Return a copy of df with exactly the schema's columns, in schema order, cast to the schema's dtypes."""
     missing = required - set(df.columns)

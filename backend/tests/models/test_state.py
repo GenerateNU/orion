@@ -1,20 +1,21 @@
-from datetime import datetime
+from datetime import UTC, datetime
 
 import numpy as np
 import pandas as pd
 import pytest
 
-from backend.models.vehicle import StateEstimate, vehicle_states
+from models.vehicle import StateEstimate, vehicle_states
 
 
 def _minimal_states(n: int = 1, **overrides) -> pd.DataFrame:
     """Build a valid states frame with only the required columns, unless overridden."""
-    cols = dict(
-        timestamp=pd.date_range(datetime(2026, 9, 19, 12, 0, 0), periods=n, freq="100ms"),
-        speed_mps=[27.3] * n,
-        latitude=[42.36] * n,
-        longitude=[-71.06] * n,
-    )
+    start = datetime(2026, 9, 19, 12, 0, 0, tzinfo=UTC)
+    cols = {
+        "timestamp": pd.date_range(start, periods=n, freq="100ms"),
+        "speed_mps": [27.3] * n,
+        "latitude": [42.36] * n,
+        "longitude": [-71.06] * n,
+    }
     cols.update(overrides)
     return pd.DataFrame(cols)
 
@@ -39,7 +40,7 @@ def test_vehicle_states_missing_required_column_raises():
     """location is required -- omitting it must fail loudly."""
     with pytest.raises(ValueError, match="latitude"):
         vehicle_states(pd.DataFrame({
-            "timestamp": [datetime(2026, 9, 19, 12, 0, 0)],
+            "timestamp": [datetime(2026, 9, 19, 12, 0, 0, tzinfo=UTC)],
             "speed_mps": [27.3],
             "longitude": [-71.06],
         }))  # no latitude

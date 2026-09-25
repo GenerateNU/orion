@@ -1,9 +1,9 @@
-from datetime import datetime
+from datetime import UTC, datetime
 
 import pandas as pd
 import pytest
 
-from backend.models.sensor import SENSOR_STDDEV, cleaned_readings, raw_readings
+from models.sensor import SENSOR_STDDEV, cleaned_readings, raw_readings
 
 
 def test_raw_readings_accepts_scalar_value():
@@ -11,7 +11,7 @@ def test_raw_readings_accepts_scalar_value():
     df = raw_readings(pd.DataFrame({
         "sensor_id": ["CH_07"],
         "session_id": ["run_2026_09_19_001"],
-        "timestamp": [datetime(2026, 9, 19, 12, 0, 0)],
+        "timestamp": [datetime(2026, 9, 19, 12, 0, 0, tzinfo=UTC)],
         "value": [12.6],
         "raw_unit": ["V"],
     }))
@@ -24,7 +24,7 @@ def test_raw_readings_accepts_scalar_value():
 
 def test_raw_readings_multi_axis_is_one_row_per_axis():
     """IMU-style sensors report multiple axes at once (accel x/y/z) -- long format keeps value a float column."""
-    t = datetime(2026, 9, 19, 12, 0, 0)
+    t = datetime(2026, 9, 19, 12, 0, 0, tzinfo=UTC)
     df = raw_readings(pd.DataFrame({
         "sensor_id": ["IMU_1"] * 3,
         "session_id": ["run_2026_09_19_001"] * 3,
@@ -43,7 +43,7 @@ def test_raw_readings_rejects_missing_required_column():
     with pytest.raises(ValueError, match="sensor_id"):
         raw_readings(pd.DataFrame({
             "session_id": ["run_2026_09_19_001"],
-            "timestamp": [datetime(2026, 9, 19, 12, 0, 0)],
+            "timestamp": [datetime(2026, 9, 19, 12, 0, 0, tzinfo=UTC)],
             "value": [1.0],
         }))  # no sensor_id
 
@@ -57,7 +57,7 @@ def test_raw_readings_accepts_arbitrary_unresolved_sensor_id():
     df = raw_readings(pd.DataFrame({
         "sensor_id": ["0x142"],
         "session_id": ["run_2026_09_19_001"],
-        "timestamp": [datetime(2026, 9, 19, 12, 0, 0)],
+        "timestamp": [datetime(2026, 9, 19, 12, 0, 0, tzinfo=UTC)],
         "value": [3.3],
     }))
     assert df["sensor_id"].iloc[0] == "0x142"
@@ -67,7 +67,7 @@ def test_raw_readings_normalizes_columns_and_timestamps():
     """Output always has the full schema in order, with timestamps in UTC."""
     df = raw_readings(pd.DataFrame({
         "value": [3.3],
-        "timestamp": [datetime(2026, 9, 19, 12, 0, 0)],
+        "timestamp": [datetime(2026, 9, 19, 12, 0, 0, tzinfo=UTC)],
         "sensor_id": ["CH_07"],
         "session_id": ["run_2026_09_19_001"],
     }))
@@ -81,7 +81,7 @@ def test_cleaned_readings_has_no_per_row_stddev():
         "sensor_id": ["CH_07"],
         "session_id": ["run_2026_09_19_001"],
         "name": ["battery_voltage"],
-        "timestamp": [datetime(2026, 9, 19, 12, 0, 0)],
+        "timestamp": [datetime(2026, 9, 19, 12, 0, 0, tzinfo=UTC)],
         "value": [12.6],
     }))
     assert "stddev" not in df.columns
@@ -94,6 +94,6 @@ def test_cleaned_readings_requires_name():
         cleaned_readings(pd.DataFrame({
             "sensor_id": ["CH_07"],
             "session_id": ["run_2026_09_19_001"],
-            "timestamp": [datetime(2026, 9, 19, 12, 0, 0)],
+            "timestamp": [datetime(2026, 9, 19, 12, 0, 0, tzinfo=UTC)],
             "value": [12.6],
         }))

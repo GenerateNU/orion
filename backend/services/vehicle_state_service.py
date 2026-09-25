@@ -5,7 +5,7 @@ Kept as separate methods because they are structurally two different passes over
 
 import pandas as pd
 
-from backend.models.vehicle import StateEstimate
+from models.vehicle import StateEstimate
 
 
 class StateService:

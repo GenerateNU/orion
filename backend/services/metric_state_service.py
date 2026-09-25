@@ -2,7 +2,7 @@
 
 import pandas as pd
 
-from backend.models.metrics import AnalysisResult
+from models.metrics import AnalysisResult
 
 
 class MetricService:

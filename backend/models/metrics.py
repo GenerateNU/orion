@@ -1,6 +1,7 @@
 from datetime import datetime
-from typing import Optional
+
 from pydantic import BaseModel
+
 
 class AnalysisResult(BaseModel):
     """Derived metrics computed over a window (e.g. a lap) of VehicleState rows."""
@@ -9,5 +10,5 @@ class AnalysisResult(BaseModel):
     avg_speed_mps: float
     max_speed_mps: float
     total_distance_m: float
-    battery_drain_rate_v_per_min: Optional[float] = None
-    lap_number: Optional[int] = None
+    battery_drain_rate_v_per_min: float | None = None
+    lap_number: int | None = None

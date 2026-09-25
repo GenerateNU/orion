@@ -1,16 +1,20 @@
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta, timezone
 
 import pandas as pd
 import pytest
 
-from backend.models.frames import validate_frame
+from models.frames import validate_frame
 
 SCHEMA = {"id": "string", "timestamp": "datetime64[ns, UTC]", "value": "float64", "note": "string"}
 REQUIRED = {"id", "timestamp", "value"}
 
 
 def _frame(**overrides) -> pd.DataFrame:
-    cols = dict(id=["a", "b"], timestamp=[datetime(2026, 9, 19, 12, 0, 0)] * 2, value=[1.0, 2.0])
+    cols = {
+        "id": ["a", "b"],
+        "timestamp": [datetime(2026, 9, 19, 12, 0, 0, tzinfo=UTC)] * 2,
+        "value": [1.0, 2.0],
+    }
     cols.update(overrides)
     return pd.DataFrame(cols)
 

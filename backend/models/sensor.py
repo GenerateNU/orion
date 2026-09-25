@@ -9,7 +9,7 @@ services/clean_service.py job is to resolve these to generic sensor names that w
 """
 import pandas as pd
 
-from backend.models.frames import validate_frame
+from models.frames import validate_frame
 
 RAW_READING_SCHEMA = {
     "session_id": "string",
