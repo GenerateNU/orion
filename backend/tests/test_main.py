@@ -21,8 +21,8 @@ def test_get_specific_lap():
         {"speed": 30}
     ]
 
-    service = RaceService(repository)
-
+    service = RaceService()
+    service.repository = repository
     result = service.get_specific_lap(1, 3)
 
     assert result["race_id"] == 1
