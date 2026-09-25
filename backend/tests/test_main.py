@@ -1,5 +1,6 @@
-from main import health
 from unittest.mock import Mock
+
+from main import health
 from services.race_service import RaceService
 
 
