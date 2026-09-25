@@ -1,59 +1,74 @@
 from datetime import datetime
- 
+
+import numpy as np
+import pandas as pd
 import pytest
-from pydantic import ValidationError
- 
-from backend.models.vehicle import Location, StateCovariance, VehicleState
- 
- 
-def _minimal_state(**overrides) -> VehicleState:
-    """Build a valid VehicleState with only the required fields, unless overridden."""
-    defaults = dict(
-        timestamp=datetime(2026, 9, 19, 12, 0, 0),
-        speed_mps=27.3,
-        location=Location(latitude=42.36, longitude=-71.06),
+
+from backend.models.vehicle import StateEstimate, vehicle_states
+
+
+def _minimal_states(n: int = 1, **overrides) -> pd.DataFrame:
+    """Build a valid states frame with only the required columns, unless overridden."""
+    cols = dict(
+        timestamp=pd.date_range(datetime(2026, 9, 19, 12, 0, 0), periods=n, freq="100ms"),
+        speed_mps=[27.3] * n,
+        latitude=[42.36] * n,
+        longitude=[-71.06] * n,
     )
-    defaults.update(overrides)
-    return VehicleState(**defaults)
- 
- 
-def test_vehicle_state_constructs_with_only_required_fields():
-    """timestamp, speed_mps, location are the required set."""
-    state = _minimal_state()
-    assert state.speed_mps == 27.3
-    assert state.location.latitude == 42.36
- 
- 
-def test_vehicle_state_optional_fields_default_correctly():
-    """Fields we don't have values for yet (heading, yaw rate, covariance) must default,
-    not be silently required -- and is_smoothed must default False (forward-pass output)."""
-    state = _minimal_state()
-    assert state.heading_deg is None
-    assert state.yaw_rate_dps is None
-    assert state.position_covariance is None
-    assert state.is_smoothed is False
- 
- 
-def test_vehicle_state_missing_required_field_raises():
+    cols.update(overrides)
+    return pd.DataFrame(cols)
+
+
+def test_vehicle_states_constructs_with_only_required_columns():
+    """timestamp, speed_mps, latitude, longitude are the required set."""
+    df = vehicle_states(_minimal_states())
+    assert df["speed_mps"].iloc[0] == 27.3
+    assert df["latitude"].iloc[0] == 42.36
+
+
+def test_vehicle_states_optional_columns_default_to_missing():
+    """Columns we don't have values for yet (heading, yaw rate, altitude) must default, not be silently required."""
+    df = vehicle_states(_minimal_states())
+    assert df["heading_deg"].isna().all()
+    assert df["yaw_rate_dps"].isna().all()
+    # not every sensor setup reports altitude
+    assert df["altitude"].isna().all()
+
+
+def test_vehicle_states_missing_required_column_raises():
     """location is required -- omitting it must fail loudly."""
-    with pytest.raises(ValidationError):
-        VehicleState(
-            timestamp=datetime(2026, 9, 19, 12, 0, 0),
-            speed_mps=27.3,
-        )  # no location
- 
- 
-def test_location_altitude_is_optional():
-    """Not every sensor setup reports altitude -- must not be required."""
-    loc = Location(latitude=42.36, longitude=-71.06)
-    assert loc.altitude is None
- 
- 
-def test_vehicle_state_accepts_state_covariance_and_smoothed_flag():
-    """After URTS, a state carries a StateCovariance and is_smoothed=True."""
-    smoothed = _minimal_state(
-        position_covariance=StateCovariance(matrix=[[0.5, 0.0], [0.0, 0.5]]),
-        is_smoothed=True,
-    )
-    assert smoothed.is_smoothed is True
-    assert smoothed.position_covariance.matrix == [[0.5, 0.0], [0.0, 0.5]]
+    with pytest.raises(ValueError, match="latitude"):
+        vehicle_states(pd.DataFrame({
+            "timestamp": [datetime(2026, 9, 19, 12, 0, 0)],
+            "speed_mps": [27.3],
+            "longitude": [-71.06],
+        }))  # no latitude
+
+
+def test_state_estimate_defaults_to_forward_pass():
+    """Forward-pass output: no covariance required, is_smoothed False."""
+    est = StateEstimate(states=_minimal_states())
+    assert est.covariance is None
+    assert est.is_smoothed is False
+
+
+def test_state_estimate_accepts_covariance_and_smoothed_flag():
+    """After URTS, an estimate carries one covariance matrix per state row and is_smoothed=True."""
+    cov = np.tile(np.eye(2) * 0.5, (3, 1, 1))
+    est = StateEstimate(states=_minimal_states(3), covariance=cov, is_smoothed=True)
+    assert est.is_smoothed is True
+    assert est.covariance.shape == (3, 2, 2)
+    np.testing.assert_array_equal(est.covariance[0], [[0.5, 0.0], [0.0, 0.5]])
+
+
+def test_state_estimate_validates_states():
+    """A StateEstimate can't be built around a broken states frame."""
+    with pytest.raises(ValueError, match="latitude"):
+        StateEstimate(states=_minimal_states().drop(columns=["latitude"]))
+
+
+@pytest.mark.parametrize("shape", [(2, 2, 2), (3, 2, 3), (3, 4)])
+def test_state_estimate_rejects_misshapen_covariance(shape):
+    """Covariance must be (len(states), n, n) -- one square matrix per row."""
+    with pytest.raises(ValueError, match="covariance"):
+        StateEstimate(states=_minimal_states(3), covariance=np.zeros(shape))

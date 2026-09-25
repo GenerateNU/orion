@@ -2,22 +2,24 @@
 StateService -- UKF forward pass + URTS backward smoothing pass (if we chose RTS).
 Kept as separate methods because they are structurally two different passes over the data
 """
- 
-from backend.models.sensor import CleanedReading
-from backend.models.vehicle import VehicleState
- 
- 
+
+import pandas as pd
+
+from backend.models.vehicle import StateEstimate
+
+
 class StateService:
-    def predict_forward(self, cleaned_readings: list[CleanedReading]) -> list[VehicleState]:
+    def predict_forward(self, cleaned_readings: pd.DataFrame) -> StateEstimate:
         """Run the UKF forward, one tick at a time (past-and-current-only).
-        Output rows have is_smoothed=False."""
+        Takes CLEANED_READING_SCHEMA rows; noise for the R matrix comes from SENSOR_STDDEV.
+        Output has is_smoothed=False."""
         raise NotImplementedError
- 
-    def smooth(self, forward_states: list[VehicleState]) -> list[VehicleState]:
+
+    def smooth(self, forward: StateEstimate) -> StateEstimate:
         """Run the URTS backward pass over a completed forward run.
-        Output rows have is_smoothed=True."""
+        Output has is_smoothed=True."""
         raise NotImplementedError
- 
-    def estimate_lap(self, cleaned_readings: list[CleanedReading]) -> list[VehicleState]:
+
+    def estimate_lap(self, cleaned_readings: pd.DataFrame) -> StateEstimate:
         """Convenience wrapper: predict_forward() then smooth() for one full lap."""
         raise NotImplementedError
