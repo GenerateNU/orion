@@ -4,6 +4,7 @@ class RaceRepository:
     def get_races(self, date):
         return [
             {
+                "race_id": 1,
                 "name": "Northeastern Electric Racing",
                 "dates": date or "2026-05-14",
             }
