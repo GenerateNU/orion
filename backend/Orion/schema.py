@@ -1,4 +1,7 @@
-from sqlalchemy import Column, DateTime, Integer, MetaData, String, Table, Text
+from sqlalchemy import Column, Integer, MetaData, String, Table, Text
+
+metadata = MetaData()
+
 
 signals_table = Table(
     "signals",
