@@ -39,7 +39,7 @@ SIGNALS = [
         "raw_tag": "BMS/Cells/Volts_Low_Value",
         "name": "bms_voltage_low",
         "display_name": "Battery Cell Voltage (Lowest)",
-        "description": "Voltage of the lowest single battery cell,
+        "description": "Voltage of the lowest single battery cell",
         "unit": "V",
     },
 
