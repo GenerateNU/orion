@@ -1,15 +1,16 @@
 from dotenv import load_dotenv
+
 load_dotenv()
 
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 from penelope.client import PenelopeClient
 
 client = PenelopeClient.from_env()
 
 # Test 1: confirm get_by_time_bounds returns a numpy array now
-start = datetime(2026, 8, 15, 21, 55, tzinfo=timezone.utc)
-end = datetime(2026, 8, 15, 22, 55, tzinfo=timezone.utc)
+start = datetime(2026, 8, 15, 21, 55, tzinfo=UTC)
+end = datetime(2026, 8, 15, 22, 55, tzinfo=UTC)
 
 result = client.get_by_time_bounds(start, end)
 print(type(result))

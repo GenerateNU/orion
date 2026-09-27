@@ -1,14 +1,10 @@
-from typing import Generic, Type, TypeVar
 
-from pydantic import BaseModel
-from sqlalchemy import Table
+import numpy as np
 from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.engine import Engine
 
 from .schema import data_table
-from penelope.models import DataPoint
 
-import numpy as np
 
 class DataPointRepository:
     """Generic write-only repository: np array <-> one Table."""

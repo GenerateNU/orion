@@ -1,8 +1,11 @@
 from dotenv import load_dotenv
+
 load_dotenv()
 
 import os
+
 from sqlalchemy import create_engine
+
 from orion.schema import create_tables
 
 # dotenv sets a key even when its value is blank, so a half-filled .env slips

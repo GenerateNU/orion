@@ -22,7 +22,6 @@ Two things to know before adding validation back:
 """
 
 from datetime import datetime
-from typing import Optional
 
 from pydantic import BaseModel
 
@@ -30,7 +29,7 @@ from pydantic import BaseModel
 class DataType(BaseModel):
     """Mirrors a row in Penelope's `data_type` table."""
     name: str
-    unit: Optional[str] = None
+    unit: str | None = None
 
 
 class DataPoint(BaseModel):

@@ -1,14 +1,15 @@
 from dotenv import load_dotenv
+
 load_dotenv()
 
 import os
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 import numpy as np
 from sqlalchemy import create_engine
 
-from penelope.client import PenelopeClient
 from orion.repository import DataPointRepository
+from penelope.client import PenelopeClient
 
 url = os.environ.get("NEON_DB_URL")
 if not url:
@@ -21,8 +22,8 @@ penelope = PenelopeClient.from_env()
 repo = DataPointRepository(create_engine(url))
 
 points = penelope.get_by_time_bounds(
-    datetime(2026, 8, 15, 22, 45, tzinfo=timezone.utc),
-    datetime(2026, 8, 15, 22, 55, tzinfo=timezone.utc),
+    datetime(2026, 8, 15, 22, 45, tzinfo=UTC),
+    datetime(2026, 8, 15, 22, 55, tzinfo=UTC),
 )
 print(f"pulled {len(points)} points from Penelope")
 

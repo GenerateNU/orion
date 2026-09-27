@@ -1,7 +1,7 @@
 import os
 from datetime import datetime
-import numpy as np 
 
+import numpy as np
 from pydantic import ValidationError
 from sqlalchemy import MetaData, create_engine, select
 from sqlalchemy.exc import OperationalError, SQLAlchemyError
