@@ -12,7 +12,7 @@ def make_valid_input():
         "longitude": [-71.0, -71.0001, -71.0002],
         "longitudinal_acceleration": [0.1, 0.2, 0.1],
         "lateral_acceleration": [0.0, 0.1, 0.0],
-        "yaw_rate": [0.01, 0.02, 0.01],
+        "turn_rate": [0.01, 0.02, 0.01],
         "vehicle_speed": [10.0, 10.1, 10.2],
     })
 
@@ -33,7 +33,7 @@ def test_valid_input():
 def test_missing_column():
     service = StateEstimationService()
 
-    df = make_valid_input().drop(columns=["yaw_rate"])
+    df = make_valid_input().drop(columns=["turn_rate"])
 
     with pytest.raises(ValueError):
         service.estimate_position(df)
