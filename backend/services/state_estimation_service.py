@@ -1,3 +1,5 @@
+from typing import ClassVar
+
 import pandas as pd
 
 
@@ -7,7 +9,8 @@ class StateEstimationService:
     """
 
     # Signals that the state estimation would need to get (based on the R&D doc)
-    REQUIRED_COLUMNS = [
+
+    REQUIRED_COLUMNS: ClassVar[list[str]] = [
         "timestamp",
         "latitude",
         "longitude",
@@ -18,12 +21,12 @@ class StateEstimationService:
     ]
 
     # Bare minimum output (need to go back and add more)
-    OUTPUT_COLUMNS = [
+    OUTPUT_COLUMNS: ClassVar[list[str]] = [
         "timestamp",
         "latitude",
         "longitude",
     ]
-
+    
     def estimate_position(self, cleaned_df: pd.DataFrame) -> pd.DataFrame:
         """
         Estimate vehicle position from cleaned sensor data.

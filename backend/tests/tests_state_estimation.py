@@ -3,6 +3,7 @@ import pytest
 
 from services.state_estimation_service import StateEstimationService
 
+
 #testing that it takes in a dataframe
 def make_valid_input():
     return pd.DataFrame({
