@@ -12,6 +12,7 @@ export default function ErrorState({ title = "Something went wrong", error }) {
   );
 }
 
+// Prop type checks for dev
 ErrorState.propTypes = {
   title: PropTypes.string,
   error: PropTypes.instanceOf(Error),
