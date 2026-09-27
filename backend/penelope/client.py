@@ -173,24 +173,23 @@ class PenelopeClient:
         return self._fetch(stmt)
 
     def get_all_paginated(self, batch_size: int = 5000):
+        if batch_size <= 0:
+            raise ValueError("batch_size must be positive")
 
-      """Yields batches of rows as NumPy arrays, using cursor pagination on `time`."""
-      last_time = None
-      while True:
+        stmt = select(self.data_table).order_by(self.data_table.c.time)
 
-            # LIMIT keeps each page a fixed, bounded size.
-            stmt = select(self.data_table).order_by(self.data_table.c.time).limit(batch_size)
-
-            # First page has no cursor yet. Every page after that starts after last row is yielded
-            if last_time is not None:
-                stmt = stmt.where(self.data_table.c.time > last_time)
-
-            with self.engine.connect() as conn:
-                rows = conn.execute(stmt).fetchall()
-
-            if not rows: 
-                break
-
-            # hand this page off before fetching the next one so the whole table is never held in memory at once.
-            yield self._to_array(rows)
-            last_time = rows[-1].time
+        try:
+            with self.engine.connect().execution_options(yield_per=batch_size) as conn:
+                result = conn.execute(stmt)
+                for partition in result.partitions():
+                    yield self._to_array(partition)
+        except OperationalError as exc:
+            raise PenelopeConnectionError(
+                f"Lost connection to PenelopeDB at {self.engine.url.host}:"
+                f"{self.engine.url.port} during a streamed read. "
+                "Check that the VPN is still connected"
+            ) from exc
+        except SQLAlchemyError as exc:
+            raise PenelopeSchemaError(
+                "Streamed query against PenelopeDB failed."
+            ) from exc
