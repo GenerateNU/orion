@@ -1,5 +1,4 @@
 import PropTypes from "prop-types";
-import { useEffect } from "react";
 import { CircleMarker, MapContainer, Polyline, TileLayer, Tooltip } from "react-leaflet";
 import "leaflet/dist/leaflet.css";
 import FitToPath from "./FitToPath"
