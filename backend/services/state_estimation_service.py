@@ -13,7 +13,7 @@ class StateEstimationService:
         "longitude",
         "longitudinal_acceleration",
         "lateral_acceleration",
-        "yaw_rate",
+        "turn_rate",
         "vehicle_speed",
     ]
 
