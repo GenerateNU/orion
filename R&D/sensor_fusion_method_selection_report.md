@@ -46,3 +46,48 @@ Unscented RTS follows the same basic idea as UKF, but uses all of the data avail
 Instead of relying on physics equations and probability, a smoothing spline fits a smooth curve through each sensor's data points, and each point can be weighted by how much we trust it or its sensor. Noisy or uncertain sensor readings get less influence, while more confident sensor readings pull the curve harder.
 
 There are several drawbacks to this approach. It sacrifices accuracy since it has no estimate of what the physical positions are supposed to be, most of our sensors are noisy so it is not clear which ones we would weigh more heavily, and our sensor values cannot correlate with each other during prediction. The only advantage is that it is much easier to implement.
+
+## Implementation Contract
+
+The state estimation service will accept a cleaned DataFrame from the clean service.
+
+The initial required signals are:
+- timestamp
+- latitude
+- longitude
+- longitudinal acceleration
+- lateral acceleration
+- Turn rate
+- vehicle speed
+
+(can add more and edit names based on what data we will actually end up having/keeping)
+
+The service will return a positions DataFrame containing:
+
+- timestamp
+- latitude
+- longitude
+- speed 
+
+**The exact signal names and sampling rates will be confirmed
+against the cleaned data and source signal metadata** 
+
+## State Estimation Scaffold
+
+The state estimation implementation will be contained in
+`backend/services/state_estimation_service.py`.
+
+The service currently defines:
+
+- the required input signals
+- the output positions structure
+- validation of the input DataFrame
+- the interface for the future UKF + URTS + CTRA implementation
+
+Dependencies: 
+
+- pandas: to read and output a Dataframe 
+- numpy: to do any vectors and matrixes 
+- FilterPy: has the actual UKF model that we can use 
+- SciPy: If our timestamps for our values are off and we need to use other estimations for times and calculations we would need this package 
+    (but depends on data, not a required package as of right now)
