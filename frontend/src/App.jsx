@@ -1,19 +1,20 @@
-import { useEffect, useState } from "react";
+import { useState } from "react";
 
+import RaceListView from "./views/RaceListView.jsx";
+import RaceMapView from "./views/RaceMapView.jsx";
+
+// Two views for now: the race list, and the map for whichever race was picked from it.
 export default function App() {
-  const [status, setStatus] = useState("...");
-
-  useEffect(() => {
-    fetch("/api/health")
-      .then((r) => r.json())
-      .then((d) => setStatus(d.status))
-      .catch(() => setStatus("unreachable"));
-  }, []);
+  const [selectedRace, setSelectedRace] = useState(null);
 
   return (
-    <main style={{ fontFamily: "system-ui", padding: "2rem" }}>
+    <main style={{ fontFamily: "system-ui", padding: "2rem", maxWidth: "960px", margin: "0 auto" }}>
       <h1>orion</h1>
-      <p>backend: {status}</p>
+      {selectedRace ? (
+        <RaceMapView race={selectedRace} onBack={() => setSelectedRace(null)} />
+      ) : (
+        <RaceListView onSelectRace={setSelectedRace} />
+      )}
     </main>
   );
 }
