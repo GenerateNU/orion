@@ -1,6 +1,11 @@
-from fastapi import APIRouter
+import datetime
+from typing import Annotated
 
-from services.race_service import RaceService
+from fastapi import APIRouter, Depends, HTTPException
+from sqlalchemy.engine import Connection
+
+from orion.db import get_connection
+from services.race_service import RaceNotFoundError, RaceService
 
 #this file creates all the API endpoints
 
@@ -14,10 +19,14 @@ service = RaceService()
 General Race Information that user might pull
 """
 
-# Get races 
+# Shorthand for "give this endpoint a database connection" (see orion/db.py)
+DbConnection = Annotated[Connection, Depends(get_connection)]
+
+# Get races (wired to OrionDB)
+# date is parsed as a real date so a malformed one is a 422, not a DB error
 @router.get("")
-def get_races(date: str | None = None):
-    return service.get_races(date)
+def get_races(conn: DbConnection, date: datetime.date | None = None):
+    return service.get_races(conn, date)
 
 # Get information for a specific race (instead of all races + includes all laps)
 @router.get("/{race_id}")
@@ -39,9 +48,10 @@ def get_specific_lap(race_id: int, lap_number: int):
 Specific information about positions (Maybe we just combine into summary)
 """
 
-# Get position data for a lap 
+# Get position data for a lap (wired to OrionDB)
 @router.get("/{race_id}/laps/{lap_number}/positions")
 def get_positions(
+    conn: DbConnection,
     race_id: int,
     lap_number: int,
     min_lat: float | None = None,
@@ -49,14 +59,18 @@ def get_positions(
     min_lon: float | None = None,
     max_lon: float | None = None,
 ):
-    return service.get_positions(
-        race_id,
-        lap_number,
-        min_lat,
-        max_lat,
-        min_lon,
-        max_lon,
-    )
+    try:
+        return service.get_positions(
+            conn,
+            race_id,
+            lap_number,
+            min_lat,
+            max_lat,
+            min_lon,
+            max_lon,
+        )
+    except RaceNotFoundError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
 
 # Get energy for a lap
 @router.get("/{race_id}/laps/{lap_number}/energy")

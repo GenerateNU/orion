@@ -1,6 +1,14 @@
 from repositories.race_repository import RaceRepository
 
 
+class RaceNotFoundError(Exception):
+    """No race with this ID exists. The controller turns this into a 404."""
+
+    def __init__(self, race_id):
+        super().__init__(f"Race {race_id} not found")
+        self.race_id = race_id
+
+
 class RaceService:
 
     '''
@@ -16,9 +24,9 @@ class RaceService:
         # Create the repository that this service will use.
         self.repository = RaceRepository()
 
-    def get_races(self, race_date=None):
+    def get_races(self, conn, race_date=None):
         # Ask the repository for races.
-        return self.repository.get_races(race_date)
+        return self.repository.get_races(conn, race_date)
 
     def get_laps(self, race_id: int):
         # Ask the repository for all laps in a race.
@@ -44,6 +52,7 @@ class RaceService:
 
     def get_positions(
         self,
+        conn,
         race_id: int,
         lap_number: int,
         min_lat=None,
@@ -51,8 +60,14 @@ class RaceService:
         min_lon=None,
         max_lon=None
     ):
+        # A race with no positions yet returns [], but a race that doesn't
+        # exist at all is an error -- otherwise a typo'd ID looks like "no data".
+        if not self.repository.race_exists(conn, race_id):
+            raise RaceNotFoundError(race_id)
+
         # Ask the repository for position data.
         return self.repository.get_positions(
+            conn,
             race_id,
             lap_number,
             min_lat,

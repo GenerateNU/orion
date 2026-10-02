@@ -1,7 +1,9 @@
 from unittest.mock import Mock
 
+import pytest
+
 from main import health
-from services.race_service import RaceService
+from services.race_service import RaceNotFoundError, RaceService
 
 
 def test_health_returns_ok_status():
@@ -18,7 +20,7 @@ def test_get_races():
     service = RaceService()
     service.repository = repository
 
-    result = service.get_races()
+    result = service.get_races(Mock())
 
     assert result == [
         {"race_id": 1},
@@ -35,7 +37,7 @@ def test_get_races_with_date():
     service = RaceService()
     service.repository = repository
 
-    result = service.get_races("2026-09-25")
+    result = service.get_races(Mock(), "2026-09-25")
 
     assert result == [
         {"race_id": 1, "date": "2026-09-25"}
@@ -117,7 +119,7 @@ def test_get_positions():
     service = RaceService()
     service.repository = repository
 
-    result = service.get_positions(1, 3)
+    result = service.get_positions(Mock(), 1, 3)
 
     assert result == [
         {"latitude": 42.1, "longitude": -71.1}
@@ -134,6 +136,7 @@ def test_get_positions_with_bounds():
     service.repository = repository
 
     result = service.get_positions(
+        Mock(),
         1,
         3,
         42.0,
@@ -145,6 +148,20 @@ def test_get_positions_with_bounds():
     assert result == [
         {"latitude": 42.1, "longitude": -71.1}
     ]
+
+
+def test_get_positions_unknown_race_raises():
+    repository = Mock()
+    repository.race_exists.return_value = False
+
+    service = RaceService()
+    service.repository = repository
+
+    with pytest.raises(RaceNotFoundError):
+        service.get_positions(Mock(), 999, 1)
+
+    # never queries positions for a race that doesn't exist
+    repository.get_positions.assert_not_called()
 
 
 def test_get_lap_energy():

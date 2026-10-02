@@ -1,4 +1,14 @@
-from sqlalchemy import Column, DateTime, MetaData, String, Table
+from sqlalchemy import (
+    Column,
+    Date,
+    DateTime,
+    Float,
+    ForeignKey,
+    Integer,
+    MetaData,
+    String,
+    Table,
+)
 from sqlalchemy.dialects.postgresql import ARRAY, DOUBLE_PRECISION
 from sqlalchemy.engine import Engine
 
@@ -26,6 +36,45 @@ data_table = Table(
     Column("dataTypeName", String, primary_key=True),
     Column("runId", String, primary_key=True),
     Column("values", ARRAY(DOUBLE_PRECISION), nullable=False),
+)
+
+
+# One row per race/session -- what GET /api/races serves. Column names match
+# the frontend's contract (RaceListView reads race_id, name, dates), so rows
+# can be returned as-is.
+#
+# run_id links a race back to its readings in `data` (Penelope's runId). It is
+# nullable so a race can be entered before its data has been ingested.
+#
+# DRAFT: columns beyond what the frontend reads are still to be agreed.
+races_table = Table(
+    "races",
+    metadata,
+    Column("race_id", Integer, primary_key=True, autoincrement=True),
+    Column("run_id", String, unique=True, nullable=True),
+    Column("name", String, nullable=False),
+    Column("dates", Date, nullable=True),
+)
+
+
+# Estimated positions from the state estimation (Kalman filter) pipeline --
+# what GET /api/races/{id}/laps/{lap}/positions serves to PositionMap.
+#
+# The primary key (race_id, lap_number, timestamp) is one estimate per instant
+# per lap, which keeps re-runs from duplicating rows. It also leads with
+# race_id and lap_number, the two columns the positions query filters on.
+#
+# DRAFT: kept to what PositionMap needs and StateEstimationService outputs
+# (timestamp, latitude, longitude). Confirm with the Kalman filter ticket before
+# running setup_orion.py against Neon; more columns can be added then.
+estimated_positions_table = Table(
+    "estimated_positions",
+    metadata,
+    Column("race_id", Integer, ForeignKey("races.race_id"), primary_key=True),
+    Column("lap_number", Integer, primary_key=True),
+    Column("timestamp", DateTime(timezone=True), primary_key=True),
+    Column("latitude", Float, nullable=False),
+    Column("longitude", Float, nullable=False),
 )
 
 
