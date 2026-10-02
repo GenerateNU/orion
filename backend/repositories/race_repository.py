@@ -35,7 +35,11 @@ class RaceRepository:
         stmt = select(exists().where(races_table.c.race_id == race_id))
         return bool(_run(conn, stmt).scalar())
 
-    # Get all laps for a race
+    # ---- STUBS: everything below except get_positions returns sample data. ----
+    # Not wired to OrionDB yet; kept so the endpoints keep responding until their
+    # tables exist. Don't delete them.
+
+    # STUB: Get all laps for a race
     def get_laps(self, race_id):
         return [
             {
@@ -49,7 +53,7 @@ class RaceRepository:
             }
         ]
 
-    # Get one lap
+    # STUB: Get one lap
     def get_specific_lap(self, race_id, lap_number):
         return {
             "race_id": race_id,
@@ -90,7 +94,7 @@ class RaceRepository:
         return [dict(row._mapping) for row in _run(conn, stmt)]
 
 
-    # Get velocity at a position
+    # STUB: Get velocity at a position
     def get_velocity_at_position(
         self,
         race_id,
@@ -104,8 +108,7 @@ class RaceRepository:
             "speed": 40.0,
         }
     
-    # Get a specific race as well 
-
+    # STUB: Get a specific race as well (not yet reading the races table)
     def get_specific_race(self, race_id):
         return {
             "race_id": race_id, 
@@ -113,7 +116,7 @@ class RaceRepository:
             "date": "2026-09-10"
         }
     
-    #energy consumption per lap 
+    # STUB: energy consumption per lap
     def get_lap_energy(self, race_id, lap_number):
         return {
             "race_id": race_id,

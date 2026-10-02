@@ -120,8 +120,19 @@ def test_positions_unknown_race_is_404(engine):
     assert response.json()["detail"] == "Race 999 not found"
 
 
-def test_positions_non_numeric_race_id_is_422(engine):
-    assert client.get("/api/races/abc/laps/1/positions").status_code == 422
+@pytest.mark.parametrize("url", [
+    "/api/races/abc/laps/1/positions",  # race id not a number
+    "/api/races/0/laps/1/positions",    # race ids start at 1
+    "/api/races/-1/laps/1/positions",
+    "/api/races/1/laps/x/positions",    # lap not a number
+    "/api/races/1/laps/0/positions",    # laps start at 1
+    "/api/races/1/laps/-1/positions",
+    "/api/races/1/laps/1/positions?min_lat=abc",  # bad bounds
+])
+def test_positions_invalid_input_is_422(engine, url):
+    add_race(engine, race_id=1)  # so a 422 can't be a disguised 404
+
+    assert client.get(url).status_code == 422
 
 
 def test_positions_returns_the_lap_in_time_order(engine):
@@ -147,6 +158,30 @@ def test_positions_bounding_box_filters(engine):
     ).json()
 
     assert [(p["latitude"], p["longitude"]) for p in positions] == [(43.0, -72.0)]
+
+
+# --- stubs ------------------------------------------------------------------
+
+@pytest.mark.parametrize("url", [
+    "/api/races/1",
+    "/api/races/1/laps",
+    "/api/races/1/laps/1",
+    "/api/races/1/laps/1/energy",
+    "/api/races/1/laps/1/5?latitude=42.1&longitude=-71.1",
+])
+def test_stub_endpoints_respond_without_a_database(monkeypatch, url):
+    """The ticket: endpoints not wired yet still return stub data and don't throw."""
+    monkeypatch.delenv("NEON_DB_URL", raising=False)
+
+    response = client.get(url)
+
+    assert response.status_code == 200
+    assert response.json()
+
+
+def test_velocity_stub_requires_its_coordinates():
+    """Missing required parameters are a 422, not a crash."""
+    assert client.get("/api/races/1/laps/1/5").status_code == 422
 
 
 # --- database problems ------------------------------------------------------

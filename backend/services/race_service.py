@@ -28,26 +28,18 @@ class RaceService:
         # Ask the repository for races.
         return self.repository.get_races(conn, race_date)
 
+    # STUB: returns sample data until a laps table exists in OrionDB.
     def get_laps(self, race_id: int):
         # Ask the repository for all laps in a race.
         return self.repository.get_laps(race_id)
 
+    # STUB: returns sample data until a laps table exists in OrionDB.
+    # It used to average speed over the lap's positions, but positions now come
+    # from estimated_positions, which has no speed column yet -- bring that back
+    # when laps are wired for real.
     def get_specific_lap(self, race_id: int, lap_number: int):
         # Ask the repository for one specific lap.
-        lap = self.repository.get_lap(race_id, lap_number)
-        
-        positions = self.repository.get_positions(race_id, lap_number)
-        
-        #calculate average speed for the lap based on positions if available
-        if positions:
-            lap["average_speed"] = sum(p["speed"] for p in positions) / len(positions)
-        else:
-            lap["average_speed"] = None
-
-        #Include positions in the lap data
-        lap["positions"] = positions
-
-        return lap
+        return self.repository.get_specific_lap(race_id, lap_number)
 
 
     def get_positions(
@@ -76,10 +68,12 @@ class RaceService:
             max_lon
         )
 
+    # STUB: returns sample data until energy is computed into OrionDB.
     def get_lap_energy(self, race_id, lap_number):
         return self.repository.get_lap_energy(race_id, lap_number)
-    
 
+
+    # STUB: returns sample data until velocity is computed into OrionDB.
     def get_velocity_at_position(
         self,
         race_id: int,
@@ -95,5 +89,6 @@ class RaceService:
             longitude
         )
 
+    # STUB: returns sample data -- not wired to the races table yet.
     def get_specific_race(self, race_id):
         return self.repository.get_specific_race(race_id)

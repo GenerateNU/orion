@@ -2,24 +2,18 @@ from dotenv import load_dotenv
 
 load_dotenv()
 
-import os
-
-from sqlalchemy import create_engine
-
+from orion.db import get_engine
+from orion.exceptions import OrionConfigError
 from orion.schema import create_tables
 
-# dotenv sets a key even when its value is blank, so a half-filled .env slips
-# past a plain os.environ[...] lookup and fails later inside create_engine with
-# an ArgumentError that never names NEON_DB_URL. Check for empty rather than
-# missing, the same way PenelopeClient.from_env does.
-url = os.environ.get("NEON_DB_URL")
-if not url:
-    raise SystemExit(
-        "NEON_DB_URL is not set. Copy .env.example to .env in the repo root "
-        "and paste your Neon connection string into it."
-    )
-
-engine = create_engine(url)
+# get_engine checks NEON_DB_URL for blank as well as missing (dotenv sets a key
+# even when its value is blank) and pins the psycopg2 driver -- SQLAlchemy 2.1
+# would otherwise map Neon's plain postgresql:// URL to psycopg v3, which isn't
+# installed.
+try:
+    engine = get_engine()
+except OrionConfigError as exc:
+    raise SystemExit(str(exc)) from exc
 
 # create_all(checkfirst=True) only creates tables that are missing. It will
 # never ALTER one that already exists, so a schema change made after this has
