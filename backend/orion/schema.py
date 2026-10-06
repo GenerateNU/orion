@@ -1,4 +1,13 @@
-from sqlalchemy import Column, DateTime, Integer, MetaData, String, Table, Text
+from sqlalchemy import (
+    Column,
+    DateTime,
+    ForeignKey,
+    Integer,
+    MetaData,
+    String,
+    Table,
+    Text,
+)
 from sqlalchemy.dialects.postgresql import ARRAY, DOUBLE_PRECISION
 from sqlalchemy.engine import Engine
 
@@ -26,6 +35,18 @@ data_table = Table(
     Column("dataTypeName", String, primary_key=True),
     Column("runId", String, primary_key=True),
     Column("values", ARRAY(DOUBLE_PRECISION), nullable=False),
+)
+
+sensors_table = Table(
+    "sensors", 
+    metadata,
+    Column("name", String, primary_key=True),
+    Column("unit", String, nullable=True))
+
+
+sensor_sources_table = Table(
+    Column("sourceDataTypeName", String, primary_key=True),
+    Column("sensor", String, ForeignKey("sensors.name"), nullable=False)
 )
 
 signals_table = Table(
