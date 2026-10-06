@@ -1,4 +1,4 @@
-from sqlalchemy import Column, DateTime, MetaData, String, Table
+from sqlalchemy import Column, DateTime, Integer, MetaData, String, Table, Text
 from sqlalchemy.dialects.postgresql import ARRAY, DOUBLE_PRECISION
 from sqlalchemy.engine import Engine
 
@@ -28,6 +28,16 @@ data_table = Table(
     Column("values", ARRAY(DOUBLE_PRECISION), nullable=False),
 )
 
+signals_table = Table(
+    "signals",
+    metadata,
+    Column("id", Integer, primary_key=True, autoincrement=True),
+    Column("raw_tag", String, nullable=False, unique=True),
+    Column("name", String, nullable=False, unique=True),
+    Column("display_name", String, nullable=False),
+    Column("description", Text, nullable=False),
+    Column("unit", String, nullable=True),
+)
 
 def create_tables(engine: Engine) -> None:
     """Create all tables in this module if they don't already exist."""
