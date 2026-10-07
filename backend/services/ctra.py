@@ -1,102 +1,105 @@
-from typing import ClassVar
+import torch
 
-import pandas as pd
 
-from models.vehicle import StateEstimate
-
-class StateEstimationService:
+def ctra(state: torch.Tensor, dt: float) -> torch.Tensor:
     """
-    Scaffold for estimating vehicle position from cleaned sensor data.
+    Predict the next vehicle position at a given time using CTRA motion model.
+
+    Args:
+        Current position: Lat / Longitude 
+        acceleration 
+        turn rate (gyro)
+
+    Returns:
+        Predicted vehicle state.
     """
 
-    # Signals that the state estimation would need to get (based on the R&D doc)
+    # this pre-check/error can be edited based on how many features we want CTRA to use 
+    if state.shape != (6,):
+        raise ValueError(
+            "State must have shape (6,): "
+            "[ x, y, velocity, heading, turn_rate, acceleration]"
+        )
 
-    REQUIRED_COLUMNS: ClassVar[list[str]] = [
-        "timestamp",
-        "latitude",
-        "longitude",
-        "longitudinal_acceleration",
-        "lateral_acceleration",
-        "turn_rate",
-        "vehicle_speed",
-    ]
+    x, y, velocity, heading, turn_rate, acceleration = state
 
-    # Bare minimum output (need to go back and add more)
-    OUTPUT_COLUMNS: ClassVar[list[str]] = [
-        "timestamp",
-        "latitude",
-        "longitude",
-    ]
-    
-    def estimate_position(self, cleaned_df: pd.DataFrame) -> pd.DataFrame:
-        """
-        Estimate vehicle position from cleaned sensor data.
+    new_velocity = velocity + acceleration * dt
+    new_heading = heading + turn_rate * dt
 
-        Parameters
-        ----------
-        cleaned_df : pd.DataFrame
-            Cleaned, wide-format sensor data from the clean service.
+    # If car not turning (useful if our data has some noise but there isn't actual turns)
+    # if no turn, calculating position is so easy (math formula)
+    if torch.abs(turn_rate) < 1e-6:
 
-        Returns
-        -------
-        pd.DataFrame
-            Estimated vehicle positions with timestamp, latitude,
-            and longitude.
-        """
+        #basic distance formula: d = v*t + 1/2 * a *t^2
+        distance = (
+            velocity * dt + 0.5 * acceleration * dt**2
+        )
 
-        # Validatation so nothing breaks because of bad data
-        self._validate_input(cleaned_df)
-
-        # Implement the state estimation pipeline.
+        new_x = x + distance * torch.cos(heading)
+        new_y = y + distance * torch.sin(heading)
 
 
-        return pd.DataFrame(columns=self.OUTPUT_COLUMNS)
+    # If the car is turning
+    else:
+        # Calculate how much the current speed moves the car in x and y
+        x_movement_from_speed = (
+            velocity
+            * (torch.sin(new_heading) - torch.sin(heading))
+            / turn_rate
+        )
 
-    def _validate_input(self, cleaned_df: pd.DataFrame) -> None:
-        """
-        Validate the input DataFrame from the clean service.
+        y_movement_from_speed = (
+            velocity
+            * (torch.cos(heading) - torch.cos(new_heading))
+            / turn_rate
+        )
 
-        """
+        # Calculate how much acceleration adds to the x movement
+        x_movement_from_acceleration = (
+            acceleration
+            * (
+                dt * torch.sin(new_heading) / turn_rate
+                + (
+                    torch.cos(new_heading)
+                    - torch.cos(heading)
+                ) / turn_rate**2
+            )
+        )
 
-        # Make sure the clean service actually provided a DataFrame.
-        if not isinstance(cleaned_df, pd.DataFrame):
-            raise TypeError("cleaned_df must be a pandas DataFrame")
+        # Calculate how much acceleration adds to the y movement
+        y_movement_from_acceleration = (
+            acceleration
+            * (
+                -dt * torch.cos(new_heading) / turn_rate
+                + (
+                    torch.sin(new_heading)
+                    - torch.sin(heading)
+                ) / turn_rate**2
+            )
+        )
 
-        # The estimation model cannot produce a position from no data.
-        if cleaned_df.empty:
-            raise ValueError("cleaned_df cannot be empty")
+        # how much movement
+        x_movement = (
+            x_movement_from_speed
+            + x_movement_from_acceleration
+        )
 
-        # Check that every signal required by the state estimation model is there 
-        missing_columns = [
-            column
-            for column in self.REQUIRED_COLUMNS
-            if column not in cleaned_df.columns
+        y_movement = (
+            y_movement_from_speed
+            + y_movement_from_acceleration
+        )
+
+        # new position
+        new_x = x + x_movement
+        new_y = y + y_movement
+
+    return torch.stack(
+        [
+            new_x,
+            new_y,
+            new_velocity,
+            new_heading,
+            turn_rate,
+            acceleration,
         ]
-
-        if missing_columns:
-            raise ValueError(
-                f"Missing required columns: {missing_columns}"
-            )
-
-        # Cleaned so that the data must be in chronological order.
-        if not cleaned_df["timestamp"].is_monotonic_increasing:
-            raise ValueError(
-                "cleaned_df must be sorted by timestamp"
-            )
-
-
-class StateService:
-    def predict_forward(self, cleaned_readings: pd.DataFrame) -> StateEstimate:
-        """Run the UKF forward, one tick at a time (past-and-current-only).
-        Takes CLEANED_READING_SCHEMA rows; noise for the R matrix comes from SENSOR_STDDEV.
-        Output has is_smoothed=False."""
-        raise NotImplementedError
-
-    def smooth(self, forward: StateEstimate) -> StateEstimate:
-        """Run the URTS backward pass over a completed forward run.
-        Output has is_smoothed=True."""
-        raise NotImplementedError
-
-    def estimate_lap(self, cleaned_readings: pd.DataFrame) -> StateEstimate:
-        """Convenience wrapper: predict_forward() then smooth() for one full lap."""
-        raise NotImplementedError
+    )
