@@ -193,3 +193,13 @@ class PenelopeClient:
             raise PenelopeSchemaError(
                 "Streamed query against PenelopeDB failed."
             ) from exc
+
+    def get_by_run_id_and_time(self, run_id: str, start: datetime, end: datetime) -> np.ndarray:
+        """ Fetch all data rows with a specific run id and between a start and end time (inclusive)
+        """
+        stmt = select(self.data_table).where(
+            self.data_table.c.time >= start, 
+            self.data_table.c.time <= end,
+            self.data_table.c.runId == run_id
+        )
+        return self._fetch(stmt)
