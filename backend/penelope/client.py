@@ -4,7 +4,7 @@ from datetime import datetime
 import numpy as np
 from typing import Iterator
 from pydantic import ValidationError
-from sqlalchemy import MetaData, create_engine, select
+from sqlalchemy import MetaData, create_engine, func, select
 from sqlalchemy.exc import OperationalError, SQLAlchemyError
 
 from .exceptions import (
@@ -14,7 +14,7 @@ from .exceptions import (
     PenelopeValidationError,
 )
 from .models import DataPoint
-from ..orion.signals_catalog import SIGNALS
+from orion.signals_catalog import SIGNALS
 
 class PenelopeClient:
     """Read-only client for querying PenelopeDB (Postgres)."""
@@ -210,3 +210,13 @@ class PenelopeClient:
             .order_by(self.data_table.c.time)
         )
         yield from self._fetch_paginated(stmt, batch_size)
+
+    def get_max_first_value(self, run_id, start, end, data_type_name):
+        """Max of values[1] for one tag in one run's window, or None."""
+        t = self.data_table
+        stmt = select(func.max(t.c["values"][1])).where(
+            t.c.runId == run_id, t.c.time.between(start, end),
+            t.c.dataTypeName == data_type_name,
+        )
+        with self.engine.connect() as conn:
+            return conn.execute(stmt).scalar()
