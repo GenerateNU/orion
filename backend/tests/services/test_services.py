@@ -7,7 +7,7 @@ import pytest
 
 from services.metric_state_service import MetricService
 from services.sensor_clean_service import CleanService
-from services.vehicle_state_service import StateService
+from backend.services.ctra import StateService
 
 EMPTY = pd.DataFrame()
 
