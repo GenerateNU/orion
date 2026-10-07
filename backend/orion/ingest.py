@@ -79,3 +79,29 @@ def _normalize_soc(values: list[float], scale: float) -> list[float]:
     return [v * scale for v in values] 
 
 
+# Needs Investigation Part 
+
+INVESTIGATION_NAMES = frozenset({
+    "bms_pack_soc_drift",
+    "gps_mode",
+    "gps_pps",
+    "vcu_home_mode",
+    "vcu_nero_index",
+    "vcu_state_rejection_error",
+    "vcu_tsms",
+    "vcu_eth_a_accel",
+    "vcu_eth_a_gyro",
+})
+
+def _flag_investigation_tags(run_id: str, sensor_names: set[str]) -> set[str]:
+    """Log a warning listing which NEEDS INVESTIGATION tags appeared in this run.
+    Returns the ones found."""
+    found = INVESTIGATION_NAMES & sensor_names
+    if found:
+        logger.warning(
+            "Run %s: ingested tags marked NEEDS INVESTIGATION: %s",
+            run_id, ", ".join(sorted(found)),
+        )
+    return found
+
+
