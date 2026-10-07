@@ -2,6 +2,7 @@ import os
 from datetime import datetime
 
 import numpy as np
+from typing import Iterator
 from pydantic import ValidationError
 from sqlalchemy import MetaData, create_engine, select
 from sqlalchemy.exc import OperationalError, SQLAlchemyError
@@ -15,7 +16,6 @@ from .exceptions import (
 from .models import DataPoint
 from ..orion.signals_catalog import SIGNALS
 
-RAW_TAGS = [signal["raw_tag"] for signal in SIGNALS]
 class PenelopeClient:
     """Read-only client for querying PenelopeDB (Postgres)."""
     
@@ -195,13 +195,18 @@ class PenelopeClient:
                 "Streamed query against PenelopeDB failed."
             ) from exc
 
-    def get_by_run_id_and_time(self, run_id: str, start: datetime, end: datetime) -> np.ndarray:
-        """ Fetch all data rows with a specific run id and between a start and end time (inclusive)
-        """
-        stmt = select(self.data_table).where(
-            self.data_table.c.time >= start, 
-            self.data_table.c.time <= end,
-            self.data_table.c.runId == run_id,
-            self.data_table.c.dataTypeName.in_(RAW_TAGS)
+    def get_by_run_id_and_time(
+        self, run_id: str, start: datetime, end: datetime, raw_tags: list[str], batch_size: int = 5000) -> Iterator[np.ndarray]:
+        """Stream `data` rows for one run between start and end (inclusive),
+        limited to the given raw tags, in batches of batch_size rows."""
+        stmt = (
+            select(self.data_table)
+            .where(
+                self.data_table.c.time >= start,
+                self.data_table.c.time <= end,
+                self.data_table.c.runId == run_id,
+                self.data_table.c.dataTypeName.in_(raw_tags),
+            )
+            .order_by(self.data_table.c.time)
         )
-        return self._fetch(stmt)
+        yield from self._fetch_paginated(stmt, batch_size)

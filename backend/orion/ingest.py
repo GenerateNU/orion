@@ -8,6 +8,7 @@ from sqlalchemy.exc import OperationalError, SQLAlchemyError
 from .exceptions import OrionConnectionError, OrionSchemaError
 from .schema import cleaned_data_table, metadata, sensor_sources_table, sensors_table
 from .signals_catalog import SIGNALS
+from ..penelope.client import PenelopeClient 
 
 logger = logging.getLogger(__name__)
 
@@ -39,3 +40,6 @@ def ensure_reference_tables(engine: Engine) -> None:
     except SQLAlchemyError as exc:
         logger.exception("Failed to set up reference tables")
         raise OrionSchemaError("OrionDB rejected the reference table setup.") from exc
+
+def insert_cleaned_data(engine: Engine) -> None:
+    """Insert data with mapped sensor names and normalized values into orion's cleaned data table"""
