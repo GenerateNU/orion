@@ -1,6 +1,12 @@
 import torch
 
+from models.noise import PROCESS_NOISE_STDDEV
 from services.ctra import ctra
+
+# Process noise matrix Q, built once from models/noise.py. Shared with URTS so both use identical values.
+PROCESS_NOISE = torch.diag(torch.tensor(
+    [stddev**2 for stddev in PROCESS_NOISE_STDDEV.values()], dtype=torch.float64
+))
 
 
 class UKF:
@@ -15,9 +21,11 @@ class UKF:
         self,
         initial_state: torch.Tensor,
         initial_covariance: torch.Tensor,
+        process_noise: torch.Tensor = PROCESS_NOISE,
     ):
         self.state = initial_state.to(torch.float64)
         self.covariance = initial_covariance.to(torch.float64)
+        self.process_noise = process_noise.to(torch.float64)
 
         # Number of variables in our state
         self.state_dimension = 6
@@ -138,7 +146,8 @@ class UKF:
                 * torch.outer(difference, difference)
             )
 
-        self.covariance = predicted_covariance
+        # Add process noise: the real car drifts from CTRA's physics a little every tick
+        self.covariance = predicted_covariance + self.process_noise
 
         return self.state
 
@@ -152,7 +161,7 @@ class UKF:
 
         # TODO: Define measurement model
         # TODO: Predict what the sensors should measure
-        # TODO: Calculate measurement covariance
+        # TODO: Calculate measurement covariance -- build R for this sensor from SENSOR_STDDEV in models/noise.py
         # TODO: Calculate Kalman gain
         # TODO: Update state and covariance
 

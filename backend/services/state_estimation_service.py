@@ -53,7 +53,7 @@ class StateEstimationService:
 
     def predict_forward(self, cleaned_readings: pd.DataFrame) -> StateEstimate:
         """Run the UKF forward, one tick at a time (past-and-current-only).
-        Takes CLEANED_READING_SCHEMA rows; noise for the R matrix comes from SENSOR_STDDEV.
+        Takes CLEANED_READING_SCHEMA rows; noise for R and Q comes from models/noise.py.
         Output has is_smoothed=False."""
         raise NotImplementedError
 

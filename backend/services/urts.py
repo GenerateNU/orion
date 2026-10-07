@@ -12,7 +12,7 @@ import math
 import torch
 
 from services.ctra import ctra
-from services.ukf import UKF
+from services.ukf import PROCESS_NOISE, UKF
 
 # Index of heading in the state vector [x, y, v, theta, omega, a] -- angles need wrapping
 THETA = 3
@@ -38,7 +38,7 @@ def ukf_sigma_points(x: torch.Tensor, P: torch.Tensor) -> tuple[torch.Tensor, to
     return ukf.generate_sigma_points(), Wm, Wc
 
 
-def urts_smooth(xs: torch.Tensor, Ps: torch.Tensor, dt: float, Q: torch.Tensor, fx=ctra, sigma_points=ukf_sigma_points):
+def urts_smooth(xs: torch.Tensor, Ps: torch.Tensor, dt: float, Q: torch.Tensor = PROCESS_NOISE, fx=ctra, sigma_points=ukf_sigma_points):
     """
     Smooth a completed UKF forward pass.
 
@@ -50,7 +50,8 @@ def urts_smooth(xs: torch.Tensor, Ps: torch.Tensor, dt: float, Q: torch.Tensor, 
         - describes how sure the UKF is about its assumption
     dt : seconds between ticks (0.01 for 100 Hz)
         - describes time between ticks
-    Q : (6, 6) process noise -- must be the same Q the UKF used
+    Q : (6, 6) process noise. Defaults to PROCESS_NOISE from ukf.py (built from models/noise.py),
+        the same Q the UKF uses.
         - noise factor that was also used for ukf
     fx : motion model, fx(state, dt) -> next state. Defaults to CTRA.
     sigma_points : sigma_points(x, P) -> (points, Wm, Wc). Defaults to the UKF's.
