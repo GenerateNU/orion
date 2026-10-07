@@ -23,7 +23,7 @@ def linear_fx(state, dt):
 
 
 def sigma_points(x, P, alpha=0.5, beta=2.0, kappa=0.0):
-    """Standard sigma points. TODO: replace with sigma_points from services/ukf.py once it lands."""
+    """Standard sigma points, used instead of the UKF's so these tests check URTS on its own."""
     n = x.shape[0]
     lam = alpha**2 * (n + kappa) - n
     L = torch.linalg.cholesky((n + lam) * P)
@@ -48,7 +48,7 @@ def fake_ukf_output(n_ticks=30):
 def test_matches_textbook_rts():
     """With a linear model, URTS must give exactly the same answer as the textbook RTS smoother."""
     xs, Ps = fake_ukf_output()
-    x_smooth, P_smooth = urts_smooth(xs, Ps, DT, linear_fx, Q, sigma_points)
+    x_smooth, P_smooth = urts_smooth(xs, Ps, DT, Q, fx=linear_fx, sigma_points=sigma_points)
 
     x_expected, P_expected = xs.clone(), Ps.clone()
     for k in range(len(xs) - 2, -1, -1):
@@ -65,7 +65,7 @@ def test_matches_textbook_rts():
 def test_last_tick_is_unchanged():
     """Nothing comes after the last tick, so there's nothing to smooth it with."""
     xs, Ps = fake_ukf_output()
-    x_smooth, P_smooth = urts_smooth(xs, Ps, DT, linear_fx, Q, sigma_points)
+    x_smooth, P_smooth = urts_smooth(xs, Ps, DT, Q, fx=linear_fx, sigma_points=sigma_points)
 
     assert torch.equal(x_smooth[-1], xs[-1])
     assert torch.equal(P_smooth[-1], Ps[-1])
@@ -91,8 +91,8 @@ def test_heading_near_180_degrees_matches_heading_near_0():
         new[THETA] = wrap(new[THETA])
         return new
 
-    x_smooth, _ = urts_smooth(xs, Ps, DT, wrapping_fx, Q, sigma_points)
-    x_smooth_flipped, _ = urts_smooth(xs_flipped, Ps, DT, wrapping_fx, Q, sigma_points)
+    x_smooth, _ = urts_smooth(xs, Ps, DT, Q, fx=wrapping_fx, sigma_points=sigma_points)
+    x_smooth_flipped, _ = urts_smooth(xs_flipped, Ps, DT, Q, fx=wrapping_fx, sigma_points=sigma_points)
 
     x_smooth_flipped[:, THETA] = wrap(x_smooth_flipped[:, THETA] - torch.pi)
     torch.testing.assert_close(x_smooth_flipped, x_smooth)
@@ -102,4 +102,4 @@ def test_rejects_mismatched_covariances():
     xs, Ps = fake_ukf_output()
 
     with pytest.raises(ValueError):
-        urts_smooth(xs, Ps[:-1], DT, linear_fx, Q, sigma_points)
+        urts_smooth(xs, Ps[:-1], DT, Q, fx=linear_fx, sigma_points=sigma_points)

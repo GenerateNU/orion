@@ -7,7 +7,7 @@ import pytest
 
 from services.metric_state_service import MetricService
 from services.sensor_clean_service import CleanService
-from services.state_estimation_service import StateService
+from services.state_estimation_service import StateEstimationService
 
 EMPTY = pd.DataFrame()
 
@@ -17,9 +17,9 @@ EMPTY = pd.DataFrame()
     lambda: MetricService().analyze_lap(EMPTY, lap_number=1),
     lambda: CleanService().clean(EMPTY),
     lambda: CleanService().resolve_name("CH_07"),
-    lambda: StateService().predict_forward(EMPTY),
-    lambda: StateService().smooth(None),
-    lambda: StateService().estimate_lap(EMPTY),
+    lambda: StateEstimationService().predict_forward(EMPTY),
+    lambda: StateEstimationService().smooth(None),
+    lambda: StateEstimationService().estimate_lap(EMPTY),
 ])
 def test_service_stubs_not_implemented_yet(call):
     with pytest.raises(NotImplementedError):

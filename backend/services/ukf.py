@@ -16,8 +16,8 @@ class UKF:
         initial_state: torch.Tensor,
         initial_covariance: torch.Tensor,
     ):
-        self.state = initial_state
-        self.covariance = initial_covariance
+        self.state = initial_state.to(torch.float64)
+        self.covariance = initial_covariance.to(torch.float64)
 
         # Number of variables in our state
         self.state_dimension = 6
@@ -80,6 +80,7 @@ class UKF:
         mean_weights = torch.full(
             (2 * n + 1,),
             1 / (2 * (n + lambda_)),
+            dtype=self.state.dtype,
         )
 
         covariance_weights = mean_weights.clone()

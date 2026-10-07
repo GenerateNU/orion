@@ -11,6 +11,9 @@ import math
 
 import torch
 
+from services.ctra import ctra
+from services.ukf import UKF
+
 # Index of heading in the state vector [x, y, v, theta, omega, a] -- angles need wrapping
 THETA = 3
 
@@ -27,19 +30,33 @@ def _residual(a: torch.Tensor, b: torch.Tensor) -> torch.Tensor:
     return diff
 
 
-def urts_smooth(xs: torch.Tensor, Ps: torch.Tensor, dt: float, fx, Q: torch.Tensor, sigma_points):
+def ukf_sigma_points(x: torch.Tensor, P: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
+    """Sigma points and weights from the UKF, so URTS spreads points exactly the way the UKF did.
+    The UKF keeps these as methods on its own state, so build a throwaway UKF holding x and P to get them."""
+    ukf = UKF(x, P)
+    Wm, Wc = ukf.calculate_weights()
+    return ukf.generate_sigma_points(), Wm, Wc
+
+
+def urts_smooth(xs: torch.Tensor, Ps: torch.Tensor, dt: float, Q: torch.Tensor, fx=ctra, sigma_points=ukf_sigma_points):
     """
     Smooth a completed UKF forward pass.
 
     Parameters
     ----------
     xs : (N, 6) filtered states from the UKF, one per 10 ms tick
+        - describes UKF's assumption of where the car is
     Ps : (N, 6, 6) filtered covariances from the UKF
+        - describes how sure the UKF is about its assumption
     dt : seconds between ticks (0.01 for 100 Hz)
-    fx : motion model function, fx(state, dt) -> next state  (ctra_predict)
+        - describes time between ticks
     Q : (6, 6) process noise -- must be the same Q the UKF used
-    sigma_points : function, sigma_points(x, P) -> (points, Wm, Wc), same settings as the UKF
-        TODO: import this from ukf.py once it exists instead of passing it in
+        - noise factor that was also used for ukf
+    fx : motion model, fx(state, dt) -> next state. Defaults to CTRA.
+    sigma_points : sigma_points(x, P) -> (points, Wm, Wc). Defaults to the UKF's.
+        Tests pass simpler stand-ins for both so they check URTS on its own.
+        - picks 13 points 
+        - Wm: how much each point coun
 
     Returns
     -------
