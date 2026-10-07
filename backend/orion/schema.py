@@ -60,6 +60,13 @@ signals_table = Table(
     Column("unit", String, nullable=True),
 )
 
+cleaned_data_table = Table("cleaned_data", metadata,       
+    Column("runId", String, primary_key=True),
+    Column("sensor", String, primary_key=True),
+    Column("time", DateTime(timezone=True), primary_key=True),
+    Column("value", DOUBLE_PRECISION, nullable=False),
+)
+
 def create_tables(engine: Engine) -> None:
     """Create all tables in this module if they don't already exist."""
     metadata.create_all(engine, checkfirst=True)
