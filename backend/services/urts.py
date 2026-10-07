@@ -73,31 +73,31 @@ def urts_smooth(xs: torch.Tensor, Ps: torch.Tensor, dt: float, Q: torch.Tensor, 
     # The last tick has no future to learn from, so it stays as the UKF left it.
     # Walk backward from the second-to-last tick to the first.
     for k in range(n_ticks - 2, -1, -1):
-        # 1. Spread sigma points around the filtered estimate at tick k
+        # Spread sigma points around the filtered estimate at tick k
         points, Wm, Wc = sigma_points(xs[k], Ps[k])
 
-        # 2. Push every sigma point through the motion model to tick k+1
+        # Push every sigma point through the motion model to tick k+1
         predicted_points = torch.stack([fx(point, dt) for point in points])
 
-        # 3. What tick k expected tick k+1 to look like.
-        #    Heading can't be averaged directly (179 deg and -179 deg would average to 0), so average
-        #    each point's wrapped difference from the center point and add that back on.
+        # What tick k expected tick k+1 to look like.
+        # Heading can't be averaged directly (179 deg and -179 deg would average to 0), so average
+        # each point's wrapped difference from the center point and add that back on.
         x_pred = Wm @ predicted_points
         center_theta = predicted_points[0, THETA]
         x_pred[THETA] = _wrap_angle(center_theta + Wm @ _wrap_angle(predicted_points[:, THETA] - center_theta))
 
-        # 4. How unsure that expectation is, plus Q for "the motion model isn't perfect"
+        # Measures how unsure that expectation is, plus Q
         pred_diffs = _residual(predicted_points, x_pred)
         P_pred = pred_diffs.T @ torch.diag(Wc) @ pred_diffs + Q
 
-        # 5. How errors at tick k line up with errors at tick k+1
+        # How errors at tick k line up with errors at tick k+1
         point_diffs = _residual(points, xs[k])
         cross_cov = point_diffs.T @ torch.diag(Wc) @ pred_diffs
 
-        # 6. Smoother gain: how much tick k should listen to tick k+1 (cross_cov @ inv(P_pred))
+        # Smoother gain: how much tick k should listen to tick k+1 (cross_cov @ inv(P_pred))
         gain = torch.linalg.solve(P_pred, cross_cov.T).T
 
-        # 7. Nudge tick k by how far the smoothed k+1 landed from what tick k expected
+        # Nudge tick k by how far the smoothed k+1 landed from what tick k expected
         x_smooth[k] = xs[k] + gain @ _residual(x_smooth[k + 1], x_pred)
         x_smooth[k, THETA] = _wrap_angle(x_smooth[k, THETA])
 
