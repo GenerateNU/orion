@@ -6,7 +6,7 @@ from sqlalchemy import create_engine
 from sqlalchemy.engine import Connection
 
 from main import app
-from orion.db import get_connection, get_engine
+from orion.connection import get_connection, get_engine
 from orion.exceptions import OrionConfigError
 
 client = TestClient(app)

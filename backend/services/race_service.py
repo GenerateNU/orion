@@ -1,13 +1,5 @@
 from repositories.race_repository import RaceRepository
-
-
-class RaceNotFoundError(Exception):
-    """No race with this ID exists. The controller turns this into a 404."""
-
-    def __init__(self, race_id):
-        super().__init__(f"Race {race_id} not found")
-        self.race_id = race_id
-
+from services.exceptions import RaceNotFoundError
 
 class RaceService:
 

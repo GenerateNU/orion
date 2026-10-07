@@ -3,7 +3,8 @@ from unittest.mock import Mock
 import pytest
 
 from main import health
-from services.race_service import RaceNotFoundError, RaceService
+from services.race_service import RaceService
+from services.exceptions import RaceNotFoundError
 
 
 def test_health_returns_ok_status():

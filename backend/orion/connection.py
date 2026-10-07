@@ -66,4 +66,4 @@ def get_connection() -> Iterator[Connection]:
         ) from exc
 
     with conn:
-        yield conn
+        yield conn # pauses the helper function so API code can run

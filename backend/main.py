@@ -8,7 +8,7 @@ from sqlalchemy.engine import Connection
 from sqlalchemy.exc import OperationalError
 
 from controllers.race_controller import router as race_router
-from orion.db import get_connection
+from orion.connection import get_connection
 from orion.exceptions import OrionConfigError, OrionConnectionError, OrionSchemaError
 
 app = FastAPI(title="orion")

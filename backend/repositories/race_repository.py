@@ -25,7 +25,8 @@ class RaceRepository:
 
     # Get all races (wired to OrionDB)
     def get_races(self, conn: Connection, date=None):
-        stmt = select(races_table).order_by(races_table.c.race_id)
+        r = races_table
+        stmt = select(r.c.race_id, r.c.name, r.c.dates).order_by(r.c.race_id)
         if date is not None:
             stmt = stmt.where(races_table.c.dates == date)
         return [dict(row._mapping) for row in _run(conn, stmt)]
@@ -78,7 +79,7 @@ class RaceRepository:
     ):
         t = estimated_positions_table
         stmt = (
-            select(t.c.timestamp, t.c.latitude, t.c.longitude)
+            select(t.c.timestamp, t.c.latitude, t.c.longitude, t.c.orientation, t.c.speed, t.c.tangential_acceleration, t.c.centripetal_acceleration)
             .where(t.c.race_id == race_id, t.c.lap_number == lap_number)
             .order_by(t.c.timestamp)
         )

@@ -70,11 +70,16 @@ races_table = Table(
 estimated_positions_table = Table(
     "estimated_positions",
     metadata,
-    Column("race_id", Integer, ForeignKey("races.race_id"), primary_key=True),
-    Column("lap_number", Integer, primary_key=True),
     Column("timestamp", DateTime(timezone=True), primary_key=True),
     Column("latitude", Float, nullable=False),
     Column("longitude", Float, nullable=False),
+    Column("orientation", Float, nullable=False),
+    Column("speed", Float, nullable=False),
+    Column("tangential_acceleration", Float, nullable=False),
+    Column("centripetal_acceleration", Float, nullable=False),
+    Column("race_id", Integer, ForeignKey("races.race_id"), primary_key=True),
+    Column("lap_number", Integer, primary_key=True),
+
 )
 
 

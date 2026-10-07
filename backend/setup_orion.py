@@ -2,7 +2,7 @@ from dotenv import load_dotenv
 
 load_dotenv()
 
-from orion.db import get_engine
+from orion.connection import get_engine
 from orion.exceptions import OrionConfigError
 from orion.schema import create_tables
 

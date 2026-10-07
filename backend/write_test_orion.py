@@ -6,7 +6,7 @@ from datetime import UTC, datetime
 
 import numpy as np
 
-from orion.db import get_engine
+from orion.connection import get_engine
 from orion.exceptions import OrionConfigError
 from orion.repository import DataPointRepository
 from penelope.client import PenelopeClient

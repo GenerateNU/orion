@@ -16,7 +16,7 @@ from sqlalchemy.exc import OperationalError, ProgrammingError
 from sqlalchemy.pool import StaticPool
 
 from main import app
-from orion.db import get_connection
+from orion.connection import get_connection
 from orion.schema import estimated_positions_table, metadata, races_table
 
 client = TestClient(app)
