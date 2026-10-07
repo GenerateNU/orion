@@ -32,3 +32,15 @@ chunk = [
     ("t1", "VCU_Ethernet/A/Acceleration", "run", [-870.0, -24.6, 486.0]),
     ("t2", "BMS/Pack/SoC", "run", [0.637]),
 ]
+
+from orion.ingest import _clean_chunk
+
+t = datetime(2026, 8, 15, 18, 17, 3, tzinfo=UTC)
+chunk = [
+    (t, "VCU_Ethernet/A/Acceleration", "run", [-870.0, -24.6, 486.0]),
+    (t, "BMS/Pack/SoC", "run", [0.637]),
+    (t, "VCU/CarState/speed", "run", [42.0]),
+    (t, "TPU/GPS/Location", "run", [42.33, -71.09]),
+]
+for row in _clean_chunk(chunk, 100.0):
+    print(row)

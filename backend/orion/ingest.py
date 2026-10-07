@@ -1,16 +1,30 @@
 import logging
+from datetime import datetime, timedelta
 from importlib import metadata
 
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.engine import Engine
 from sqlalchemy.exc import OperationalError, SQLAlchemyError
 
+from penelope.client import PenelopeClient
+
 from .exceptions import OrionConnectionError, OrionSchemaError
-from .schema import cleaned_data_table, metadata, sensor_sources_table, sensors_table
+from .schema import cleaned_data_table, sensor_sources_table, sensors_table
 from .signals_catalog import SIGNALS
-from penelope.client import PenelopeClient 
 
 logger = logging.getLogger(__name__)
+
+
+# CONSTANTS 
+
+#soc_tag
+SOC_TAG = "BMS/Pack/SoC"
+
+# 3 seconds added to every GPS timestamp.
+GPS_TAG_PREFIX = "TPU/GPS/"
+DEFAULT_GPS_LAG_SECONDS = 3.0
+
+
 
 # turns the raw Penelope tag into a clean name
 TAG_TO_NAME = {s["raw_tag"]: s["name"] for s in SIGNALS}
@@ -41,18 +55,10 @@ def ensure_reference_tables(engine: Engine) -> None:
         logger.exception("Failed to set up reference tables")
         raise OrionSchemaError("OrionDB rejected the reference table setup.") from exc
 
+
 def insert_cleaned_data(engine: Engine) -> None:
     """Insert data with mapped sensor names and normalized values into orion's cleaned data table"""
 
-
-import logging
-from datetime import datetime
-
-from penelope.client import PenelopeClient
-
-logger = logging.getLogger(__name__)
-
-SOC_TAG = "BMS/Pack/SoC"
 
 
 # Normalize SOC values 
@@ -103,5 +109,41 @@ def _flag_investigation_tags(run_id: str, sensor_names: set[str]) -> set[str]:
             run_id, ", ".join(sorted(found)),
         )
     return found
+
+
+def _clean_chunk(chunk, soc_scale: float, gps_lag_seconds: float = DEFAULT_GPS_LAG_SECONDS) -> list[tuple]:
+    """Clean one chunk of Penelope rows.
+    Rename while still an array, fix SoC, shift GPS timestamps, then split.
+    Returns (time, sensor, value) tuples."""
+        
+    gps_lag = timedelta(seconds= gps_lag_seconds)
+    rows = []
+
+
+    for time, tag, _run_id, values in chunk:
+        # 1. map raw tag -> clean name (still an array)
+        name = TAG_TO_NAME[tag]
+
+
+        # 2. fix SoC (still an array)
+        if tag == SOC_TAG:
+            values = _normalize_soc(values, soc_scale)
+
+        # 3. shift GPS timestamps by the lag
+        if tag.startswith(GPS_TAG_PREFIX):
+            time = time + gps_lag
+
+        # 4. split at the end
+        if len(values) == 1:
+            rows.append((time, name, float(values[0])))
+        else:
+            rows.extend((time, f"{name}_{i}", float(v)) for i, v in enumerate(values))
+            
+    return rows
+
+
+
+
+
 
 
