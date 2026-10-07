@@ -13,11 +13,12 @@ from .exceptions import (
     PenelopeValidationError,
 )
 from .models import DataPoint
+from ..orion.signals_catalog import SIGNALS
 
-
+RAW_TAGS = [signal["raw_tag"] for signal in SIGNALS]
 class PenelopeClient:
     """Read-only client for querying PenelopeDB (Postgres)."""
-
+    
     def __init__(self, engine):
         """Reflect Penelope's tables off an existing SQLAlchemy engine.
 
@@ -200,6 +201,7 @@ class PenelopeClient:
         stmt = select(self.data_table).where(
             self.data_table.c.time >= start, 
             self.data_table.c.time <= end,
-            self.data_table.c.runId == run_id
+            self.data_table.c.runId == run_id,
+            self.data_table.c.dataTypeName.in_(RAW_TAGS)
         )
         return self._fetch(stmt)
