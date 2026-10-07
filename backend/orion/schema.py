@@ -45,14 +45,14 @@ sensors_table = Table(
 
 
 sensor_sources_table = Table(
-    "signals",
+    "sensor_sources",
     metadata,
     Column("sourceDataTypeName", String, primary_key=True),
     Column("sensor", String, ForeignKey("sensors.name"), nullable=False)
 )
 
 signals_table = Table(
-    "sensor_sources",
+    "signals",
     metadata,
     Column("id", Integer, primary_key=True, autoincrement=True),
     Column("raw_tag", String, nullable=False, unique=True),

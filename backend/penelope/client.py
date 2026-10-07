@@ -173,11 +173,14 @@ class PenelopeClient:
         )
         return self._fetch(stmt)
 
-    def get_all_paginated(self, batch_size: int = 5000):
+    def get_all_paginated(self, batch_size: int = 5000, stmt=None):
+        """Stream rows in batches. With no stmt, streams every row in `data`;
+        pass a stmt to stream a filtered query instead."""
         if batch_size <= 0:
             raise ValueError("batch_size must be positive")
 
-        stmt = select(self.data_table).order_by(self.data_table.c.time)
+        if stmt is None:
+            stmt = select(self.data_table).order_by(self.data_table.c.time)
 
         try:
             with self.engine.connect().execution_options(yield_per=batch_size) as conn:
@@ -195,6 +198,7 @@ class PenelopeClient:
                 "Streamed query against PenelopeDB failed."
             ) from exc
 
+        
     def get_by_run_id_and_time(
         self, run_id: str, start: datetime, end: datetime, raw_tags: list[str], batch_size: int = 5000) -> Iterator[np.ndarray]:
         """Stream `data` rows for one run between start and end (inclusive),
@@ -209,7 +213,8 @@ class PenelopeClient:
             )
             .order_by(self.data_table.c.time)
         )
-        yield from self._fetch_paginated(stmt, batch_size)
+        
+        yield from self.get_all_paginated(batch_size, stmt)
 
     def get_max_first_value(self, run_id, start, end, data_type_name):
         """Max of values[1] for one tag in one run's window, or None."""
