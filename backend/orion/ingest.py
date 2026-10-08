@@ -1,16 +1,21 @@
 import logging
 from datetime import datetime, timedelta
-from importlib import metadata
 
-from sqlalchemy import delete, insert
+import pandas as pd
+from sqlalchemy import and_, delete, insert, or_
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.engine import Engine
 from sqlalchemy.exc import OperationalError, SQLAlchemyError
 
 from penelope.client import PenelopeClient
+from penelope.exceptions import (
+    PenelopeConnectionError,
+    PenelopeSchemaError,
+    PenelopeValidationError,
+)
 
 from .exceptions import OrionConnectionError, OrionSchemaError
-from .schema import cleaned_data_table, sensor_sources_table, sensors_table
+from .schema import cleaned_data_table, metadata, sensor_sources_table, sensors_table
 from .signals_catalog import SIGNALS
 
 logger = logging.getLogger(__name__)
@@ -22,14 +27,16 @@ logger = logging.getLogger(__name__)
 #soc_tag
 SOC_TAG = "BMS/Pack/SoC"
 
-# 3 seconds added to every GPS timestamp.
+# GPS timestamps run 3 s late, so shift them back by 3 s.
 GPS_TAG_PREFIX = "TPU/GPS/"
-DEFAULT_GPS_LAG_SECONDS = 3.0
-
-
+DEFAULT_GPS_LAG_SECONDS = -3.0
 
 # turns the raw Penelope tag into a clean name
 TAG_TO_NAME = {s["raw_tag"]: s["name"] for s in SIGNALS}
+GPS_NAMES = [name for tag, name in TAG_TO_NAME.items() if tag.startswith(GPS_TAG_PREFIX)]
+
+# clean name -> unit, so suffixed sensors (vcu_eth_a_accel_0) can get their base sensor's unit
+NAME_TO_UNIT = {s["name"]: s.get("unit") for s in SIGNALS}
 
 def ensure_reference_tables(engine: Engine) -> None:
     """Create sensors, sensor_sources and cleaned_data if missing, and fill
@@ -56,10 +63,6 @@ def ensure_reference_tables(engine: Engine) -> None:
     except SQLAlchemyError as exc:
         logger.exception("Failed to set up reference tables")
         raise OrionSchemaError("OrionDB rejected the reference table setup.") from exc
-
-
-def insert_cleaned_data(engine: Engine) -> None:
-    """Insert data with mapped sensor names and normalized values into orion's cleaned data table"""
 
 
 
@@ -148,18 +151,20 @@ def _clean_chunk(chunk, soc_scale: float, gps_lag_seconds: float = DEFAULT_GPS_L
 
 def _delete_existing_rows(conn, run_id: str, start: datetime, end: datetime,
                           gps_lag_seconds: float = DEFAULT_GPS_LAG_SECONDS) -> int:
-    
-    """Delete this run's cleaned_data rows in [start, end] so a rerun replaces
-    them instead of duplicating. The window is widened by the GPS lag, since
-    shifted GPS rows can land just outside it. Returns rows deleted."""
+    """Delete exactly the cleaned_data rows this ingest will rewrite, so a rerun
+    replaces them instead of duplicating: non-GPS rows in [start, end] and GPS
+    rows in the window shifted by the lag. Returns rows deleted."""
 
     lag = timedelta(seconds=gps_lag_seconds)
     c = cleaned_data_table.c
+    is_gps = or_(*[c.sensor.startswith(n, autoescape=True) for n in GPS_NAMES])
     result = conn.execute(
         delete(cleaned_data_table).where(
             c.runId == run_id,
-            c.time >= start + min(lag, timedelta(0)),
-            c.time <= end + max(lag, timedelta(0)),
+            or_(
+                and_(~is_gps, c.time.between(start, end)),
+                and_(is_gps, c.time.between(start + lag, end + lag)),
+            ),
         )
     )
     logger.info("Run %s: deleted %d existing cleaned_data rows", run_id, result.rowcount)
@@ -176,3 +181,91 @@ def insert_cleaned_data(conn, run_id: str, rows: list[tuple]) -> int:
         [{"runId": run_id, "time": t, "sensor": s, "value": v} for t, s, v in rows],
     )
     return len(rows)
+
+
+def ingest_run(
+    engine: Engine,
+    penelope: PenelopeClient,
+    run_id: str,
+    start: datetime,
+    end: datetime,
+    gps_lag_seconds: float = DEFAULT_GPS_LAG_SECONDS,
+) -> pd.DataFrame:
+    """Ingest one run's catalog sensors from PenelopeDB into OrionDB's cleaned_data.
+
+    Replaces existing rows for the run's window, reads and writes chunk by
+    chunk, and returns the cleaned readings as a DataFrame with columns
+    time, sensor, value for the estimation service.
+    """
+    ensure_reference_tables(engine)
+
+    # Decide the SoC scale once for the whole window, before any chunk is cleaned.
+    try:
+        soc_scale = _soc_scale(penelope, run_id, start, end)
+    except SQLAlchemyError:
+        logger.exception("Run %s: SoC range query against PenelopeDB failed", run_id)
+        raise
+
+    known_sensors = set(TAG_TO_NAME.values())
+    flagged: set[str] = set()
+    frames: list[pd.DataFrame] = []
+    total = 0
+
+    try:
+        # One transaction: the delete and every insert commit together, and any
+        # error rolls all of it back, so a failed rerun leaves the old rows intact.
+        with engine.begin() as conn:
+            _delete_existing_rows(conn, run_id, start, end, gps_lag_seconds)
+
+            for chunk in penelope.get_by_run_id_and_time(run_id, start, end, list(TAG_TO_NAME)):
+                # Flag NEEDS INVESTIGATION tags once per run. 
+                names = {TAG_TO_NAME.get(row[1]) for row in chunk}
+                flagged |= _flag_investigation_tags(run_id, names - flagged)
+
+                # The query filters to catalog tags, so this should never fire.
+                try:
+                    rows = _clean_chunk(chunk, soc_scale, gps_lag_seconds)
+                except KeyError as exc:
+                    logger.error("Run %s: Penelope returned tag %s, which is not in the signals catalog", run_id, exc)
+                    raise
+
+                # Suffixed names (vcu_eth_a_accel_0) aren't in the catalog, so add
+                # them to `sensors` as they appear. Every new name is a catalog name
+                # + _<index>, so dropping the _<index> part gives the base for the unit.
+                new = {sensor for _, sensor, _ in rows} - known_sensors
+                if new:
+                    conn.execute(
+                        pg_insert(sensors_table).on_conflict_do_nothing(),
+                        [{"name": n, "unit": NAME_TO_UNIT.get(n.rsplit("_", 1)[0])} for n in new],
+                    )
+                    known_sensors |= new
+
+                written = insert_cleaned_data(conn, run_id, rows)
+                if written:
+                    total += written
+                    frames.append(pd.DataFrame(rows, columns=["time", "sensor", "value"]))
+
+            if total == 0:
+                # Raising inside the transaction also undoes the delete above.
+                msg = (
+                    f"Run {run_id} has no readings for any signals catalog tag between "
+                    f"{start} and {end}; nothing was written."
+                )
+                logger.error(msg)
+                raise ValueError(msg)
+
+    # Penelope errors come from the chunk generator, which has already converted
+    # them from SQLAlchemy errors, so any SQLAlchemyError below is from OrionDB.
+    except (PenelopeConnectionError, PenelopeSchemaError, PenelopeValidationError):
+        logger.exception("Run %s: reading from PenelopeDB failed; OrionDB rolled back", run_id)
+        raise
+    except OperationalError as exc:
+        logger.exception("Run %s: lost connection to OrionDB mid-write; rolled back", run_id)
+        raise OrionConnectionError(f"Lost connection to OrionDB while writing run {run_id}.") from exc
+    except SQLAlchemyError as exc:
+        logger.exception("Run %s: OrionDB rejected the cleaned_data write; rolled back", run_id)
+        raise OrionSchemaError(f"OrionDB rejected the cleaned_data write for run {run_id}.") from exc
+
+    result = pd.concat(frames, ignore_index=True)
+    logger.info("Run %s: wrote %d cleaned rows across %d sensors", run_id, total, result["sensor"].nunique())
+    return result

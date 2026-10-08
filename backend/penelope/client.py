@@ -14,7 +14,6 @@ from .exceptions import (
     PenelopeValidationError,
 )
 from .models import DataPoint
-from orion.signals_catalog import SIGNALS
 
 class PenelopeClient:
     """Read-only client for querying PenelopeDB (Postgres)."""
