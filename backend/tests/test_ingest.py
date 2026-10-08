@@ -44,3 +44,40 @@ chunk = [
 ]
 for row in _clean_chunk(chunk, 100.0):
     print(row)
+
+
+import os
+from sqlalchemy import create_engine
+from orion.ingest import _delete_existing_rows
+
+engine = create_engine(os.environ["NEON_DB_URL"])
+with engine.connect() as conn:
+    trans = conn.begin()
+    n = _delete_existing_rows(
+        conn,
+        "5eee6c81-e84d-4f08-b8c4-bc1a481a5ad6",
+        datetime(2026, 8, 15, 18, 17, tzinfo=UTC),
+        datetime(2026, 8, 15, 18, 19, tzinfo=UTC),
+    )
+    print("would delete:", n)
+    trans.rollback()   # undo, so nothing is actually deleted
+
+
+from sqlalchemy import func, select
+from orion.ingest import insert_cleaned_data
+from orion.schema import cleaned_data_table
+
+fake_rows = [
+    (datetime(2026, 1, 1, 0, 0, 0, tzinfo=UTC), "bms_pack_soc", 63.7),
+    (datetime(2026, 1, 1, 0, 0, 1, tzinfo=UTC), "vcu_speed", 42.0),
+]
+with engine.connect() as conn:
+    trans = conn.begin()
+    n = insert_cleaned_data(conn, "test-run", fake_rows)
+    count = conn.execute(
+        select(func.count()).select_from(cleaned_data_table)
+        .where(cleaned_data_table.c.runId == "test-run")
+    ).scalar()
+    print("inserted:", n, "| in table:", count)
+    print("empty chunk:", insert_cleaned_data(conn, "test-run", []))
+    trans.rollback()  

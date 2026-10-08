@@ -2,6 +2,7 @@ import logging
 from datetime import datetime, timedelta
 from importlib import metadata
 
+from sqlalchemy import delete, insert
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.engine import Engine
 from sqlalchemy.exc import OperationalError, SQLAlchemyError
@@ -13,6 +14,7 @@ from .schema import cleaned_data_table, sensor_sources_table, sensors_table
 from .signals_catalog import SIGNALS
 
 logger = logging.getLogger(__name__)
+
 
 
 # CONSTANTS 
@@ -138,12 +140,39 @@ def _clean_chunk(chunk, soc_scale: float, gps_lag_seconds: float = DEFAULT_GPS_L
             rows.append((time, name, float(values[0])))
         else:
             rows.extend((time, f"{name}_{i}", float(v)) for i, v in enumerate(values))
-            
+
     return rows
 
 
 
 
+def _delete_existing_rows(conn, run_id: str, start: datetime, end: datetime,
+                          gps_lag_seconds: float = DEFAULT_GPS_LAG_SECONDS) -> int:
+    
+    """Delete this run's cleaned_data rows in [start, end] so a rerun replaces
+    them instead of duplicating. The window is widened by the GPS lag, since
+    shifted GPS rows can land just outside it. Returns rows deleted."""
+
+    lag = timedelta(seconds=gps_lag_seconds)
+    c = cleaned_data_table.c
+    result = conn.execute(
+        delete(cleaned_data_table).where(
+            c.runId == run_id,
+            c.time >= start + min(lag, timedelta(0)),
+            c.time <= end + max(lag, timedelta(0)),
+        )
+    )
+    logger.info("Run %s: deleted %d existing cleaned_data rows", run_id, result.rowcount)
+    return result.rowcount
 
 
-
+def insert_cleaned_data(conn, run_id: str, rows: list[tuple]) -> int:
+    """Insert one chunk of (time, sensor, value) rows into cleaned_data.
+    Returns the number of rows written."""
+    if not rows:
+        return 0
+    conn.execute(
+        insert(cleaned_data_table),
+        [{"runId": run_id, "time": t, "sensor": s, "value": v} for t, s, v in rows],
+    )
+    return len(rows)
