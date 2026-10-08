@@ -1,5 +1,4 @@
-from backend.orion.signals_catalog import SIGNALS
-
+from orion.signals_catalog import SIGNALS
 
 def test_signals_have_required_fields():
     required = {
