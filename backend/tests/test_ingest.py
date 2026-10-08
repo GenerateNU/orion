@@ -1,15 +1,15 @@
-from dotenv import load_dotenv; load_dotenv()
 import logging
 import os
 from datetime import UTC, datetime, timedelta
 
+from dotenv import load_dotenv
 from sqlalchemy import and_, create_engine, func, or_, select
 
 from orion.ingest import (
     DEFAULT_GPS_LAG_SECONDS,
     GPS_NAMES,
-    TAG_TO_NAME,
     INVESTIGATION_NAMES,
+    TAG_TO_NAME,
     _clean_chunk,
     _delete_existing_rows,
     _flag_investigation_tags,
@@ -21,6 +21,7 @@ from orion.ingest import (
 from orion.schema import cleaned_data_table, sensor_sources_table, sensors_table
 from penelope.client import PenelopeClient
 
+load_dotenv()
 logging.basicConfig(level=logging.INFO)
 
 RUN_ID = "5eee6c81-e84d-4f08-b8c4-bc1a481a5ad6"

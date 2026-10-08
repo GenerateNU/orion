@@ -1,8 +1,8 @@
 import os
+from collections.abc import Iterator
 from datetime import datetime
 
 import numpy as np
-from typing import Iterator
 from pydantic import ValidationError
 from sqlalchemy import MetaData, create_engine, func, select
 from sqlalchemy.exc import OperationalError, SQLAlchemyError
@@ -14,6 +14,7 @@ from .exceptions import (
     PenelopeValidationError,
 )
 from .models import DataPoint
+
 
 class PenelopeClient:
     """Read-only client for querying PenelopeDB (Postgres)."""

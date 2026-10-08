@@ -15,9 +15,9 @@ from penelope.exceptions import (
 )
 
 from .exceptions import OrionConnectionError, OrionSchemaError
+from .repository import DataPointRepository
 from .schema import cleaned_data_table, metadata, sensor_sources_table, sensors_table
 from .signals_catalog import SIGNALS
-from .repository import DataPointRepository
 
 logger = logging.getLogger(__name__)
 

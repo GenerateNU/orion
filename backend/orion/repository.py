@@ -84,5 +84,5 @@ class DataPointRepository:
             )
             if conn is not None:
                 return len(conn.execute(stmt, dicts).all())
-            with self.engine.begin() as conn:
-                return len(conn.execute(stmt, dicts).all())
+            with self.engine.begin() as ownconn:
+                return len(ownconn.execute(stmt, dicts).all())
