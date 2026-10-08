@@ -2,6 +2,8 @@ from typing import ClassVar
 
 import pandas as pd
 
+from models.vehicle import StateEstimate
+
 
 class StateEstimationService:
     """
@@ -9,7 +11,6 @@ class StateEstimationService:
     """
 
     # Signals that the state estimation would need to get (based on the R&D doc)
-
     REQUIRED_COLUMNS: ClassVar[list[str]] = [
         "timestamp",
         "latitude",
@@ -51,32 +52,49 @@ class StateEstimationService:
 
         return pd.DataFrame(columns=self.OUTPUT_COLUMNS)
 
+    def predict_forward(self, cleaned_readings: pd.DataFrame) -> StateEstimate:
+        """Run the UKF forward, one tick at a time (past-and-current-only).
+        Takes CLEANED_READING_SCHEMA rows; noise for R and Q comes from models/noise.py.
+        Output has is_smoothed=False."""
+        raise NotImplementedError
+
+    def smooth(self, forward: StateEstimate) -> StateEstimate:
+        """Run the URTS backward pass over a completed forward run.
+        Output has is_smoothed=True."""
+        raise NotImplementedError
+
+    def estimate_lap(self, cleaned_readings: pd.DataFrame) -> StateEstimate:
+        """Convenience wrapper: predict_forward() then smooth() for one full lap.
+        
+        Left in for now: looks similar to estimate_position()"""
+        raise NotImplementedError
+
     def _validate_input(self, cleaned_df: pd.DataFrame) -> None:
         """
         Validate the input DataFrame from the clean service.
-
+            
         """
-
+            
         # Make sure the clean service actually provided a DataFrame.
         if not isinstance(cleaned_df, pd.DataFrame):
             raise TypeError("cleaned_df must be a pandas DataFrame")
-
+            
         # The estimation model cannot produce a position from no data.
-        if cleaned_df.empty:
-            raise ValueError("cleaned_df cannot be empty")
-
+            if cleaned_df.empty:
+                raise ValueError("cleaned_df cannot be empty")
+            
         # Check that every signal required by the state estimation model is there 
         missing_columns = [
             column
             for column in self.REQUIRED_COLUMNS
             if column not in cleaned_df.columns
         ]
-
+ 
         if missing_columns:
             raise ValueError(
                 f"Missing required columns: {missing_columns}"
             )
-
+        
         # Cleaned so that the data must be in chronological order.
         if not cleaned_df["timestamp"].is_monotonic_increasing:
             raise ValueError(
