@@ -2,7 +2,7 @@ import logging
 from datetime import datetime, timedelta
 
 import pandas as pd
-from sqlalchemy import and_, delete, insert, or_
+from sqlalchemy import and_, delete, or_
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.engine import Engine
 from sqlalchemy.exc import OperationalError, SQLAlchemyError
@@ -17,6 +17,7 @@ from penelope.exceptions import (
 from .exceptions import OrionConnectionError, OrionSchemaError
 from .schema import cleaned_data_table, metadata, sensor_sources_table, sensors_table
 from .signals_catalog import SIGNALS
+from .repository import DataPointRepository
 
 logger = logging.getLogger(__name__)
 
@@ -172,15 +173,14 @@ def _delete_existing_rows(conn, run_id: str, start: datetime, end: datetime,
 
 
 def insert_cleaned_data(conn, run_id: str, rows: list[tuple]) -> int:
-    """Insert one chunk of (time, sensor, value) rows into cleaned_data.
-    Returns the number of rows written."""
-    if not rows:
-        return 0
-    conn.execute(
-        insert(cleaned_data_table),
-        [{"runId": run_id, "time": t, "sensor": s, "value": v} for t, s, v in rows],
+    """Write one chunk of (time, sensor, value) rows into cleaned_data through
+    the repository, inside the caller's transaction. Returns rows written."""
+    written = DataPointRepository(conn.engine).write_cleaned(
+        [(run_id, t, s, v) for t, s, v in rows], conn=conn
     )
-    return len(rows)
+    if written < len(rows):
+        logger.warning("Run %s: %d rows already existed and were skipped", run_id, len(rows) - written)
+    return written
 
 
 def ingest_run(
