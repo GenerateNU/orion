@@ -24,7 +24,9 @@ def _wrap_angle(angle: torch.Tensor) -> torch.Tensor:
 
 
 def _residual(a: torch.Tensor, b: torch.Tensor) -> torch.Tensor:
-    """a - b, with the heading difference wrapped so 359 deg - 1 deg comes out as -2 deg, not 358."""
+    """a - b, with the heading difference wrapped so 359 deg - 1 deg comes out as -2 deg, not 358.
+        essentially gets difference between a and be and also
+        converts angle values to get within range of -pi and pi"""
     diff = a - b
     diff[..., THETA] = _wrap_angle(diff[..., THETA])
     return diff
