@@ -26,9 +26,6 @@ class RaceService:
         return self.repository.get_laps(race_id)
 
     # STUB: returns sample data until a laps table exists in OrionDB.
-    # It used to average speed over the lap's positions, but positions now come
-    # from estimated_positions, which has no speed column yet -- bring that back
-    # when laps are wired for real.
     def get_specific_lap(self, race_id: int, lap_number: int):
         # Ask the repository for one specific lap.
         return self.repository.get_specific_lap(race_id, lap_number)

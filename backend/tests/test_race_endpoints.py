@@ -52,15 +52,19 @@ def add_race(engine, race_id=1, name="Test Race", dates=date(2026, 5, 14)):
 
 
 def add_positions(engine, race_id, lap_number, points):
-    start = datetime(2026, 5, 14, 12, 0, 0, tzinfo=UTC)
+    """Insert one position per (lat, lon) point, 0.1 seconds apart like the stub."""
     with engine.begin() as conn:
         conn.execute(insert(estimated_positions_table), [
             {
                 "race_id": race_id,
                 "lap_number": lap_number,
-                "timestamp": start + timedelta(seconds=i),
+                "timestamp": round(i * 0.1, 1),
                 "latitude": lat,
                 "longitude": lon,
+                "orientation": 90.0,
+                "speed": 40.0,
+                "tangential_acceleration": 1.2,
+                "centripetal_acceleration": 0.4,
             }
             for i, (lat, lon) in enumerate(points)
         ])
@@ -146,7 +150,6 @@ def test_positions_returns_the_lap_in_time_order(engine):
     assert [(p["latitude"], p["longitude"]) for p in positions] == [
         (42.34, -71.09), (42.35, -71.08), (42.36, -71.07),
     ]
-    assert set(positions[0]) == {"timestamp", "latitude", "longitude"}
 
 
 def test_positions_bounding_box_filters(engine):
@@ -216,3 +219,26 @@ def test_database_errors_become_clear_responses(error, status, message):
 
     assert response.status_code == status
     assert message in response.json()["detail"]
+
+# Copied from the stubs the frontend was built against before this ticket.
+STUB_RACE = {"race_id": 1, "name": "Northeastern Electric Racing", "dates": "2026-05-14"}
+STUB_POSITION = {
+    "timestamp": 0.0, "latitude": 40.7000, "longitude": -73.5000, "orientation": 90.0,
+    "speed": 40.0, "tangential_acceleration": 1.2, "centripetal_acceleration": 0.4,
+}
+
+def shape(item):
+    """The keys and value types of one JSON object, e.g. {"race_id": int, "name": str}."""
+    return {key: type(value) for key, value in item.items()}
+
+
+def test_races_match_the_stub_shape(engine):
+    add_race(engine)
+    assert shape(client.get("/api/races").json()[0]) == shape(STUB_RACE)
+
+
+def test_positions_match_the_stub_shape(engine):
+    add_race(engine)
+    add_positions(engine, 1, 1, [(42.34, -71.09)])
+    position = client.get("/api/races/1/laps/1/positions").json()[0]
+    assert shape(position) == shape(STUB_POSITION)

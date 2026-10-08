@@ -20,7 +20,7 @@ service = RaceService()
 General Race Information that user might pull
 """
 
-# Shorthand for "give this endpoint a database connection" (see orion/db.py)
+# Shorthand for "give this endpoint a database connection" (see orion/connection.py)
 DbConnection = Annotated[Connection, Depends(get_connection)]
 
 # IDs and lap numbers start at 1, so 0 or negative is a 422 before any query runs

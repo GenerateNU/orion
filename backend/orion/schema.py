@@ -59,27 +59,23 @@ races_table = Table(
 
 # Estimated positions from the state estimation (Kalman filter) pipeline --
 # what GET /api/races/{id}/laps/{lap}/positions serves to PositionMap.
+# Fields match the stub the frontend was built against.
 #
-# The primary key (race_id, lap_number, timestamp) is one estimate per instant
-# per lap, which keeps re-runs from duplicating rows. It also leads with
-# race_id and lap_number, the two columns the positions query filters on.
-#
-# DRAFT: kept to what PositionMap needs and StateEstimationService outputs
-# (timestamp, latitude, longitude). Confirm with the Kalman filter ticket before
-# running setup_orion.py against Neon; more columns can be added then.
+# race_id and lap_number come first on purpose: the primary key (and its index)
+# follows column order, and the positions query filters on these two.
 estimated_positions_table = Table(
     "estimated_positions",
     metadata,
-    Column("timestamp", DateTime(timezone=True), primary_key=True),
+    Column("race_id", Integer, ForeignKey("races.race_id"), primary_key=True),
+    Column("lap_number", Integer, primary_key=True),
+    # Seconds since the start of the lap, a plain number like the stub's 0.0, 0.1
+    Column("timestamp", Float, primary_key=True),
     Column("latitude", Float, nullable=False),
     Column("longitude", Float, nullable=False),
     Column("orientation", Float, nullable=False),
     Column("speed", Float, nullable=False),
     Column("tangential_acceleration", Float, nullable=False),
     Column("centripetal_acceleration", Float, nullable=False),
-    Column("race_id", Integer, ForeignKey("races.race_id"), primary_key=True),
-    Column("lap_number", Integer, primary_key=True),
-
 )
 
 
