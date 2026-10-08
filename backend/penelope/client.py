@@ -1,9 +1,10 @@
 import os
+from collections.abc import Iterator
 from datetime import datetime
 
 import numpy as np
 from pydantic import ValidationError
-from sqlalchemy import MetaData, create_engine, select
+from sqlalchemy import MetaData, create_engine, func, select
 from sqlalchemy.exc import OperationalError, SQLAlchemyError
 
 from .exceptions import (
@@ -17,7 +18,7 @@ from .models import DataPoint
 
 class PenelopeClient:
     """Read-only client for querying PenelopeDB (Postgres)."""
-
+    
     def __init__(self, engine):
         """Reflect Penelope's tables off an existing SQLAlchemy engine.
 
@@ -172,11 +173,14 @@ class PenelopeClient:
         )
         return self._fetch(stmt)
 
-    def get_all_paginated(self, batch_size: int = 5000):
+    def get_all_paginated(self, batch_size: int = 5000, stmt=None):
+        """Stream rows in batches. With no stmt, streams every row in `data`;
+        pass a stmt to stream a filtered query instead."""
         if batch_size <= 0:
             raise ValueError("batch_size must be positive")
 
-        stmt = select(self.data_table).order_by(self.data_table.c.time)
+        if stmt is None:
+            stmt = select(self.data_table).order_by(self.data_table.c.time)
 
         try:
             with self.engine.connect().execution_options(yield_per=batch_size) as conn:
@@ -193,3 +197,31 @@ class PenelopeClient:
             raise PenelopeSchemaError(
                 "Streamed query against PenelopeDB failed."
             ) from exc
+
+        
+    def get_by_run_id_and_time(
+        self, run_id: str, start: datetime, end: datetime, raw_tags: list[str], batch_size: int = 5000) -> Iterator[np.ndarray]:
+        """Stream `data` rows for one run between start and end (inclusive),
+        limited to the given raw tags, in batches of batch_size rows."""
+        stmt = (
+            select(self.data_table)
+            .where(
+                self.data_table.c.time >= start,
+                self.data_table.c.time <= end,
+                self.data_table.c.runId == run_id,
+                self.data_table.c.dataTypeName.in_(raw_tags),
+            )
+            .order_by(self.data_table.c.time)
+        )
+        
+        yield from self.get_all_paginated(batch_size, stmt)
+
+    def get_max_first_value(self, run_id, start, end, data_type_name):
+        """Max of values[1] for one tag in one run's window, or None."""
+        t = self.data_table
+        stmt = select(func.max(t.c["values"][1])).where(
+            t.c.runId == run_id, t.c.time.between(start, end),
+            t.c.dataTypeName == data_type_name,
+        )
+        with self.engine.connect() as conn:
+            return conn.execute(stmt).scalar()

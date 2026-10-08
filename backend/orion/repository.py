@@ -3,11 +3,11 @@ import numpy as np
 from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.engine import Engine
 
-from .schema import data_table
+from .schema import cleaned_data_table, data_table
 
 
 class DataPointRepository:
-    """Generic write-only repository: np array <-> one Table."""
+    """Generic write-only repository: np array <-> data and cleaned data tables."""
 
     def __init__(self, engine: Engine):
         self.engine = engine
@@ -56,3 +56,33 @@ class DataPointRepository:
         )
         with self.engine.begin() as conn:
             return len(conn.execute(stmt, dicts).all())
+
+    def write_cleaned(self, rows, conn=None) -> int:
+            """Insert (runId, time, sensor, value) rows into cleaned_data.
+
+            Pass conn to write inside the caller's transaction, so the caller
+            decides when everything commits or rolls back. Without it, this opens
+            and commits its own transaction.
+
+            Returns:
+                The number of rows actually inserted (rows already present,
+                per the primary key, are silently skipped).
+            """
+            if len(rows) == 0:
+                return 0
+
+            dicts = [
+                {"runId": row[0], "time": row[1], "sensor": row[2], "value": row[3]}
+                for row in rows
+            ]
+
+            # Same ON CONFLICT + RETURNING approach as write_many, for the same reasons.
+            stmt = (
+                insert(cleaned_data_table)
+                .on_conflict_do_nothing()
+                .returning(cleaned_data_table.c.time)
+            )
+            if conn is not None:
+                return len(conn.execute(stmt, dicts).all())
+            with self.engine.begin() as ownconn:
+                return len(ownconn.execute(stmt, dicts).all())
