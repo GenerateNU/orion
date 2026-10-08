@@ -1,6 +1,7 @@
 from repositories.race_repository import RaceRepository
 from services.exceptions import RaceNotFoundError
 
+
 class RaceService:
 
     '''

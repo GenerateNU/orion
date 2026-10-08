@@ -5,7 +5,7 @@ Only `races` and `estimated_positions` are created -- `data` uses a Postgres ARR
 column that SQLite can't build, and these endpoints never touch it.
 """
 from collections.abc import Iterator
-from datetime import UTC, date, datetime, timedelta
+from datetime import date
 from unittest.mock import Mock
 
 import pytest

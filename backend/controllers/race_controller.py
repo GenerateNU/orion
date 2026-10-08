@@ -5,8 +5,8 @@ from fastapi import APIRouter, Depends, HTTPException, Path
 from sqlalchemy.engine import Connection
 
 from orion.connection import get_connection
-from services.race_service import RaceService
 from services.exceptions import RaceNotFoundError
+from services.race_service import RaceService
 
 #this file creates all the API endpoints
 
