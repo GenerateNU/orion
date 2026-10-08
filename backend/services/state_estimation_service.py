@@ -4,6 +4,7 @@ import pandas as pd
 
 from models.vehicle import StateEstimate
 
+
 class StateEstimationService:
     """
     Scaffold for estimating vehicle position from cleaned sensor data.
