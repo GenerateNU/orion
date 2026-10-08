@@ -1,4 +1,87 @@
+# Orion local stack.
+#
+#   New services (uv workspace: packages/ + services/)
+#     orion-db               local OrionDB (Postgres)       localhost:5434
+#     orion-migrate          one-shot: alembic upgrade head
+#     orion-backend          FastAPI API                    http://localhost:8100/docs
+#     orion-pipeline-api     pipeline trigger/status API    http://localhost:8200/docs
+#     orion-pipeline-worker  runs pipeline jobs (sync)
+#
+#   Legacy services (backend/, kept until it is retired; BackendCI uses them)
+#     backend, test-db, frontend
+#
+# Point at Neon / Penelope by setting ORION_DATABASE_URL and PENELOPE_DATABASE_URL
+# in .env. Without them, OrionDB defaults to the local orion-db container.
+
+x-orion-env: &orion-env
+  ORION_DATABASE_URL: ${ORION_DATABASE_URL:-postgresql://orion:orion@orion-db:5432/orion}
+  PENELOPE_DATABASE_URL: ${PENELOPE_DATABASE_URL:-}
+  PIPELINE_API_URL: http://orion-pipeline-api:8000
+
+x-orion-python: &orion-python
+  build:
+    context: .
+    dockerfile: docker/python.Dockerfile
+  env_file:
+    - path: .env
+      required: false
+  environment: *orion-env
+  volumes:
+    - ./packages:/app/packages
+    - ./services:/app/services
+
 services:
+  # ==================== New stack ====================
+  orion-db:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: orion
+      POSTGRES_PASSWORD: orion
+      POSTGRES_DB: orion
+    ports:
+      - "5434:5432"
+    volumes:
+      - orion-db-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U orion -d orion"]
+      interval: 2s
+      timeout: 5s
+      retries: 15
+
+  orion-migrate:
+    <<: *orion-python
+    command: alembic -c packages/orion_core/alembic.ini upgrade head
+    depends_on:
+      orion-db:
+        condition: service_healthy
+
+  orion-backend:
+    <<: *orion-python
+    command: uvicorn orion_backend.main:app --host 0.0.0.0 --port 8000 --reload
+    ports:
+      - "8100:8000"
+    depends_on:
+      orion-migrate:
+        condition: service_completed_successfully
+
+  orion-pipeline-api:
+    <<: *orion-python
+    command: orion-pipeline api --host 0.0.0.0 --port 8000 --reload
+    ports:
+      - "8200:8000"
+    depends_on:
+      orion-migrate:
+        condition: service_completed_successfully
+
+  orion-pipeline-worker:
+    <<: *orion-python
+    command: orion-pipeline worker
+    stop_signal: SIGINT
+    depends_on:
+      orion-migrate:
+        condition: service_completed_successfully
+
+  # ==================== Legacy (backend/) ====================
   backend:
     build: ./backend
     ports:
@@ -36,6 +119,10 @@ services:
       - ./frontend:/app
       - /app/node_modules
     environment:
+      # Still the legacy backend: the frontend's hooks use /api/races (see REFACTOR_PLAN Q2).
       - VITE_API_URL=http://backend:8000
     depends_on:
       - backend
+
+volumes:
+  orion-db-data:
