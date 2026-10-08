@@ -27,6 +27,14 @@ class OrionError(Exception):
     """
 
 
+class OrionConfigError(OrionError):
+    """NEON_DB_URL is missing or blank, so there is nothing to connect to.
+
+    Separate from OrionConnectionError because retrying cannot help -- someone
+    has to fill in .env.
+    """
+
+
 class OrionConnectionError(OrionError):
     """OrionDB could not be reached, or the connection dropped mid-statement.
 

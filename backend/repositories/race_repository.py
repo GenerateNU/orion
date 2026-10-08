@@ -1,16 +1,46 @@
+from sqlalchemy import exists, select
+from sqlalchemy.engine import Connection
+from sqlalchemy.exc import OperationalError, SQLAlchemyError
+
+from orion.exceptions import OrionConnectionError, OrionSchemaError
+from orion.schema import estimated_positions_table, races_table
+
+
+def _run(conn: Connection, stmt):
+    """Execute a query, raising Orion errors instead of SQLAlchemy ones."""
+    try:
+        return conn.execute(stmt)
+    except OperationalError as exc:
+        raise OrionConnectionError("Lost connection to OrionDB mid-query.") from exc
+    except SQLAlchemyError as exc:
+        # Connected but the query failed -- usually the table doesn't exist yet.
+        # Must come second: OperationalError is a SQLAlchemyError subclass.
+        raise OrionSchemaError(
+            "Query against OrionDB failed. If the races/estimated_positions "
+            "tables are missing, run setup_orion.py."
+        ) from exc
+
+
 class RaceRepository:
 
-    # Get all races
-    def get_races(self, date):
-        return [
-            {
-                "race_id": 1,
-                "name": "Northeastern Electric Racing",
-                "dates": date or "2026-05-14",
-            }
-        ]
+    # Get all races (wired to OrionDB)
+    def get_races(self, conn: Connection, date=None):
+        r = races_table
+        stmt = select(r.c.race_id, r.c.name, r.c.dates).order_by(r.c.race_id)
+        if date is not None:
+            stmt = stmt.where(races_table.c.dates == date)
+        return [dict(row._mapping) for row in _run(conn, stmt)]
 
-    # Get all laps for a race
+    # Check a race exists, so the API can 404 instead of returning [] for a typo
+    def race_exists(self, conn: Connection, race_id):
+        stmt = select(exists().where(races_table.c.race_id == race_id))
+        return bool(_run(conn, stmt).scalar())
+
+    # ---- STUBS: everything below except get_positions returns sample data. ----
+    # Not wired to OrionDB yet; kept so the endpoints keep responding until their
+    # tables exist. Don't delete them.
+
+    # STUB: Get all laps for a race
     def get_laps(self, race_id):
         return [
             {
@@ -24,7 +54,7 @@ class RaceRepository:
             }
         ]
 
-    # Get one lap
+    # STUB: Get one lap
     def get_specific_lap(self, race_id, lap_number):
         return {
             "race_id": race_id,
@@ -36,39 +66,36 @@ class RaceRepository:
             "efficiency": 0.82,
         }
 
-    # Get position data
+    # Get position data for one lap, in time order (wired to OrionDB)
     def get_positions(
         self,
+        conn: Connection,
         race_id,
         lap_number,
-        min_lat,
-        max_lat,
-        min_lon,
-        max_lon,
+        min_lat=None,
+        max_lat=None,
+        min_lon=None,
+        max_lon=None,
     ):
-        return [
-            {
-                "timestamp": 0.0,
-                "latitude": 40.7000,
-                "longitude": -73.5000,
-                "orientation": 90.0,
-                "speed": 40.0,
-                "tangential_acceleration": 1.2,
-                "centripetal_acceleration": 0.4,
-            },
-            {
-                "timestamp": 0.1,
-                "latitude": 40.7001,
-                "longitude": -73.4999,
-                "orientation": 91.0,
-                "speed": 41.0,
-                "tangential_acceleration": 1.1,
-                "centripetal_acceleration": 0.5,
-            },
-        ]
+        t = estimated_positions_table
+        stmt = (
+            select(t.c.timestamp, t.c.latitude, t.c.longitude, t.c.orientation, t.c.speed, t.c.tangential_acceleration, t.c.centripetal_acceleration)
+            .where(t.c.race_id == race_id, t.c.lap_number == lap_number)
+            .order_by(t.c.timestamp)
+        )
+        # optional bounding box, each edge independent
+        if min_lat is not None:
+            stmt = stmt.where(t.c.latitude >= min_lat)
+        if max_lat is not None:
+            stmt = stmt.where(t.c.latitude <= max_lat)
+        if min_lon is not None:
+            stmt = stmt.where(t.c.longitude >= min_lon)
+        if max_lon is not None:
+            stmt = stmt.where(t.c.longitude <= max_lon)
+        return [dict(row._mapping) for row in _run(conn, stmt)]
 
 
-    # Get velocity at a position
+    # STUB: Get velocity at a position
     def get_velocity_at_position(
         self,
         race_id,
@@ -82,8 +109,7 @@ class RaceRepository:
             "speed": 40.0,
         }
     
-    # Get a specific race as well 
-
+    # STUB: Get a specific race as well (not yet reading the races table)
     def get_specific_race(self, race_id):
         return {
             "race_id": race_id, 
@@ -91,7 +117,7 @@ class RaceRepository:
             "date": "2026-09-10"
         }
     
-    #energy consumption per lap 
+    # STUB: energy consumption per lap
     def get_lap_energy(self, race_id, lap_number):
         return {
             "race_id": race_id,
