@@ -39,8 +39,7 @@ class UKF:
         """
         Generate sigma points around the current state.
 
-        For a 6-variable state, the UKF generates
-        2 * 6 + 1 = 13 sigma points.
+        For a 6-variable state, the UKF generates 13 sigma points.
         """
 
         n = self.state_dimension
@@ -58,7 +57,7 @@ class UKF:
         # First sigma point is the current state
         sigma_points = [self.state]
 
-        # Add positive and negative variations
+        # Add positive/negative variations
         for i in range(n):
             sigma_points.append(
                 self.state + covariance_sqrt[:, i]
@@ -72,7 +71,7 @@ class UKF:
 
     def calculate_weights(self) -> tuple[torch.Tensor, torch.Tensor]:
         """
-        Calculate the weights used for the sigma points.
+        Calculate the weights used for the sigma points. (how much significance each has)
 
         Returns:
             Mean weights and covariance weights.
@@ -81,8 +80,7 @@ class UKF:
         n = self.state_dimension
 
         lambda_ = (
-            self.alpha**2 * (n + self.kappa)
-            - n
+            self.alpha**2 * (n + self.kappa) - n
         )
 
         mean_weights = torch.full(
@@ -106,7 +104,7 @@ class UKF:
         """
         Predict the next vehicle state using CTRA.
         """
-
+        #generates 13 guesses (sigma)
         sigma_points = self.generate_sigma_points()
 
         # Run every sigma point through CTRA
@@ -158,11 +156,9 @@ class UKF:
         The measurement format will be added once the
         sensor inputs are finalized.
         """
-
-        # TODO: Define measurement model
-        # TODO: Predict what the sensors should measure
-        # TODO: Calculate measurement covariance -- build R for this sensor from SENSOR_STDDEV in models/noise.py
-        # TODO: Calculate Kalman gain
-        # TODO: Update state and covariance
+        # Predict what the sensors should measure
+        # Calculate Kalman gain
+        # Update state and covariance
+        # figure out exact lag of the time and data
 
         raise NotImplementedError
