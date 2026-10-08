@@ -57,7 +57,7 @@ class DataPointRepository:
         with self.engine.begin() as conn:
             return len(conn.execute(stmt, dicts).all())
 
-        def write_cleaned(self, rows, conn=None) -> int:
+    def write_cleaned(self, rows, conn=None) -> int:
             """Insert (runId, time, sensor, value) rows into cleaned_data.
 
             Pass conn to write inside the caller's transaction, so the caller

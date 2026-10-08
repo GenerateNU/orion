@@ -9,6 +9,7 @@ from orion.ingest import (
     DEFAULT_GPS_LAG_SECONDS,
     GPS_NAMES,
     TAG_TO_NAME,
+    INVESTIGATION_NAMES,
     _clean_chunk,
     _delete_existing_rows,
     _flag_investigation_tags,
@@ -17,7 +18,7 @@ from orion.ingest import (
     ingest_run,
     insert_cleaned_data,
 )
-from orion.schema import cleaned_data_table, sensors_table
+from orion.schema import cleaned_data_table, sensor_sources_table, sensors_table
 from penelope.client import PenelopeClient
 
 logging.basicConfig(level=logging.INFO)
@@ -119,13 +120,13 @@ with engine.connect() as conn:
     assert kept == {2.0, 4.0}, kept
     trans.rollback()
 
-"""
+
 # --- 5. Full ingest ---
 # WARNING: ingest_run COMMITS its own transaction, so this really writes to
 # whatever NEON_DB_URL points at. Use a dev database or a Neon branch.
 def rows_in_window() -> int:
-    """"""Count the rows an ingest of [START, END] writes: non-GPS rows in the
-    window, GPS rows in the window shifted by the lag (same ranges as the delete).""""""
+    """Count the rows an ingest of [START, END] writes: non-GPS rows in the
+    window, GPS rows in the window shifted by the lag (same ranges as the delete)."""
     c = cleaned_data_table.c
     is_gps = or_(*[c.sensor.startswith(n, autoescape=True) for n in GPS_NAMES])
     with engine.connect() as conn:
@@ -172,6 +173,17 @@ with engine.connect() as conn:
 assert table_sensors <= known, table_sensors - known
 print("sensors:", sorted(table_sensors))
 
+# Every catalog raw tag is mapped to its clean name in `sensor_sources`
+with engine.connect() as conn:
+    sources = dict(conn.execute(
+        select(sensor_sources_table.c.sourceDataTypeName, sensor_sources_table.c.sensor)
+    ).all())
+assert all(sources.get(tag) == name for tag, name in TAG_TO_NAME.items())
+
+# NEEDS INVESTIGATION sensors are ingested (only ones present in this window show up)
+present = {n for n in INVESTIGATION_NAMES if df["sensor"].str.startswith(n).any()}
+print("investigation sensors in output:", sorted(present))
+
 # Rerun replaces instead of duplicating
 ingest_run(engine, penelope, RUN_ID, START, END)
 print("rows after rerun:", rows_in_window())
@@ -185,4 +197,4 @@ try:
 except ValueError as exc:
     print("empty run raised as expected:", exc)
 
-print("all checks passed")"""
+print("all checks passed")
