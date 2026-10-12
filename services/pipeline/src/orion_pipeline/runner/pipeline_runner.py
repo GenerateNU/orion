@@ -24,11 +24,21 @@ class PipelineRunner:
             else None
         )
 
-    def run(self, run_id: str) -> None:
+    # Runs each step in order
+    def run_all(self, run_id: str) -> None:
         ctx = RunContext(run_id=run_id)
         for step_cls in ordered_steps():
+            # TODO: Switch ownership of DB to be in the step implementation directly. 
             reader = (
                 self.penelope if step_cls.reads_from == "penelope" else self.oriondb
             )
             logger.info("run %s: %s", run_id, step_cls.name)
             step_cls(reader=reader, writer=self.oriondb).run(ctx)
+
+    # Runs single specific step
+    def run_step(self, run_id: str, step: str) -> None:
+        raise NotImplemented
+
+    # Runs remaining steps starting from pipeline stage.
+    def run_from(self, run_id: str, start_step: str) -> None:
+        raise NotImplemented

@@ -37,7 +37,7 @@ def main() -> None:
         queue = JobQueue(make_sync_engine(settings.orion_database_url))
         PipelineWorker(queue, PipelineRunner(settings)).run_forever()
     else:
-        PipelineRunner(settings).run(args.run_id)
+        PipelineRunner(settings).run_all(args.run_id)
 
 
 if __name__ == "__main__":

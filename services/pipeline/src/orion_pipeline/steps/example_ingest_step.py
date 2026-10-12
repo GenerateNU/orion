@@ -1,3 +1,5 @@
+from collections.abc import Iterator
+
 import pandas as pd
 
 from orion_pipeline.runner.run_context import RunContext
@@ -15,10 +17,16 @@ class ExampleIngestStep(PipelineStep):
     name = "example_ingest"
     reads_from = "penelope"
     output_table = "cleaned_data"
+    pagination_key = ("time", "raw_tag")
 
-    def extract(self, ctx: RunContext) -> pd.DataFrame:
-        # Real: return self.reader.fetch_readings(ctx.run_id)
-        return pd.DataFrame({"raw_tag": ["VCU/CarState/speed"], "values": [[12.5]]})
+    def extract(self, ctx: RunContext) -> Iterator[pd.DataFrame]:
+        # Real: return self.reader.iter_readings(
+        #     ctx.run_id, self.pagination_key, self.page_size
+        # )
+        page = pd.DataFrame(
+            {"time": [0.0], "raw_tag": ["VCU/CarState/speed"], "values": [[12.5]]}
+        )
+        return iter([page])
 
     def transform(self, df: pd.DataFrame, ctx: RunContext) -> pd.DataFrame:
         # Real: map raw tags to clean signal names, unpack values[], fix units.

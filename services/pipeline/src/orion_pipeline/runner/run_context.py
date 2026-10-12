@@ -1,8 +1,8 @@
 from dataclasses import dataclass
+from pydantic import BaseModel
 
 
-@dataclass
-class RunContext:
+class RunContext(BaseModel):
     """What a step knows about the job it's running in.
 
     Steps take this instead of a bare run_id, so later we can add fields

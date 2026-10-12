@@ -1,3 +1,5 @@
+from collections.abc import Iterator
+
 import pandas as pd
 
 from orion_pipeline.runner.run_context import RunContext
@@ -16,12 +18,16 @@ class ExampleEstimateStep(PipelineStep):
     depends_on = ("example_ingest",)
     reads_from = "oriondb"
     output_table = "vehicle_state"
+    pagination_key = ("signal",)
 
-    def extract(self, ctx: RunContext) -> pd.DataFrame:
-        # Real: return self.reader.fetch_cleaned(ctx.run_id)
-        return pd.DataFrame(
+    def extract(self, ctx: RunContext) -> Iterator[pd.DataFrame]:
+        # Real: return self.reader.iter_cleaned(
+        #     ctx.run_id, self.pagination_key, self.page_size
+        # )
+        page = pd.DataFrame(
             {"run_id": [ctx.run_id], "signal": ["speed"], "value": [12.5]}
         )
+        return iter([page])
 
     def transform(self, df: pd.DataFrame, ctx: RunContext) -> pd.DataFrame:
         # Real: Kalman filter → 100 Hz latitude/longitude/speed.
