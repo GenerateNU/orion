@@ -3,8 +3,7 @@ from datetime import datetime
 from sqlalchemy import DateTime, func, UUID, ARRAY, FLOAT, INTEGER
 from sqlalchemy.orm import Mapped, mapped_column
 
-from orion_core.db.orion.base import Base
-
+from orion_core.models.orion.base import Base
 
 class EstimatedCarState(Base):
     """Gets all fo the estimated car positions for one Penelope run (`runId`): the pipeline's unit of work."""

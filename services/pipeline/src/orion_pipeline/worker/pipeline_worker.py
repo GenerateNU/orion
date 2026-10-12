@@ -25,7 +25,7 @@ class PipelineWorker:
                 time.sleep(self.poll_seconds)
                 continue
             try:
-                self.runner.run(job.run_id)
+                self.runner.run_all(job.run_id)
                 self.queue.finish(job.id)
             except Exception as exc:
                 logger.exception("job %s failed", job.id)

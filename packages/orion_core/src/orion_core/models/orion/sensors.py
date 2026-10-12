@@ -3,8 +3,7 @@ from datetime import datetime
 from sqlalchemy import DateTime, String, func, UUID, ARRAY, FLOAT
 from sqlalchemy.orm import Mapped, mapped_column
 
-from orion_core.db.orion.base import Base
-
+from orion_core.models.orion.base import Base
 
 class Sensors(Base):
     """Our sensor names along with the unit that they are in, unit is NULL if the sensor is unitless."""

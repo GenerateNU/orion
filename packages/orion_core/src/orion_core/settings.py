@@ -14,6 +14,8 @@ class Settings(BaseSettings):
     penelope_database_url: str | None = None
     # Where the backend reaches the pipeline API.
     pipeline_api_url: str = "http://localhost:8200"
+    # How many rows each extract section can pull at once.
+    pipeline_page_size: int = 100_000
 
 
 @lru_cache
