@@ -145,7 +145,7 @@ def test_clean_data_adds_suffixed_sensors_once_and_returns_all_rows():
 def test_clean_data_flags_investigation_tags_once_per_run(caplog):
     if not INVESTIGATION_NAMES:
         pytest.skip("catalog has no NEEDS INVESTIGATION entries")
-    name = sorted(INVESTIGATION_NAMES)[0]
+    name = min(INVESTIGATION_NAMES)
     tag = next(tag for tag, n in TAG_TO_NAME.items() if n == name)
     chunks = [make_chunk([(T + timedelta(seconds=i), tag, RUN_ID, [1.0])]) for i in range(2)]
  

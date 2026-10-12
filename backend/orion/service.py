@@ -5,6 +5,7 @@ import numpy as np
 import pandas as pd
 
 from penelope.client import PenelopeClient
+
 from .repository import DataPointRepository
 from .signals_catalog import SIGNALS
 
@@ -69,11 +70,11 @@ class OrionService:
 
         return pd.DataFrame(cleaned_rows, columns=["time", "sensor", "runId", "value"])
 
-    def clean_data(self, run_id: str, start: datetime, end: datetime, raw_tags: list[str] = list(TAG_TO_NAME)):
+    def clean_data(self, run_id: str, start: datetime, end: datetime, raw_tags: list[str] | None = None):
+        raw_tags = raw_tags or list(TAG_TO_NAME)
         repo = self.orion_client
         frames = []
         flagged = set()
-        cleaned_rows = []
         sensors = np.array(list(NAME_TO_UNIT.items()), dtype=object)
         sources = np.array(list(TAG_TO_NAME.items()), dtype=object)
         known = set(TAG_TO_NAME.values())
