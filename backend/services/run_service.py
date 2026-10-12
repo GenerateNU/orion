@@ -1,7 +1,8 @@
 from uuid import UUID
 
+from backend.controllers.run_controller import LapNumber
 from repositories.run_repository import RunRepository
-from services.exceptions import RunNotFoundError
+from services.exceptions import LapNotFoundError, RunNotFoundError
 
 
 class RunService:
@@ -19,9 +20,9 @@ class RunService:
         # Create the repository that this service will use.
         self.repository = RunRepository()
 
-    def get_runs(self, conn, run_date=None):
+    def get_runs(self, conn):
         # Ask the repository for runs.
-        return self.repository.get_runs(conn, run_date)
+        return self.repository.get_runs(conn)
 
     # STUB: returns sample data until a laps table exists in OrionDB.
     def get_laps(self, run_id: UUID):
@@ -34,15 +35,10 @@ class RunService:
         return self.repository.get_specific_lap(run_id, lap_number)
 
 
-    def get_positions(
+    def get_run_positions(
         self,
         conn,
         run_id: UUID,
-        lap_number: int,
-        min_lat=None,
-        max_lat=None,
-        min_lon=None,
-        max_lon=None
     ):
         # A run with no positions yet returns [], but a run that doesn't
         # exist at all is an error -- otherwise a typo'd ID looks like "no data".
@@ -50,36 +46,31 @@ class RunService:
             raise RunNotFoundError(run_id)
 
         # Ask the repository for position data.
-        return self.repository.get_positions(
+        return self.repository.get_run_positions(
+            conn,
+            run_id
+        )
+    
+    def get_lap_positions(
+        self,
+        conn,
+        run_id: UUID,
+        lap_number: LapNumber
+    ):
+        # A run with no positions yet returns [], but a run that doesn't
+        # exist at all is an error -- otherwise a typo'd ID looks like "no data".
+        if not self.repository.run_exists(conn, run_id):
+            raise RunNotFoundError(run_id)
+        if not self.repository.lap_exists(conn, run_id, lap_number):
+            raise LapNotFoundError(run_id, lap_number)
+
+        # Ask the repository for position data.
+        return self.repository.get_lap_positions(
             conn,
             run_id,
-            lap_number,
-            min_lat,
-            max_lat,
-            min_lon,
-            max_lon
+            lap_number
         )
 
-    # STUB: returns sample data until energy is computed into OrionDB.
-    def get_lap_energy(self, run_id, lap_number):
-        return self.repository.get_lap_energy(run_id, lap_number)
-
-
-    # STUB: returns sample data until velocity is computed into OrionDB.
-    def get_velocity_at_position(
-        self,
-        run_id: UUID,
-        lap_number: int,
-        latitude: float,
-        longitude: float
-    ):
-        # Ask the repository for velocity at a specific position.
-        return self.repository.get_velocity_at_position(
-            run_id,
-            lap_number,
-            latitude,
-            longitude
-        )
 
     # STUB: returns sample data -- not wired to the runs table yet.
     def get_specific_run(self, run_id):

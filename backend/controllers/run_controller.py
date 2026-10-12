@@ -1,12 +1,12 @@
 import datetime
-from typing import Annotated
+from typing import Annotated, Optional
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, Path
 from sqlalchemy.engine import Connection
 
 from orion.connection import get_connection
-from services.exceptions import RunNotFoundError
+from services.exceptions import LapNotFoundError, RunNotFoundError
 from services.run_service import RunService
 
 #this file creates all the API endpoints
@@ -31,8 +31,8 @@ LapNumber = Annotated[int, Path(ge=1)]
 # Get runs (wired to OrionDB)
 # date is parsed as a real date so a malformed one is a 422, not a DB error
 @router.get("")
-def get_runs(conn: DbConnection, date: datetime.date | None = None):
-    return service.get_runs(conn, date)
+def get_runs(conn: DbConnection):
+    return service.get_runs(conn)
 
 # STUB: Get information for a specific run (instead of all runs + includes all laps)
 @router.get("/{run_id}")
@@ -55,27 +55,31 @@ Specific information about positions (Maybe we just combine into summary)
 """
 
 # Get position data for a lap (wired to OrionDB)
-@router.get("/{run_id}/laps/{lap_number}/positions")
-def get_positions(
+@router.get("/{run_id}/positions")
+def get_run_positions(
     conn: DbConnection,
-    run_id: UUID,
-    lap_number: LapNumber,
-    min_lat: float | None = None,
-    max_lat: float | None = None,
-    min_lon: float | None = None,
-    max_lon: float | None = None,
-):
+    run_id: UUID):
     try:
-        return service.get_positions(
+        return service.get_run_positions(
             conn,
             run_id,
-            lap_number,
-            min_lat,
-            max_lat,
-            min_lon,
-            max_lon,
         )
     except RunNotFoundError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+
+# Get position data for a lap (wired to OrionDB)
+@router.get("/{run_id}/laps/{lap_number}/positions")
+def get_lap_positions(
+    conn: DbConnection,
+    run_id: UUID,
+    lap_number: LapNumber):
+    try:
+        return service.get_lap_positions(
+            conn,
+            run_id,
+            lap_number
+        )
+    except LapNotFoundError as exc:
         raise HTTPException(status_code=404, detail=str(exc)) from exc
 
 # STUB: Get energy for a lap
