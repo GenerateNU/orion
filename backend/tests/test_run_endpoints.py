@@ -77,69 +77,79 @@ def test_runs_empty_database_returns_empty_list(engine):
     assert response.json() == []
 
 
-def test_runs_lists_each_run_once_newest_first(engine):
+def test_runs_lists_each_run_once_most_recent_first(engine):
     add_positions(engine, RUN_1, 1, [(42.0, -71.0), (42.1, -71.1)], start=datetime(2026, 5, 14, 12, tzinfo=UTC))
     add_positions(engine, RUN_2, 1, [(42.0, -71.0)], start=datetime(2026, 6, 1, 9, tzinfo=UTC))
 
     runs = client.get("/api/runs").json()
 
-    # RunListView reads run_id and dates; dates is the day of the run's first estimate
-    assert runs == [
-        {"run_id": str(RUN_2), "dates": "2026-06-01"},
-        {"run_id": str(RUN_1), "dates": "2026-05-14"},
+    # one object per run (not one per row), RunListView reads run_id
+    assert runs == [{"run_id": str(RUN_2)}, {"run_id": str(RUN_1)}]
+
+
+# --- GET /api/runs/{id}/positions ------------------------------------------
+
+def test_run_positions_returns_every_lap_in_time_order(engine):
+    add_positions(engine, RUN_1, 1, [(42.0, -71.0), (42.1, -71.1)])
+    # a later lap, and points with no lap yet -- both belong to the run
+    add_positions(engine, RUN_1, 2, [(43.0, -72.0)], start=datetime(2026, 5, 14, 13, tzinfo=UTC))
+    add_positions(engine, RUN_1, None, [(44.0, -73.0)], start=datetime(2026, 5, 14, 14, tzinfo=UTC))
+    add_positions(engine, RUN_2, 1, [(10.0, 10.0)])  # another run, must not leak in
+
+    positions = client.get(f"/api/runs/{RUN_1}/positions").json()
+
+    assert [(p["latitude"], p["longitude"]) for p in positions] == [
+        (42.0, -71.0), (42.1, -71.1), (43.0, -72.0), (44.0, -73.0),
     ]
 
 
-def test_runs_filters_by_date(engine):
-    add_positions(engine, RUN_1, 1, [(42.0, -71.0)], start=datetime(2026, 5, 14, 12, tzinfo=UTC))
-    add_positions(engine, RUN_2, 1, [(42.0, -71.0)], start=datetime(2026, 6, 1, 9, tzinfo=UTC))
+def test_run_positions_unknown_run_is_404(engine):
+    response = client.get(f"/api/runs/{MISSING_RUN}/positions")
 
-    runs = client.get("/api/runs?date=2026-06-01").json()
-
-    assert [r["run_id"] for r in runs] == [str(RUN_2)]
+    assert response.status_code == 404
+    assert response.json()["detail"] == f"Run {MISSING_RUN} not found"
 
 
-def test_runs_rejects_a_malformed_date(engine):
-    assert client.get("/api/runs?date=not-a-date").status_code == 422
+def test_run_positions_malformed_id_is_422(engine):
+    assert client.get("/api/runs/not-a-uuid/positions").status_code == 422
 
 
 # --- GET /api/runs/{id}/laps/{lap}/positions ------------------------------
 
-def test_positions_known_run_with_nothing_on_that_lap_returns_empty_list(engine):
-    """Valid run, nothing on this lap -> [] (RunMapView's EmptyState)."""
-    add_positions(engine, RUN_1, 2, [(42.0, -71.0)])
-
-    response = client.get(f"/api/runs/{RUN_1}/laps/1/positions")
-
-    assert response.status_code == 200
-    assert response.json() == []
-
-
-def test_positions_unknown_run_is_404(engine):
+def test_lap_positions_unknown_run_is_404(engine):
     response = client.get(f"/api/runs/{MISSING_RUN}/laps/1/positions")
 
     assert response.status_code == 404
     assert response.json()["detail"] == f"Run {MISSING_RUN} not found"
 
 
+def test_lap_positions_known_run_with_nothing_on_that_lap_is_404(engine):
+    add_positions(engine, RUN_1, 2, [(42.0, -71.0)])
+
+    response = client.get(f"/api/runs/{RUN_1}/laps/1/positions")
+
+    assert response.status_code == 404
+    assert response.json()["detail"] == f"Lap 1 not found for run {RUN_1}"
+
+
 @pytest.mark.parametrize("url", [
-    "/api/runs/not-a-uuid/laps/1/positions",          # run ids are UUIDs
-    f"/api/runs/{RUN_1}/laps/x/positions",            # lap not a number
-    f"/api/runs/{RUN_1}/laps/0/positions",            # laps start at 1
+    "/api/runs/not-a-uuid/laps/1/positions",  # run ids are UUIDs
+    f"/api/runs/{RUN_1}/laps/x/positions",    # lap not a number
+    f"/api/runs/{RUN_1}/laps/0/positions",    # laps start at 1
     f"/api/runs/{RUN_1}/laps/-1/positions",
-    f"/api/runs/{RUN_1}/laps/1/positions?min_lat=abc",  # bad bounds
 ])
-def test_positions_invalid_input_is_422(engine, url):
+def test_lap_positions_invalid_input_is_422(engine, url):
     add_positions(engine, RUN_1, 1, [(42.0, -71.0)])  # so a 422 can't be a disguised 404
 
     assert client.get(url).status_code == 422
 
 
-def test_positions_returns_the_lap_in_time_order(engine):
+def test_lap_positions_returns_the_lap_in_time_order(engine):
     add_positions(engine, RUN_1, 1, [(42.34, -71.09), (42.35, -71.08), (42.36, -71.07)])
-    # a different lap, and points with no lap yet -- neither may leak in
+    # a different lap, points with no lap yet, and another run -- none may leak in
     add_positions(engine, RUN_1, 2, [(10.0, 10.0)], start=datetime(2026, 5, 14, 13, tzinfo=UTC))
     add_positions(engine, RUN_1, None, [(20.0, 20.0)], start=datetime(2026, 5, 14, 14, tzinfo=UTC))
+    add_positions(engine, RUN_2, 1, [(30.0, 30.0)])
 
     positions = client.get(f"/api/runs/{RUN_1}/laps/1/positions").json()
 
@@ -149,29 +159,14 @@ def test_positions_returns_the_lap_in_time_order(engine):
     ]
 
 
-def test_positions_only_returns_the_requested_run(engine):
-    add_positions(engine, RUN_1, 1, [(42.0, -71.0)])
-    add_positions(engine, RUN_2, 1, [(10.0, 10.0)])
-
-    positions = client.get(f"/api/runs/{RUN_1}/laps/1/positions").json()
-
-    assert [(p["latitude"], p["longitude"]) for p in positions] == [(42.0, -71.0)]
-
-
-def test_positions_bounding_box_filters(engine):
-    add_positions(engine, RUN_1, 1, [(42.0, -71.0), (43.0, -72.0), (44.0, -73.0)])
-
-    positions = client.get(
-        f"/api/runs/{RUN_1}/laps/1/positions?min_lat=42.5&max_lat=43.5&min_lon=-72.5&max_lon=-71.5"
-    ).json()
-
-    assert [(p["latitude"], p["longitude"]) for p in positions] == [(43.0, -72.0)]
-
-
-def test_positions_shape(engine):
+@pytest.mark.parametrize("url", [
+    f"/api/runs/{RUN_1}/positions",
+    f"/api/runs/{RUN_1}/laps/1/positions",
+])
+def test_positions_shape(engine, url):
     add_positions(engine, RUN_1, 1, [(42.34, -71.09)])
 
-    position = client.get(f"/api/runs/{RUN_1}/laps/1/positions").json()[0]
+    position = client.get(url).json()[0]
 
     # time is relabelled to timestamp; estimated_car_state has no speed/orientation yet
     assert set(position) == {"timestamp", "latitude", "longitude"}
@@ -185,8 +180,6 @@ def test_positions_shape(engine):
     f"/api/runs/{RUN_1}",
     f"/api/runs/{RUN_1}/laps",
     f"/api/runs/{RUN_1}/laps/1",
-    f"/api/runs/{RUN_1}/laps/1/energy",
-    f"/api/runs/{RUN_1}/laps/1/5?latitude=42.1&longitude=-71.1",
 ])
 def test_stub_endpoints_respond_without_a_database(monkeypatch, url):
     """The ticket: endpoints not wired yet still return stub data and don't throw."""
@@ -196,11 +189,6 @@ def test_stub_endpoints_respond_without_a_database(monkeypatch, url):
 
     assert response.status_code == 200
     assert response.json()
-
-
-def test_velocity_stub_requires_its_coordinates():
-    """Missing required parameters are a 422, not a crash."""
-    assert client.get(f"/api/runs/{RUN_1}/laps/1/5").status_code == 422
 
 
 # --- database problems ------------------------------------------------------

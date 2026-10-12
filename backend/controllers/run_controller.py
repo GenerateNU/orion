@@ -1,5 +1,4 @@
-import datetime
-from typing import Annotated, Optional
+from typing import Annotated
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, Path
@@ -29,7 +28,6 @@ DbConnection = Annotated[Connection, Depends(get_connection)]
 LapNumber = Annotated[int, Path(ge=1)]
 
 # Get runs (wired to OrionDB)
-# date is parsed as a real date so a malformed one is a 422, not a DB error
 @router.get("")
 def get_runs(conn: DbConnection):
     return service.get_runs(conn)
@@ -54,7 +52,7 @@ def get_specific_lap(run_id: UUID, lap_number: int):
 Specific information about positions (Maybe we just combine into summary)
 """
 
-# Get position data for a lap (wired to OrionDB)
+# Get position data for a whole run (wired to OrionDB)
 @router.get("/{run_id}/positions")
 def get_run_positions(
     conn: DbConnection,
@@ -79,38 +77,9 @@ def get_lap_positions(
             run_id,
             lap_number
         )
-    except LapNotFoundError as exc:
+    # an unknown run and a lap with no data are both a 404
+    except (RunNotFoundError, LapNotFoundError) as exc:
         raise HTTPException(status_code=404, detail=str(exc)) from exc
-
-# STUB: Get energy for a lap
-@router.get("/{run_id}/laps/{lap_number}/energy")
-def get_lap_energy(
-     run_id: UUID,
-     lap_number: int,
-): 
-    return service.get_lap_energy(
-        run_id,
-        lap_number, 
-
-    )
-
-# STUB: Get velocity at a specific position
-# {position} is part of the URL but the lookup only uses latitude/longitude, so
-# it isn't passed on (passing it used to crash the endpoint with a 500).
-@router.get("/{run_id}/laps/{lap_number}/{position}")
-def get_velocity_at_position(
-    run_id: UUID,
-    lap_number: int,
-    position: int,
-    latitude: float,
-    longitude: float,
-):
-    return service.get_velocity_at_position(
-        run_id,
-        lap_number,
-        latitude,
-        longitude,
-    )
 
 """
 General lap information

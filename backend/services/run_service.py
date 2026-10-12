@@ -1,6 +1,5 @@
 from uuid import UUID
 
-from backend.controllers.run_controller import LapNumber
 from repositories.run_repository import RunRepository
 from services.exceptions import LapNotFoundError, RunNotFoundError
 
@@ -55,10 +54,10 @@ class RunService:
         self,
         conn,
         run_id: UUID,
-        lap_number: LapNumber
+        lap_number: int
     ):
-        # A run with no positions yet returns [], but a run that doesn't
-        # exist at all is an error -- otherwise a typo'd ID looks like "no data".
+        # An unknown run or a lap with no data is an error, so a typo'd ID or
+        # lap number doesn't look like "no data".
         if not self.repository.run_exists(conn, run_id):
             raise RunNotFoundError(run_id)
         if not self.repository.lap_exists(conn, run_id, lap_number):

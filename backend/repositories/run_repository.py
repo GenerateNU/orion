@@ -23,7 +23,9 @@ def executeQuery(conn: Connection, stmt):
 
 class RunRepository:
 
-    # Get all runs, newest first (wired to OrionDB)
+    # Get all runs, most recently active first (wired to OrionDB)
+    # A run is any runId in estimated_car_state. Each one is an object rather
+    # than a bare ID so fields can be added later without breaking the frontend.
     def get_runs(self, conn: Connection):
         t = estimated_car_state_table
 
@@ -33,7 +35,7 @@ class RunRepository:
             .order_by(func.max(t.c.time).desc())
         )
 
-        return [row.runId for row in executeQuery(conn, stmt)]
+        return [{"run_id": row.runId} for row in executeQuery(conn, stmt)]
 
 
     # Check a run exists, so the API can 404 instead of returning [] for a typo
@@ -41,11 +43,15 @@ class RunRepository:
         stmt = select(exists().where(estimated_car_state_table.c.runId == run_id))
         return bool(executeQuery(conn, stmt).scalar())
 
+    # Check a run has any data for this lap
+    # (conditions go in as separate .where() arguments -- Python's `and` doesn't
+    # work on SQL expressions)
     def lap_exists(self, conn: Connection, run_id, lap_number):
-        stmt = select(exists().where(estimated_car_state_table.c.runId == run_id and estimated_car_state_table.c.lap_number == lap_number))
+        t = estimated_car_state_table
+        stmt = select(exists().where(t.c.runId == run_id, t.c.lapId == lap_number))
         return bool(executeQuery(conn, stmt).scalar())
 
-    # ---- STUBS: everything below except get_positions returns sample data. ----
+    # ---- STUBS: everything below except the two position queries returns sample data. ----
     # Not wired to OrionDB yet; kept so the endpoints keep responding until their
     # tables exist. Don't delete them.
 
@@ -89,7 +95,8 @@ class RunRepository:
         )
 
         return [dict(row._mapping) for row in executeQuery(conn, stmt)]
-    
+
+    # Get position data for one lap of a run, in time order (wired to OrionDB)
     def get_lap_positions(
         self,
         conn: Connection,
@@ -108,7 +115,7 @@ class RunRepository:
     # STUB: Get a specific run as well (not yet reading the runs table)
     def get_specific_run(self, run_id):
         return {
-            "run_id": run_id, 
+            "run_id": run_id,
             "name": "Sample Run",
             "date": "2026-09-10"
-            }
+        }
