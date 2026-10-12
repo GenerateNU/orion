@@ -1,7 +1,7 @@
 import torch
 
 
-def ctra(state: torch.Tensor, dt: float) -> torch.Tensor:
+def ctra(state: torch.Tensor) -> torch.Tensor:
     """
     Predict the next vehicle position at a given time using CTRA motion model.
 
@@ -14,14 +14,26 @@ def ctra(state: torch.Tensor, dt: float) -> torch.Tensor:
         Predicted vehicle state.
     """
 
+    state = torch.atleast_2d(state)
+
+    start_time = state[0][0]
+    end_time = state[-1][0]
+
+    #if there is only one row fed, it won't be able to predict for that timeperiod, so fall back is to just predict for a second after. 
+    if end_time == start_time:
+        end_time = start_time + 1
+
+    dt = end_time - start_time
+
+    state = state[0]
     # this pre-check/error can be edited based on how many features we want CTRA to use 
-    if state.shape != (6,):
+    if state.shape != (7,):
         raise ValueError(
-            "State must have shape (6,): "
+            "State must have shape (7,): "
             "[ x, y, velocity, heading, turn_rate, acceleration]"
         )
 
-    x, y, velocity, heading, turn_rate, acceleration = state
+    time, x, y, velocity, heading, turn_rate, acceleration = state
 
     new_velocity = velocity + acceleration * dt
     new_heading = heading + turn_rate * dt
@@ -89,12 +101,13 @@ def ctra(state: torch.Tensor, dt: float) -> torch.Tensor:
             + y_movement_from_acceleration
         )
 
-        # new position
+        # Update the car's position
         new_x = x + x_movement
         new_y = y + y_movement
 
     return torch.stack(
-        [
+        [   
+            time + dt,
             new_x,
             new_y,
             new_velocity,
