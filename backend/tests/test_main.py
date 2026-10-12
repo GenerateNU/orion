@@ -3,7 +3,9 @@ from unittest.mock import Mock
 import pytest
 
 from main import health
-from services.exceptions import LapNotFoundError, RunNotFoundError
+from backend.services.LapNotFoundError import LapNotFoundError
+from backend.services.RunNotFoundError import RunNotFoundError
+
 from services.run_service import RunService
 
 

@@ -1,7 +1,8 @@
 from uuid import UUID
 
 from repositories.run_repository import RunRepository
-from services.exceptions import LapNotFoundError, RunNotFoundError
+from backend.services.LapNotFoundError import LapNotFoundError
+from backend.services.RunNotFoundError import RunNotFoundError
 
 
 class RunService:
