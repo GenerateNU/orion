@@ -1,4 +1,5 @@
 from sqlalchemy import (
+    UUID,
     Column,
     DateTime,
     ForeignKey,
@@ -63,10 +64,10 @@ signals_table = Table(
 )
 
 cleaned_data_table = Table("cleaned_data", metadata,       
-    Column("runId", String, primary_key=True),
+    Column("runId", UUID, primary_key=True),
     Column("sensor", String, primary_key=True),
     Column("time", DateTime(timezone=True), primary_key=True),
-    Column("value", DOUBLE_PRECISION, nullable=False),
+    Column("value", ARRAY(DOUBLE_PRECISION), nullable=False),
 )
 
 def create_tables(engine: Engine) -> None:

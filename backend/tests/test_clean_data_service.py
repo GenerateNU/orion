@@ -85,7 +85,7 @@ def run_service(chunks):
     return df, repo
  
  
-def test_clean_chunk_renames_splits_and_shifts_gps():
+def test_clean_chunk_renames_and_shifts_gps():
     chunk = make_chunk([
         (T, ACCEL_TAG, RUN_ID, [-870.0, -24.6, 486.0]),
         (T, GPS_TAG, RUN_ID, [42.33, -71.09]),
@@ -93,12 +93,13 @@ def test_clean_chunk_renames_splits_and_shifts_gps():
     ])
     df = make_service()._clean_chunk(chunk)
     by_sensor = {r.sensor: (r.time, r.value) for r in df.itertuples()}
- 
-    # multi-value arrays split into _0/_1/_2, single values keep the plain name
-    assert set(by_sensor) == {f"{ACCEL}_0", f"{ACCEL}_1", f"{ACCEL}_2", f"{GPS}_0", f"{GPS}_1", SPEED}
+
+    # one row per reading, clean names, arrays kept whole
+    assert set(by_sensor) == {ACCEL, GPS, SPEED}
     assert not set(TAG_TO_NAME) & set(by_sensor)               # no raw tags
-    assert by_sensor[SPEED] == (T, 42.0)                       # whole number -> float, not shifted
-    assert by_sensor[f"{GPS}_0"][0] == T + LAG                 # GPS shifted by the lag
+    assert by_sensor[ACCEL][1] == [-870.0, -24.6, 486.0]
+    assert by_sensor[SPEED] == (T, [42.0])                     # whole number -> float, not shifted
+    assert by_sensor[GPS][0] == T + LAG                        # GPS shifted by the lag
     assert set(df["runId"]) == {RUN_ID}
  
  
@@ -114,32 +115,31 @@ def test_clean_data_writes_reference_tables_then_each_chunk():
     _, repo = run_service(chunks)
     names = [name for name, _, _ in repo.calls]
     writes = [rows for name, rows, _ in repo.calls if name == "write_cleaned"]
- 
+
     # sensors before sensor_sources (foreign key), both before any readings
     assert names[:2] == ["write_sensors", "write_sensor_sources"]
     assert dict(repo.calls[0][1]) == NAME_TO_UNIT
     assert dict(repo.calls[1][1]) == TAG_TO_NAME
- 
+
     assert len(writes) == 2                                    # one write per chunk
-    assert list(writes[0][0]) == [RUN_ID, T, SPEED, 1.0]       # (runId, time, sensor, value)
+    assert list(writes[0][0]) == [RUN_ID, T, SPEED, [1.0]]     # (runId, time, sensor, values)
     assert all(conn is repo.conn for _, _, conn in repo.calls)  # all in one transaction
  
  
-def test_clean_data_adds_suffixed_sensors_once_and_returns_all_rows():
+def test_clean_data_returns_all_rows():
     chunks = [
         make_chunk([(T, ACCEL_TAG, RUN_ID, [1.0, 2.0, 3.0])]),
-        make_chunk([(T + timedelta(seconds=1), ACCEL_TAG, RUN_ID, [4.0, 5.0, 6.0])]),
+        make_chunk([(T + timedelta(seconds=1), SPEED_TAG, RUN_ID, [4.0])]),
     ]
     df, repo = run_service(chunks)
- 
-    # write_sensors calls after the catalog one that actually added rows
-    added = [rows for name, rows, _ in repo.calls[1:] if name == "write_sensors" and len(rows)]
-    assert len(added) == 1                                     # second chunk adds nothing new
-    assert dict(added[0]) == {f"{ACCEL}_{i}": NAME_TO_UNIT[ACCEL] for i in range(3)}
- 
+
+    # only the catalog's sensors are written, since nothing is split anymore
+    assert [name for name, _, _ in repo.calls].count("write_sensors") == 1
+
     assert {"time", "sensor", "value"} <= set(df.columns)
-    assert len(df) == 6
-    assert list(df.index) == list(range(6))                    # renumbered across chunks
+    assert len(df) == 2                                        # one row per reading
+    assert list(df.index) == [0, 1]                            # renumbered across chunks
+    assert df["value"][0] == [1.0, 2.0, 3.0]
  
  
 def test_clean_data_flags_investigation_tags_once_per_run(caplog):

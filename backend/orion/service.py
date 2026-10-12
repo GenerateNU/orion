@@ -62,6 +62,8 @@ class OrionService:
             if tag.startswith(GPS_TAG_PREFIX):
                 time = time + gps_lag
 
+            cleaned_rows.append((time, name, run_id, [float(v) for v in values]))
+
         return pd.DataFrame(cleaned_rows, columns=["time", "sensor", "runId", "value"])
 
     def clean_data(self, run_id: str, start: datetime, end: datetime, raw_tags: list[str] | None = None):
