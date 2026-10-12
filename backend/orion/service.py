@@ -62,12 +62,6 @@ class OrionService:
             if tag.startswith(GPS_TAG_PREFIX):
                 time = time + gps_lag
 
-            # 3. split multivalue sensors 
-            if len(values) == 1:
-                cleaned_rows.append((time, name, run_id, float(values[0])))
-            else:
-                cleaned_rows.extend((time, f"{name}_{i}", run_id, float(v)) for i, v in enumerate(values))
-
         return pd.DataFrame(cleaned_rows, columns=["time", "sensor", "runId", "value"])
 
     def clean_data(self, run_id: str, start: datetime, end: datetime, raw_tags: list[str] | None = None):
@@ -77,7 +71,6 @@ class OrionService:
         flagged = set()
         sensors = np.array(list(NAME_TO_UNIT.items()), dtype=object)
         sources = np.array(list(TAG_TO_NAME.items()), dtype=object)
-        known = set(TAG_TO_NAME.values())
    
         with repo.begin() as conn:
             repo.write_sensors(sensors, conn)
@@ -91,14 +84,6 @@ class OrionService:
 
                     # cleans chunk
                     cleaned_chunk = self._clean_chunk(chunk)
-
-                    # add multivariable sensor names to sensors table
-                    new = set(cleaned_chunk["sensor"]) - known
-                    repo.write_sensors(
-                        np.array([(n, NAME_TO_UNIT.get(n.rsplit("_", 1)[0])) for n in new], dtype=object),
-                        conn,
-                    )
-                    known |= new
 
                     rows = cleaned_chunk[["runId", "time", "sensor", "value"]].to_numpy(dtype=object)
                     written = repo.write_cleaned(rows, conn)
