@@ -4,7 +4,7 @@ from enum import StrEnum
 from sqlalchemy import DateTime, ForeignKey, Integer, String, func
 from sqlalchemy.orm import Mapped, mapped_column
 
-from orion_core.db.orion.base import Base
+from orion_core.models.orion.base import Base
 
 
 class PipelineStatus(StrEnum):

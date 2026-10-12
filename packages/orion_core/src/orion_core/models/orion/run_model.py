@@ -3,7 +3,7 @@ from datetime import datetime
 from sqlalchemy import DateTime, String, func
 from sqlalchemy.orm import Mapped, mapped_column
 
-from orion_core.db.orion.base import Base
+from orion_core.models.orion.base import Base
 
 
 class Run(Base):

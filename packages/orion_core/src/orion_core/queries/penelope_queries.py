@@ -3,7 +3,7 @@ async backend and the sync pipeline can share them."""
 
 from sqlalchemy import Select, select
 
-from orion_core.db.penelope.penelope_tables import data_table
+from orion_core.models.penelope import data_table
 
 
 def select_readings(run_id: str, limit: int | None = None) -> Select:

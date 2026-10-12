@@ -2,7 +2,7 @@ from sqlalchemy import Engine, select
 from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.orm import Session
 
-from orion_core.db.orion.models import PipelineRun, PipelineStatus, Run
+from orion_core.models import PipelineRun, PipelineStatus, Run
 
 
 class JobQueue:

@@ -5,7 +5,7 @@ from logging.config import fileConfig
 from alembic import context
 
 from orion_core.db.engines import make_sync_engine
-from orion_core.db.orion import Base
+from orion_core.models import Base
 from orion_core.settings import get_settings
 
 fileConfig(context.config.config_file_name)
