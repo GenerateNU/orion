@@ -1,5 +1,7 @@
 import PropTypes from "prop-types";
 
+import { runLabel } from "../utils/runLabel";
+
 // One clickable row in the run list. Clicking it hands the run back up to whoever renders the list.
 export default function RunListItem({ run, onSelect }) {
   return (
@@ -18,7 +20,7 @@ export default function RunListItem({ run, onSelect }) {
           cursor: "pointer",
         }}
       >
-        <strong>{run.name}</strong>
+        <strong>{runLabel(run)}</strong>
         {run.dates && <span style={{ color: "#555" }}> · {run.dates}</span>}
       </button>
     </li>
@@ -28,7 +30,6 @@ export default function RunListItem({ run, onSelect }) {
 RunListItem.propTypes = {
   run: PropTypes.shape({
     run_id: PropTypes.string.isRequired,
-    name: PropTypes.string.isRequired,
     dates: PropTypes.string,
   }).isRequired,
   onSelect: PropTypes.func.isRequired,

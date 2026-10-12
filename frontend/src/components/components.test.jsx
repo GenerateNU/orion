@@ -55,11 +55,11 @@ describe("EmptyState", () => {
 });
 
 describe("RunListItem", () => {
-  const run = { run_id: "run-7", name: "Test Run", dates: "2026-05-14" };
+  const run = { run_id: "77777777-7777-7777-7777-777777777777", dates: "2026-05-14" };
 
-  it("shows the run name and date", () => {
+  it("labels the run by the start of its id, with its date", () => {
     render(<RunListItem run={run} onSelect={() => {}} />);
-    expect(screen.getByRole("button")).toHaveTextContent("Test Run");
+    expect(screen.getByRole("button")).toHaveTextContent("Run 77777777");
     expect(screen.getByRole("button")).toHaveTextContent("2026-05-14");
   });
 

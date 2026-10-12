@@ -1,9 +1,9 @@
-from sqlalchemy import exists, select
+from sqlalchemy import exists, func, select
 from sqlalchemy.engine import Connection
 from sqlalchemy.exc import OperationalError, SQLAlchemyError
 
 from orion.exceptions import OrionConnectionError, OrionSchemaError
-from orion.schema import estimated_positions_table, runs_table
+from orion.schema import estimated_car_state_table
 
 
 def _run(conn: Connection, stmt):
@@ -13,27 +13,39 @@ def _run(conn: Connection, stmt):
     except OperationalError as exc:
         raise OrionConnectionError("Lost connection to OrionDB mid-query.") from exc
     except SQLAlchemyError as exc:
-        # Connected but the query failed -- usually the table doesn't exist yet.
+        # Connected but the query failed -- usually a table or column is missing.
         # Must come second: OperationalError is a SQLAlchemyError subclass.
         raise OrionSchemaError(
-            "Query against OrionDB failed. If the runs/estimated_positions "
-            "tables are missing, run setup_orion.py."
+            "Query against OrionDB failed. Check that the estimated_car_state "
+            "table exists and matches orion/schema.py."
         ) from exc
 
 
 class RunRepository:
 
-    # Get all runs (wired to OrionDB)
+    # Get all runs, newest first (wired to OrionDB)
+    # A run is any runId in estimated_car_state; there's no runs table, so a run
+    # has no name, and its date is the (UTC) day of its first estimate.
     def get_runs(self, conn: Connection, date=None):
-        r = runs_table
-        stmt = select(r.c.run_id, r.c.name, r.c.dates).order_by(r.c.run_id)
+        t = estimated_car_state_table
+        stmt = (
+            select(t.c.runId, func.min(t.c.time).label("started"))
+            .group_by(t.c.runId)
+            .order_by(func.min(t.c.time).desc())
+        )
+        runs = [
+            {"run_id": row.runId, "dates": row.started.date()}
+            for row in _run(conn, stmt)
+        ]
+        # filtered here rather than in SQL: Postgres and SQLite turn a
+        # timestamp into a date differently, and there are only a handful of runs
         if date is not None:
-            stmt = stmt.where(runs_table.c.dates == date)
-        return [dict(row._mapping) for row in _run(conn, stmt)]
+            runs = [run for run in runs if run["dates"] == date]
+        return runs
 
     # Check a run exists, so the API can 404 instead of returning [] for a typo
     def run_exists(self, conn: Connection, run_id):
-        stmt = select(exists().where(runs_table.c.run_id == run_id))
+        stmt = select(exists().where(estimated_car_state_table.c.runId == run_id))
         return bool(_run(conn, stmt).scalar())
 
     # ---- STUBS: everything below except get_positions returns sample data. ----
@@ -77,11 +89,11 @@ class RunRepository:
         min_lon=None,
         max_lon=None,
     ):
-        t = estimated_positions_table
+        t = estimated_car_state_table
         stmt = (
-            select(t.c.timestamp, t.c.latitude, t.c.longitude, t.c.orientation, t.c.speed, t.c.tangential_acceleration, t.c.centripetal_acceleration)
-            .where(t.c.run_id == run_id, t.c.lap_number == lap_number)
-            .order_by(t.c.timestamp)
+            select(t.c.time.label("timestamp"), t.c.latitude, t.c.longitude)
+            .where(t.c.runId == run_id, t.c.lapId == lap_number)
+            .order_by(t.c.time)
         )
         # optional bounding box, each edge independent
         if min_lat is not None:

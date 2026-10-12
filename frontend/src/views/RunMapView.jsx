@@ -5,6 +5,7 @@ import ErrorState from "../components/ErrorState.jsx";
 import LoadingState from "../components/LoadingState.jsx";
 import PositionMap from "../components/PositionMap.jsx";
 import { usePositionsByBounds } from "../hooks/positional_data";
+import { runLabel } from "../utils/runLabel";
 
 // Positions come per lap, so for now the map shows one lap of the selected run.
 const DEFAULT_LAP = 1;
@@ -30,7 +31,7 @@ export default function RunMapView({ run, onBack }) {
         ← Back to runs
       </button>
       <h2>
-        {run.name} <span style={{ color: "#555", fontWeight: "normal" }}>· Lap {DEFAULT_LAP}</span>
+        {runLabel(run)} <span style={{ color: "#555", fontWeight: "normal" }}>· Lap {DEFAULT_LAP}</span>
       </h2>
       {content}
     </section>
@@ -40,7 +41,6 @@ export default function RunMapView({ run, onBack }) {
 RunMapView.propTypes = {
   run: PropTypes.shape({
     run_id: PropTypes.string.isRequired,
-    name: PropTypes.string.isRequired,
   }).isRequired,
   onBack: PropTypes.func.isRequired,
 };

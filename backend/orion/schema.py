@@ -1,13 +1,12 @@
 from sqlalchemy import (
     Column,
-    Date,
     DateTime,
     Float,
-    ForeignKey,
     Integer,
     MetaData,
     String,
     Table,
+    Uuid,
 )
 from sqlalchemy.dialects.postgresql import ARRAY, DOUBLE_PRECISION
 from sqlalchemy.engine import Engine
@@ -39,44 +38,28 @@ data_table = Table(
 )
 
 
-# One row per run/session -- what GET /api/runs serves. Column names match
-# the frontend's contract (RunListView reads run_id, name, dates), so rows
-# can be returned as-is.
+# Output of the state estimation (Kalman filter) pipeline, one row per instant
+# per run. It's the API's only data source: GET /api/runs lists its runIds, and
+# GET /api/runs/{id}/laps/{lap}/positions serves its points to PositionMap.
 #
-# run_id is Penelope's runId, the same string that links readings in `data`.
+# It already exists in Neon and was created outside this repo, so it's mirrored
+# here (camelCase names and all) with only the columns the API reads.
+# create_tables() deliberately skips it: create_all would build an incomplete
+# copy, without the foreign key to pipeline_runs (an internal table).
 #
-# DRAFT: columns beyond what the frontend reads are still to be agreed.
-runs_table = Table(
-    "runs",
+# runId is the UUID that connects the tables. lapId is nullable: points not
+# yet assigned to a lap have none.
+estimated_car_state_table = Table(
+    "estimated_car_state",
     metadata,
-    Column("run_id", String, primary_key=True),
-    Column("name", String, nullable=False),
-    Column("dates", Date, nullable=True),
-)
-
-
-# Estimated positions from the state estimation (Kalman filter) pipeline --
-# what GET /api/runs/{id}/laps/{lap}/positions serves to PositionMap.
-# Fields match the stub the frontend was built against.
-#
-# run_id and lap_number come first on purpose: the primary key (and its index)
-# follows column order, and the positions query filters on these two.
-estimated_positions_table = Table(
-    "estimated_positions",
-    metadata,
-    Column("run_id", String, ForeignKey("runs.run_id"), primary_key=True),
-    Column("lap_number", Integer, primary_key=True),
-    # Seconds since the start of the lap, a plain number like the stub's 0.0, 0.1
-    Column("timestamp", Float, primary_key=True),
+    Column("runId", Uuid, primary_key=True),
+    Column("time", DateTime(timezone=True), primary_key=True),
+    Column("lapId", Integer, nullable=True),
     Column("latitude", Float, nullable=False),
     Column("longitude", Float, nullable=False),
-    Column("orientation", Float, nullable=False),
-    Column("speed", Float, nullable=False),
-    Column("tangential_acceleration", Float, nullable=False),
-    Column("centripetal_acceleration", Float, nullable=False),
 )
 
 
 def create_tables(engine: Engine) -> None:
-    """Create all tables in this module if they don't already exist."""
-    metadata.create_all(engine, checkfirst=True)
+    """Create the tables this repo owns if they don't already exist."""
+    metadata.create_all(engine, tables=[data_table], checkfirst=True)

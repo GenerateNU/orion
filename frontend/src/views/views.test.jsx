@@ -13,7 +13,7 @@ vi.mock("../components/PositionMap.jsx", () => ({
   default: ({ positions }) => <div data-testid="map">{positions.length} points</div>,
 }));
 
-const run = { run_id: "run-1", name: "Test Run", dates: "2026-05-14" };
+const run = { run_id: "11111111-1111-1111-1111-111111111111", dates: "2026-05-14" };
 const hookState = (overrides) => ({ data: null, isLoading: false, error: null, ...overrides });
 
 describe("RunListView", () => {
@@ -37,11 +37,11 @@ describe("RunListView", () => {
 
   it("lists runs and reports which one was picked", () => {
     const onSelectRun = vi.fn();
-    const other = { run_id: "run-2", name: "Other Run" };
+    const other = { run_id: "22222222-2222-2222-2222-222222222222", dates: "2026-06-01" };
     useRuns.mockReturnValue(hookState({ data: [run, other] }));
     render(<RunListView onSelectRun={onSelectRun} />);
 
-    fireEvent.click(screen.getByRole("button", { name: /Other Run/ }));
+    fireEvent.click(screen.getByRole("button", { name: /Run 22222222/ }));
     expect(onSelectRun).toHaveBeenCalledWith(other);
   });
 });
@@ -52,7 +52,7 @@ describe("RunMapView", () => {
   it("asks for lap 1 of the selected run", () => {
     usePositionsByBounds.mockReturnValue(hookState({ isLoading: true }));
     render(<RunMapView run={run} onBack={() => {}} />);
-    expect(usePositionsByBounds).toHaveBeenCalledWith("run-1", 1);
+    expect(usePositionsByBounds).toHaveBeenCalledWith("11111111-1111-1111-1111-111111111111", 1);
   });
 
   it("shows a loading indicator while positions load", () => {
@@ -79,7 +79,7 @@ describe("RunMapView", () => {
     );
     render(<RunMapView run={run} onBack={() => {}} />);
     expect(screen.getByTestId("map")).toHaveTextContent("2 points");
-    expect(screen.getByRole("heading")).toHaveTextContent("Test Run");
+    expect(screen.getByRole("heading")).toHaveTextContent("Run 11111111");
   });
 
   it("goes back when the back button is clicked", () => {

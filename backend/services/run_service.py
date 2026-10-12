@@ -1,3 +1,5 @@
+from uuid import UUID
+
 from repositories.run_repository import RunRepository
 from services.exceptions import RunNotFoundError
 
@@ -22,12 +24,12 @@ class RunService:
         return self.repository.get_runs(conn, run_date)
 
     # STUB: returns sample data until a laps table exists in OrionDB.
-    def get_laps(self, run_id: str):
+    def get_laps(self, run_id: UUID):
         # Ask the repository for all laps in a run.
         return self.repository.get_laps(run_id)
 
     # STUB: returns sample data until a laps table exists in OrionDB.
-    def get_specific_lap(self, run_id: str, lap_number: int):
+    def get_specific_lap(self, run_id: UUID, lap_number: int):
         # Ask the repository for one specific lap.
         return self.repository.get_specific_lap(run_id, lap_number)
 
@@ -35,7 +37,7 @@ class RunService:
     def get_positions(
         self,
         conn,
-        run_id: str,
+        run_id: UUID,
         lap_number: int,
         min_lat=None,
         max_lat=None,
@@ -66,7 +68,7 @@ class RunService:
     # STUB: returns sample data until velocity is computed into OrionDB.
     def get_velocity_at_position(
         self,
-        run_id: str,
+        run_id: UUID,
         lap_number: int,
         latitude: float,
         longitude: float

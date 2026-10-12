@@ -5,7 +5,7 @@ import App from "./App.jsx";
 
 vi.mock("./hooks/all_runs", () => ({
   useRuns: () => ({
-    data: [{ run_id: "run-1", name: "Test Run", dates: "2026-05-14" }],
+    data: [{ run_id: "11111111-1111-1111-1111-111111111111", dates: "2026-05-14" }],
     isLoading: false,
     error: null,
   }),
@@ -32,7 +32,7 @@ describe("App", () => {
   it("opens a run's map from the list and goes back", () => {
     render(<App />);
 
-    fireEvent.click(screen.getByRole("button", { name: /Test Run/ }));
+    fireEvent.click(screen.getByRole("button", { name: /Run 11111111/ }));
     expect(screen.getByTestId("map")).toBeInTheDocument();
     expect(screen.queryByRole("heading", { name: "Runs" })).not.toBeInTheDocument();
 
