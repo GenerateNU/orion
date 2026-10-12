@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { apiClient } from "../api/client";
 
-export function useEnergy(raceId, lapNumber) {
+export function useEnergy(runId, lapNumber) {
   const [data, setData] = useState(null);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState(null);
@@ -10,7 +10,7 @@ export function useEnergy(raceId, lapNumber) {
     async function fetchEnergy() {
       try {
         const result = await apiClient(
-          `/api/races/${raceId}/laps/${lapNumber}/energy`
+          `/api/runs/${runId}/laps/${lapNumber}/energy`
         );
         setData(result);
       } catch (err) {
@@ -21,7 +21,7 @@ export function useEnergy(raceId, lapNumber) {
     }
 
     fetchEnergy();
-  }, [raceId, lapNumber]);
+  }, [runId, lapNumber]);
 
   return {
     data,

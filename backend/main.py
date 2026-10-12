@@ -7,7 +7,7 @@ from sqlalchemy import text
 from sqlalchemy.engine import Connection
 from sqlalchemy.exc import OperationalError
 
-from controllers.race_controller import router as race_router
+from controllers.run_controller import router as run_router
 from orion.connection import get_connection
 from orion.exceptions import OrionConfigError, OrionConnectionError, OrionSchemaError
 
@@ -20,8 +20,8 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# Tell FastAPI to use the router we created in the race_controller.py file.
-app.include_router(race_router)
+# Tell FastAPI to use the router we created in the run_controller.py file.
+app.include_router(run_router)
 
 
 # Turn OrionDB failures into clean JSON errors instead of a bare 500 traceback.

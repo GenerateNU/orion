@@ -39,34 +39,32 @@ data_table = Table(
 )
 
 
-# One row per race/session -- what GET /api/races serves. Column names match
-# the frontend's contract (RaceListView reads race_id, name, dates), so rows
+# One row per run/session -- what GET /api/runs serves. Column names match
+# the frontend's contract (RunListView reads run_id, name, dates), so rows
 # can be returned as-is.
 #
-# run_id links a race back to its readings in `data` (Penelope's runId). It is
-# nullable so a race can be entered before its data has been ingested.
+# run_id is Penelope's runId, the same string that links readings in `data`.
 #
 # DRAFT: columns beyond what the frontend reads are still to be agreed.
-races_table = Table(
-    "races",
+runs_table = Table(
+    "runs",
     metadata,
-    Column("race_id", Integer, primary_key=True, autoincrement=True),
-    Column("run_id", String, unique=True, nullable=True),
+    Column("run_id", String, primary_key=True),
     Column("name", String, nullable=False),
     Column("dates", Date, nullable=True),
 )
 
 
 # Estimated positions from the state estimation (Kalman filter) pipeline --
-# what GET /api/races/{id}/laps/{lap}/positions serves to PositionMap.
+# what GET /api/runs/{id}/laps/{lap}/positions serves to PositionMap.
 # Fields match the stub the frontend was built against.
 #
-# race_id and lap_number come first on purpose: the primary key (and its index)
+# run_id and lap_number come first on purpose: the primary key (and its index)
 # follows column order, and the positions query filters on these two.
 estimated_positions_table = Table(
     "estimated_positions",
     metadata,
-    Column("race_id", Integer, ForeignKey("races.race_id"), primary_key=True),
+    Column("run_id", String, ForeignKey("runs.run_id"), primary_key=True),
     Column("lap_number", Integer, primary_key=True),
     # Seconds since the start of the lap, a plain number like the stub's 0.0, 0.1
     Column("timestamp", Float, primary_key=True),

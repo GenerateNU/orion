@@ -1,75 +1,75 @@
 import { fireEvent, render, screen } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-import RaceListView from "./RaceListView.jsx";
-import RaceMapView from "./RaceMapView.jsx";
-import { useRaces } from "../hooks/all_races";
+import RunListView from "./RunListView.jsx";
+import RunMapView from "./RunMapView.jsx";
+import { useRuns } from "../hooks/all_runs";
 import { usePositionsByBounds } from "../hooks/positional_data";
 
-vi.mock("../hooks/all_races", () => ({ useRaces: vi.fn() }));
+vi.mock("../hooks/all_runs", () => ({ useRuns: vi.fn() }));
 vi.mock("../hooks/positional_data", () => ({ usePositionsByBounds: vi.fn() }));
 // Leaflet can't render in jsdom; PositionMap has its own tests.
 vi.mock("../components/PositionMap.jsx", () => ({
   default: ({ positions }) => <div data-testid="map">{positions.length} points</div>,
 }));
 
-const race = { race_id: 1, name: "Test Race", dates: "2026-05-14" };
+const run = { run_id: "run-1", name: "Test Run", dates: "2026-05-14" };
 const hookState = (overrides) => ({ data: null, isLoading: false, error: null, ...overrides });
 
-describe("RaceListView", () => {
-  it("shows a loading indicator while races load", () => {
-    useRaces.mockReturnValue(hookState({ isLoading: true }));
-    render(<RaceListView onSelectRace={() => {}} />);
-    expect(screen.getByRole("status")).toHaveTextContent("Loading races...");
+describe("RunListView", () => {
+  it("shows a loading indicator while runs load", () => {
+    useRuns.mockReturnValue(hookState({ isLoading: true }));
+    render(<RunListView onSelectRun={() => {}} />);
+    expect(screen.getByRole("status")).toHaveTextContent("Loading runs...");
   });
 
   it("shows a readable error when the request fails", () => {
-    useRaces.mockReturnValue(hookState({ error: new Error("API request failed: 500") }));
-    render(<RaceListView onSelectRace={() => {}} />);
-    expect(screen.getByRole("alert")).toHaveTextContent("Couldn't load races");
+    useRuns.mockReturnValue(hookState({ error: new Error("API request failed: 500") }));
+    render(<RunListView onSelectRun={() => {}} />);
+    expect(screen.getByRole("alert")).toHaveTextContent("Couldn't load runs");
   });
 
-  it("says so when there are no races", () => {
-    useRaces.mockReturnValue(hookState({ data: [] }));
-    render(<RaceListView onSelectRace={() => {}} />);
-    expect(screen.getByText("No races found.")).toBeInTheDocument();
+  it("says so when there are no runs", () => {
+    useRuns.mockReturnValue(hookState({ data: [] }));
+    render(<RunListView onSelectRun={() => {}} />);
+    expect(screen.getByText("No runs found.")).toBeInTheDocument();
   });
 
-  it("lists races and reports which one was picked", () => {
-    const onSelectRace = vi.fn();
-    const other = { race_id: 2, name: "Other Race" };
-    useRaces.mockReturnValue(hookState({ data: [race, other] }));
-    render(<RaceListView onSelectRace={onSelectRace} />);
+  it("lists runs and reports which one was picked", () => {
+    const onSelectRun = vi.fn();
+    const other = { run_id: "run-2", name: "Other Run" };
+    useRuns.mockReturnValue(hookState({ data: [run, other] }));
+    render(<RunListView onSelectRun={onSelectRun} />);
 
-    fireEvent.click(screen.getByRole("button", { name: /Other Race/ }));
-    expect(onSelectRace).toHaveBeenCalledWith(other);
+    fireEvent.click(screen.getByRole("button", { name: /Other Run/ }));
+    expect(onSelectRun).toHaveBeenCalledWith(other);
   });
 });
 
-describe("RaceMapView", () => {
+describe("RunMapView", () => {
   beforeEach(() => usePositionsByBounds.mockReset());
 
-  it("asks for lap 1 of the selected race", () => {
+  it("asks for lap 1 of the selected run", () => {
     usePositionsByBounds.mockReturnValue(hookState({ isLoading: true }));
-    render(<RaceMapView race={race} onBack={() => {}} />);
-    expect(usePositionsByBounds).toHaveBeenCalledWith(1, 1);
+    render(<RunMapView run={run} onBack={() => {}} />);
+    expect(usePositionsByBounds).toHaveBeenCalledWith("run-1", 1);
   });
 
   it("shows a loading indicator while positions load", () => {
     usePositionsByBounds.mockReturnValue(hookState({ isLoading: true }));
-    render(<RaceMapView race={race} onBack={() => {}} />);
+    render(<RunMapView run={run} onBack={() => {}} />);
     expect(screen.getByRole("status")).toHaveTextContent("Loading GPS data...");
   });
 
   it("shows a readable error when the request fails", () => {
     usePositionsByBounds.mockReturnValue(hookState({ error: new TypeError("Failed to fetch") }));
-    render(<RaceMapView race={race} onBack={() => {}} />);
+    render(<RunMapView run={run} onBack={() => {}} />);
     expect(screen.getByRole("alert")).toHaveTextContent(/couldn't reach the server/i);
   });
 
   it("says so when the lap has no GPS data", () => {
     usePositionsByBounds.mockReturnValue(hookState({ data: [] }));
-    render(<RaceMapView race={race} onBack={() => {}} />);
+    render(<RunMapView run={run} onBack={() => {}} />);
     expect(screen.getByText("No GPS data for this lap.")).toBeInTheDocument();
   });
 
@@ -77,16 +77,16 @@ describe("RaceMapView", () => {
     usePositionsByBounds.mockReturnValue(
       hookState({ data: [{ latitude: 1, longitude: 2 }, { latitude: 3, longitude: 4 }] })
     );
-    render(<RaceMapView race={race} onBack={() => {}} />);
+    render(<RunMapView run={run} onBack={() => {}} />);
     expect(screen.getByTestId("map")).toHaveTextContent("2 points");
-    expect(screen.getByRole("heading")).toHaveTextContent("Test Race");
+    expect(screen.getByRole("heading")).toHaveTextContent("Test Run");
   });
 
   it("goes back when the back button is clicked", () => {
     const onBack = vi.fn();
     usePositionsByBounds.mockReturnValue(hookState({ data: [] }));
-    render(<RaceMapView race={race} onBack={onBack} />);
-    fireEvent.click(screen.getByRole("button", { name: /back to races/i }));
+    render(<RunMapView run={run} onBack={onBack} />);
+    fireEvent.click(screen.getByRole("button", { name: /back to runs/i }));
     expect(onBack).toHaveBeenCalled();
   });
 });

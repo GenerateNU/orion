@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import { apiClient } from "../api/client";
 
 export function useVelocityAtPosition(
-  raceId,
+  runId,
   lapNumber,
   latitude,
   longitude
@@ -20,7 +20,7 @@ export function useVelocityAtPosition(
         });
 
         const result = await apiClient(
-          `/api/races/${raceId}/laps/${lapNumber}/velocity-at-position?${params}`
+          `/api/runs/${runId}/laps/${lapNumber}/velocity-at-position?${params}`
         );
 
         setData(result);
@@ -32,7 +32,7 @@ export function useVelocityAtPosition(
     }
 
     fetchVelocity();
-  }, [raceId, lapNumber, latitude, longitude]);
+  }, [runId, lapNumber, latitude, longitude]);
 
   return {
     data,

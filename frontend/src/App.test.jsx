@@ -3,9 +3,9 @@ import { describe, expect, it, vi } from "vitest";
 
 import App from "./App.jsx";
 
-vi.mock("./hooks/all_races", () => ({
-  useRaces: () => ({
-    data: [{ race_id: 1, name: "Test Race", dates: "2026-05-14" }],
+vi.mock("./hooks/all_runs", () => ({
+  useRuns: () => ({
+    data: [{ run_id: "run-1", name: "Test Run", dates: "2026-05-14" }],
     isLoading: false,
     error: null,
   }),
@@ -23,20 +23,20 @@ vi.mock("./components/PositionMap.jsx", () => ({
 }));
 
 describe("App", () => {
-  it("starts on the race list", () => {
+  it("starts on the run list", () => {
     render(<App />);
-    expect(screen.getByRole("heading", { name: "Races" })).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "Runs" })).toBeInTheDocument();
     expect(screen.queryByTestId("map")).not.toBeInTheDocument();
   });
 
-  it("opens a race's map from the list and goes back", () => {
+  it("opens a run's map from the list and goes back", () => {
     render(<App />);
 
-    fireEvent.click(screen.getByRole("button", { name: /Test Race/ }));
+    fireEvent.click(screen.getByRole("button", { name: /Test Run/ }));
     expect(screen.getByTestId("map")).toBeInTheDocument();
-    expect(screen.queryByRole("heading", { name: "Races" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("heading", { name: "Runs" })).not.toBeInTheDocument();
 
-    fireEvent.click(screen.getByRole("button", { name: /back to races/i }));
-    expect(screen.getByRole("heading", { name: "Races" })).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: /back to runs/i }));
+    expect(screen.getByRole("heading", { name: "Runs" })).toBeInTheDocument();
   });
 });

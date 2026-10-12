@@ -6,12 +6,12 @@ import LoadingState from "../components/LoadingState.jsx";
 import PositionMap from "../components/PositionMap.jsx";
 import { usePositionsByBounds } from "../hooks/positional_data";
 
-// Positions come per lap, so for now the map shows one lap of the selected race.
+// Positions come per lap, so for now the map shows one lap of the selected run.
 const DEFAULT_LAP = 1;
 
-// Plots the GPS positions for one race from GET /api/races/{id}/laps/{lap}/positions.
-export default function RaceMapView({ race, onBack }) {
-  const { data: positions, isLoading, error } = usePositionsByBounds(race.race_id, DEFAULT_LAP);
+// Plots the GPS positions for one run from GET /api/runs/{id}/laps/{lap}/positions.
+export default function RunMapView({ run, onBack }) {
+  const { data: positions, isLoading, error } = usePositionsByBounds(run.run_id, DEFAULT_LAP);
 
   let content;
   if (isLoading) {
@@ -27,19 +27,19 @@ export default function RaceMapView({ race, onBack }) {
   return (
     <section>
       <button type="button" onClick={onBack}>
-        ← Back to races
+        ← Back to runs
       </button>
       <h2>
-        {race.name} <span style={{ color: "#555", fontWeight: "normal" }}>· Lap {DEFAULT_LAP}</span>
+        {run.name} <span style={{ color: "#555", fontWeight: "normal" }}>· Lap {DEFAULT_LAP}</span>
       </h2>
       {content}
     </section>
   );
 }
 
-RaceMapView.propTypes = {
-  race: PropTypes.shape({
-    race_id: PropTypes.number.isRequired,
+RunMapView.propTypes = {
+  run: PropTypes.shape({
+    run_id: PropTypes.string.isRequired,
     name: PropTypes.string.isRequired,
   }).isRequired,
   onBack: PropTypes.func.isRequired,

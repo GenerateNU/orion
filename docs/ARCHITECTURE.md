@@ -116,7 +116,7 @@ flowchart TB
 
 ```mermaid
 flowchart LR
-    A["Raw rows<br/>(name, value, ts, raceId)<br/><b>irregular, mixed rates</b>"]
+    A["Raw rows<br/>(name, value, ts, runId)<br/><b>irregular, mixed rates</b>"]
     B["Clean channels<br/>one series per physical signal<br/><b>known unit + frequency</b>"]
     C["State trace<br/>position, speed, steering, yaw…<br/><b>uniform high-frequency</b>"]
     D["Laps<br/>segmented trace<br/><b>comparable units of driving</b>"]

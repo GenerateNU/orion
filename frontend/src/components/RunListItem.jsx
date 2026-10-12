@@ -1,12 +1,12 @@
 import PropTypes from "prop-types";
 
-// One clickable row in the race list. Clicking it hands the race back up to whoever renders the list.
-export default function RaceListItem({ race, onSelect }) {
+// One clickable row in the run list. Clicking it hands the run back up to whoever renders the list.
+export default function RunListItem({ run, onSelect }) {
   return (
     <li>
       <button
         type="button"
-        onClick={() => onSelect(race)}
+        onClick={() => onSelect(run)}
         style={{
           width: "100%",
           textAlign: "left",
@@ -18,16 +18,16 @@ export default function RaceListItem({ race, onSelect }) {
           cursor: "pointer",
         }}
       >
-        <strong>{race.name}</strong>
-        {race.dates && <span style={{ color: "#555" }}> · {race.dates}</span>}
+        <strong>{run.name}</strong>
+        {run.dates && <span style={{ color: "#555" }}> · {run.dates}</span>}
       </button>
     </li>
   );
 }
 
-RaceListItem.propTypes = {
-  race: PropTypes.shape({
-    race_id: PropTypes.number.isRequired,
+RunListItem.propTypes = {
+  run: PropTypes.shape({
+    run_id: PropTypes.string.isRequired,
     name: PropTypes.string.isRequired,
     dates: PropTypes.string,
   }).isRequired,

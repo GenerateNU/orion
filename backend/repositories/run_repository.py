@@ -3,7 +3,7 @@ from sqlalchemy.engine import Connection
 from sqlalchemy.exc import OperationalError, SQLAlchemyError
 
 from orion.exceptions import OrionConnectionError, OrionSchemaError
-from orion.schema import estimated_positions_table, races_table
+from orion.schema import estimated_positions_table, runs_table
 
 
 def _run(conn: Connection, stmt):
@@ -16,35 +16,35 @@ def _run(conn: Connection, stmt):
         # Connected but the query failed -- usually the table doesn't exist yet.
         # Must come second: OperationalError is a SQLAlchemyError subclass.
         raise OrionSchemaError(
-            "Query against OrionDB failed. If the races/estimated_positions "
+            "Query against OrionDB failed. If the runs/estimated_positions "
             "tables are missing, run setup_orion.py."
         ) from exc
 
 
-class RaceRepository:
+class RunRepository:
 
-    # Get all races (wired to OrionDB)
-    def get_races(self, conn: Connection, date=None):
-        r = races_table
-        stmt = select(r.c.race_id, r.c.name, r.c.dates).order_by(r.c.race_id)
+    # Get all runs (wired to OrionDB)
+    def get_runs(self, conn: Connection, date=None):
+        r = runs_table
+        stmt = select(r.c.run_id, r.c.name, r.c.dates).order_by(r.c.run_id)
         if date is not None:
-            stmt = stmt.where(races_table.c.dates == date)
+            stmt = stmt.where(runs_table.c.dates == date)
         return [dict(row._mapping) for row in _run(conn, stmt)]
 
-    # Check a race exists, so the API can 404 instead of returning [] for a typo
-    def race_exists(self, conn: Connection, race_id):
-        stmt = select(exists().where(races_table.c.race_id == race_id))
+    # Check a run exists, so the API can 404 instead of returning [] for a typo
+    def run_exists(self, conn: Connection, run_id):
+        stmt = select(exists().where(runs_table.c.run_id == run_id))
         return bool(_run(conn, stmt).scalar())
 
     # ---- STUBS: everything below except get_positions returns sample data. ----
     # Not wired to OrionDB yet; kept so the endpoints keep responding until their
     # tables exist. Don't delete them.
 
-    # STUB: Get all laps for a race
-    def get_laps(self, race_id):
+    # STUB: Get all laps for a run
+    def get_laps(self, run_id):
         return [
             {
-                "race_id": race_id,
+                "run_id": run_id,
                 "lap_number": 1,
                 "time_seconds": 92.5,
                 "average_speed": 45.2,
@@ -55,9 +55,9 @@ class RaceRepository:
         ]
 
     # STUB: Get one lap
-    def get_specific_lap(self, race_id, lap_number):
+    def get_specific_lap(self, run_id, lap_number):
         return {
-            "race_id": race_id,
+            "run_id": run_id,
             "lap_number": lap_number,
             "time_seconds": 92.5,
             "average_speed": 45.2,
@@ -70,7 +70,7 @@ class RaceRepository:
     def get_positions(
         self,
         conn: Connection,
-        race_id,
+        run_id,
         lap_number,
         min_lat=None,
         max_lat=None,
@@ -80,7 +80,7 @@ class RaceRepository:
         t = estimated_positions_table
         stmt = (
             select(t.c.timestamp, t.c.latitude, t.c.longitude, t.c.orientation, t.c.speed, t.c.tangential_acceleration, t.c.centripetal_acceleration)
-            .where(t.c.race_id == race_id, t.c.lap_number == lap_number)
+            .where(t.c.run_id == run_id, t.c.lap_number == lap_number)
             .order_by(t.c.timestamp)
         )
         # optional bounding box, each edge independent
@@ -98,7 +98,7 @@ class RaceRepository:
     # STUB: Get velocity at a position
     def get_velocity_at_position(
         self,
-        race_id,
+        run_id,
         lap_number,
         latitude,
         longitude,
@@ -109,18 +109,18 @@ class RaceRepository:
             "speed": 40.0,
         }
     
-    # STUB: Get a specific race as well (not yet reading the races table)
-    def get_specific_race(self, race_id):
+    # STUB: Get a specific run as well (not yet reading the runs table)
+    def get_specific_run(self, run_id):
         return {
-            "race_id": race_id, 
-            "name": "Sample Race",
+            "run_id": run_id, 
+            "name": "Sample Run",
             "date": "2026-09-10"
         }
     
     # STUB: energy consumption per lap
-    def get_lap_energy(self, race_id, lap_number):
+    def get_lap_energy(self, run_id, lap_number):
         return {
-            "race_id": race_id,
+            "run_id": run_id,
             "lap_number": lap_number,
             "energy_consumption": 1.82,
             "energy_regenerated": 0.34,
