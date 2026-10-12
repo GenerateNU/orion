@@ -17,23 +17,25 @@ vi.mock("./hooks/positional_data", () => ({
     error: null,
   }),
 }));
-// Leaflet can't render in jsdom; PositionMap has its own tests.
-vi.mock("./components/PositionMap.jsx", () => ({
-  default: () => <div data-testid="map" />,
-}));
 
 describe("App", () => {
+  it("shows the header with the husky", () => {
+    render(<App />);
+    expect(screen.getByRole("img", { name: /husky/i })).toBeInTheDocument();
+    expect(screen.getByText(/Northeastern Electric Racing/)).toBeInTheDocument();
+  });
+
   it("starts on the run list", () => {
     render(<App />);
     expect(screen.getByRole("heading", { name: "Runs" })).toBeInTheDocument();
-    expect(screen.queryByTestId("map")).not.toBeInTheDocument();
+    expect(screen.queryByRole("img", { name: /GPS points/ })).not.toBeInTheDocument();
   });
 
-  it("opens a run's map from the list and goes back", () => {
+  it("opens a run's track from the list and goes back", () => {
     render(<App />);
 
     fireEvent.click(screen.getByRole("button", { name: /Run 11111111/ }));
-    expect(screen.getByTestId("map")).toBeInTheDocument();
+    expect(screen.getByRole("img", { name: /1 GPS points/ })).toBeInTheDocument();
     expect(screen.queryByRole("heading", { name: "Runs" })).not.toBeInTheDocument();
 
     fireEvent.click(screen.getByRole("button", { name: /back to runs/i }));

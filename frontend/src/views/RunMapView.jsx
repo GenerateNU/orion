@@ -3,14 +3,14 @@ import PropTypes from "prop-types";
 import EmptyState from "../components/EmptyState.jsx";
 import ErrorState from "../components/ErrorState.jsx";
 import LoadingState from "../components/LoadingState.jsx";
-import PositionMap from "../components/PositionMap.jsx";
+import RaceTrack from "../components/RaceTrack.jsx";
 import { usePositionsByBounds } from "../hooks/positional_data";
 import { runLabel } from "../utils/runLabel";
 
-// Positions come per lap, so for now the map shows one lap of the selected run.
+// Positions come per lap, so for now the track shows one lap of the selected run.
 const DEFAULT_LAP = 1;
 
-// Plots the GPS positions for one run from GET /api/runs/{id}/laps/{lap}/positions.
+// Draws the GPS positions for one run from GET /api/runs/{id}/laps/{lap}/positions as a track.
 export default function RunMapView({ run, onBack }) {
   const { data: positions, isLoading, error } = usePositionsByBounds(run.run_id, DEFAULT_LAP);
 
@@ -22,16 +22,16 @@ export default function RunMapView({ run, onBack }) {
   } else if (!positions?.length) {
     content = <EmptyState message="No GPS data for this lap." />;
   } else {
-    content = <PositionMap positions={positions} />;
+    content = <RaceTrack positions={positions} />;
   }
 
   return (
     <section>
-      <button type="button" onClick={onBack}>
-        ← Back to runs
+      <button type="button" className="back-button" onClick={onBack}>
+        ‹ Back to runs
       </button>
-      <h2>
-        {runLabel(run)} <span style={{ color: "#555", fontWeight: "normal" }}>· Lap {DEFAULT_LAP}</span>
+      <h2 className="section-title">
+        {runLabel(run)} <span className="lap-chip">Lap {DEFAULT_LAP}</span>
       </h2>
       {content}
     </section>

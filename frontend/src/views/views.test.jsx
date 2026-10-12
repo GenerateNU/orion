@@ -8,8 +8,8 @@ import { usePositionsByBounds } from "../hooks/positional_data";
 
 vi.mock("../hooks/all_runs", () => ({ useRuns: vi.fn() }));
 vi.mock("../hooks/positional_data", () => ({ usePositionsByBounds: vi.fn() }));
-// Leaflet can't render in jsdom; PositionMap has its own tests.
-vi.mock("../components/PositionMap.jsx", () => ({
+// RaceTrack has its own tests; here it just reports what it was given.
+vi.mock("../components/RaceTrack.jsx", () => ({
   default: ({ positions }) => <div data-testid="map">{positions.length} points</div>,
 }));
 
@@ -73,7 +73,7 @@ describe("RunMapView", () => {
     expect(screen.getByText("No GPS data for this lap.")).toBeInTheDocument();
   });
 
-  it("renders the map with the returned positions", () => {
+  it("draws the track with the returned positions", () => {
     usePositionsByBounds.mockReturnValue(
       hookState({ data: [{ latitude: 1, longitude: 2 }, { latitude: 3, longitude: 4 }] })
     );

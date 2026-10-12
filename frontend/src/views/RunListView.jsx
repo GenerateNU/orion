@@ -19,9 +19,9 @@ export default function RunListView({ onSelectRun }) {
     content = <EmptyState message="No runs found." />;
   } else {
     content = (
-      <ul style={{ listStyle: "none", padding: 0, margin: 0 }}>
-        {runs.map((run) => (
-          <RunListItem key={run.run_id} run={run} onSelect={onSelectRun} />
+      <ul className="run-list">
+        {runs.map((run, i) => (
+          <RunListItem key={run.run_id} run={run} position={i + 1} onSelect={onSelectRun} />
         ))}
       </ul>
     );
@@ -29,7 +29,7 @@ export default function RunListView({ onSelectRun }) {
 
   return (
     <section>
-      <h2>Runs</h2>
+      <h2 className="section-title">Runs</h2>
       {content}
     </section>
   );
