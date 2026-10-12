@@ -67,12 +67,12 @@ def test_run_writes_each_page_before_extracting_the_next():
 
 def _client_over(rows: pd.DataFrame, cursors: list) -> BaseClient:
     """A client whose `read_page` slices `rows` in memory and records each cursor."""
-    client = BaseClient(engine=None)
+    client = BaseClient(engine=None, page_size=2)
 
-    def read_page(stmt, key, after, limit):
+    def read_page(stmt, key, after):
         cursors.append(after)
         page = rows if after is None else rows[rows["time"] > after[0]]
-        return page.head(limit)
+        return page.head(client.page_size)
 
     client.read_page = read_page
     return client
@@ -82,16 +82,16 @@ def test_iter_pages_yields_by_cursor():
     cursors: list = []
     client = _client_over(pd.DataFrame({"time": [1, 2, 3, 4, 5]}), cursors)
 
-    pages = [page["time"].tolist() for page in client.iter_pages(None, ("time",), 2)]
+    pages = [page["time"].tolist() for page in client.iter_pages(None, ("time",))]
 
     assert pages == [[1, 2], [3, 4], [5]]
     assert cursors == [None, (2,), (4,)]
 
 
 def test_iter_pages_raises_when_cursor_does_not_advance():
-    client = BaseClient(engine=None)
+    client = BaseClient(engine=None, page_size=2)
     rows = pd.DataFrame({"time": [1, 2, 3]})
-    client.read_page = lambda stmt, key, after, limit: rows.head(limit)  # ignores `after`
+    client.read_page = lambda stmt, key, after: rows.head(2)  # ignores `after`
 
     with pytest.raises(RuntimeError, match="did not advance"):
-        list(client.iter_pages(None, ("time",), 2))
+        list(client.iter_pages(None, ("time",)))

@@ -15,10 +15,14 @@ class PipelineRunner:
     """Runs every registered step for one run_id, in dependency order."""
 
     def __init__(self, settings: Settings):
-        self.oriondb = OrionDBClient(make_sync_engine(settings.orion_database_url))
+        self.oriondb = OrionDBClient(
+            make_sync_engine(settings.orion_database_url),
+            page_size=settings.pipeline_page_size,
+        )
         self.penelope = (
             PenelopeClient(
-                make_sync_engine(settings.penelope_database_url, read_only=True)
+                make_sync_engine(settings.penelope_database_url, read_only=True),
+                page_size=settings.pipeline_page_size,
             )
             if settings.penelope_database_url
             else None

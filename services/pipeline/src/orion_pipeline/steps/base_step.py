@@ -16,10 +16,10 @@ class PipelineStep(ABC):
     table to OrionDB, and the next step reads it back from there. That way
     any step can be re-run on its own.
 
-    Runs are too big to hold in memory, so `extract` yields pages of up to
-    `page_size` rows, and `run` transforms and writes each page before the
-    next one is extracted. The step owns the query and the pagination key;
-    the client owns the connection and walks the query page by page.
+    Runs are too big to hold in memory, so `extract` yields pages, and `run`
+    transforms and writes each page before the next one is extracted. The
+    step owns the query and the pagination key; the client owns the
+    connection and the page size, and walks the query page by page.
     """
 
     name: ClassVar[str]
@@ -30,8 +30,6 @@ class PipelineStep(ABC):
     # Columns the input is paged by, in sort order, handed to the client.
     # Together they must be unique.
     pagination_key: ClassVar[tuple[str, ...]]
-    # TODO: Read from config not hardcode!!!
-    page_size: ClassVar[int] = 100_000
 
     def __init__(self, reader: BaseClient, writer: OrionDBClient):
         self.reader = reader
@@ -40,7 +38,7 @@ class PipelineStep(ABC):
     @abstractmethod
     def extract(self, ctx: RunContext) -> Iterator[pd.DataFrame]:
         """Return the input as pages, usually the reader's page iterator built
-        with `self.pagination_key` and `self.page_size`. Steps that page some
+        with `self.pagination_key`. Steps that page some
         other way (time windows, multiple sources) can write their own generator."""
 
     @abstractmethod

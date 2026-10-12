@@ -20,9 +20,7 @@ class ExampleIngestStep(PipelineStep):
     pagination_key = ("time", "raw_tag")
 
     def extract(self, ctx: RunContext) -> Iterator[pd.DataFrame]:
-        # Real: return self.reader.iter_readings(
-        #     ctx.run_id, self.pagination_key, self.page_size
-        # )
+        # Real: return self.reader.iter_readings(ctx.run_id, self.pagination_key)
         page = pd.DataFrame(
             {"time": [0.0], "raw_tag": ["VCU/CarState/speed"], "values": [[12.5]]}
         )

@@ -21,9 +21,7 @@ class ExampleEstimateStep(PipelineStep):
     pagination_key = ("signal",)
 
     def extract(self, ctx: RunContext) -> Iterator[pd.DataFrame]:
-        # Real: return self.reader.iter_cleaned(
-        #     ctx.run_id, self.pagination_key, self.page_size
-        # )
+        # Real: return self.reader.iter_cleaned(ctx.run_id, self.pagination_key)
         page = pd.DataFrame(
             {"run_id": [ctx.run_id], "signal": ["speed"], "value": [12.5]}
         )
