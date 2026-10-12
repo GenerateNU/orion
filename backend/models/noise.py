@@ -14,6 +14,10 @@ from sensor datasheets / calibration runs (e.g. the spread of readings while the
 
 # Measurement noise per sensor -- feeds the UKF's R matrix in update().
 # A property of each sensor, so it lives here instead of on every reading.
+
+# currently all values are placeholders, units are also subject to change
+# I didn't find any in the penelope db
+
 SENSOR_STDDEV: dict[str, float] = {
     "gps_location": 2.5,     # meters -- typical GPS accuracy is 1-5 m (placeholder)
     "vcu_speed": 0.2,        # m/s, about 0.45 mph (placeholder)
