@@ -31,6 +31,26 @@ def _residual(a: torch.Tensor, b: torch.Tensor) -> torch.Tensor:
     diff[..., THETA] = _wrap_angle(diff[..., THETA])
     return diff
 
+def _predict_state(state: torch.Tensor, dt: float, fx=ctra) -> torch.Tensor:
+    """Predict the six-variable state using the motion model."""
+
+    if fx is ctra:
+        # The new CTRA expects timestamped rows.
+        start_time = state.new_tensor(0.0)
+        end_time = state.new_tensor(dt)
+
+        start_row = torch.cat((start_time.unsqueeze(0), state))
+        end_row = torch.cat((end_time.unsqueeze(0), state))
+
+        ctra_input = torch.stack([start_row, end_row])
+        predicted_state = fx(ctra_input)
+
+        # Remove the timestamp.
+        return predicted_state[1:]
+
+    # Existing test mocks use the original fx(state, dt) signature.
+    return fx(state, dt)
+
 
 def ukf_sigma_points(x: torch.Tensor, P: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
     """Sigma points and weights from the UKF, so URTS spreads points exactly the way the UKF did.
@@ -55,8 +75,9 @@ def urts_smooth(xs: torch.Tensor, Ps: torch.Tensor, dt: float, Q: torch.Tensor =
     Q : (6, 6) process noise. Defaults to PROCESS_NOISE from ukf.py (built from models/noise.py),
         the same Q the UKF uses.
         - noise factor that was also used for ukf
-    fx : motion model, fx(state, dt) -> next state. Defaults to CTRA.
-    sigma_points : sigma_points(x, P) -> (points, Wm, Wc). Defaults to the UKF's.
+    fx : motion model accepting timestamped rows and returning
+     a 7-value state. Defaults to CTRA.    
+     sigma_points : sigma_points(x, P) -> (points, Wm, Wc). Defaults to the UKF's.
         Tests pass simpler stand-ins for both so they check URTS on its own.
         - picks 13 points 
         - Wm: how much each point coun
@@ -80,7 +101,9 @@ def urts_smooth(xs: torch.Tensor, Ps: torch.Tensor, dt: float, Q: torch.Tensor =
         points, Wm, Wc = sigma_points(xs[k], Ps[k])
 
         # Push every sigma point through the motion model to tick k+1
-        predicted_points = torch.stack([fx(point, dt) for point in points])
+        predicted_points = torch.stack(
+             [_predict_state(point, dt, fx) for point in points]
+        )
 
         # What tick k expected tick k+1 to look like.
         # Heading can't be averaged directly (179 deg and -179 deg would average to 0), so average
