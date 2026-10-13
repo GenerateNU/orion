@@ -149,19 +149,17 @@ class StateEstimationService:
             a_forward = None
 
             if len(acceleration_readings) >= 3:
-                ax, ay, az = acceleration_readings.iloc[-3:].tolist()   # latest [x, y, z]
+                ax, _, az = acceleration_readings.iloc[-3:].tolist()   # latest [x, y, z]; y isn't used
                 a_forward = self._calculate_forward_acceleration(ax, az)
 
             if previous_tick_time is not None:
                 dt = (tick_time - previous_tick_time).total_seconds()
-
-                # TODO: Pass a_forward into the UKF prediction here.
                 ukf.predict(dt)
 
             # The temporary UKF.update() takes a full 6-value state as its measurement, so start from
             # the prediction and overwrite the parts this tick's sensors measured.
             # TODO: replace with a sensor-based measurement (z, H, R) once UKF.update() supports it;
-            # gyro/accel are skipped until we know which axis is yaw/forward.
+            # gyro is skipped until we know which axis is yaw.
             measurement = ukf.state.clone()
             speed = tick_readings.loc[tick_readings["name"] == "vcu_speed", "value"]
             gps = tick_readings.loc[tick_readings["name"] == "gps_location", "value"]
@@ -175,9 +173,11 @@ class StateEstimationService:
                     torch.tensor(gps.iloc[-1], dtype=torch.float64),
                 )
                 measurement[0], measurement[1] = x, y
+            if a_forward is not None:
+                measurement[5] = a_forward
 
             # Skip ticks with nothing measured, so the filter doesn't grow falsely confident
-            if not speed.empty or len(gps) >= 2:
+            if not speed.empty or len(gps) >= 2 or a_forward is not None:
                 ukf.update(measurement)
 
             tick_times.append(tick_time)
