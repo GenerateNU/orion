@@ -30,7 +30,7 @@ class UKF:
         self.state_dimension = 6
 
         # UKF tuning parameters (hard coded but will have todo to calculate these)
-        self.alpha = 0.001
+        self.alpha = 1.0
         self.beta = 2.0
         self.kappa = 0.0
 

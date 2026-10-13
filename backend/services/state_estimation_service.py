@@ -32,8 +32,8 @@ class StateEstimationService:
     STATE_TABLE_COLUMNS: ClassVar[list[str]] = ["runId", "time", "latitude", "longitude"]
 
     # TODO: build from first readings once cleaned data format is settled
-    PLACEHOLDER_INITIAL_STATE: ClassVar[torch.Tensor] = torch.zeros(7, dtype=torch.float64)  # [x, y, v, theta, omega, a]
-    PLACEHOLDER_INITIAL_COVARIANCE: ClassVar[torch.Tensor] = torch.eye(7, dtype=torch.float64)  # 6x6 identity matrix
+    PLACEHOLDER_INITIAL_STATE: ClassVar[torch.Tensor] = torch.zeros(6, dtype=torch.float64)  # [x, y, v, theta, omega, a]
+    PLACEHOLDER_INITIAL_COVARIANCE: ClassVar[torch.Tensor] = torch.eye(6, dtype=torch.float64)  # 6x6 identity matrix
     PLACEHOLDER_ORIGIN: ClassVar[tuple[float, float]] = (0.0, 0.0)
     METERS_PER_DEGREE_LAT: ClassVar[float] = 111_320.0
 
@@ -148,12 +148,8 @@ class StateEstimationService:
 
             a_forward = None
 
-            if not acceleration_readings.empty:
-                acceleration = acceleration_readings.iloc[-1]
-                # Array order: [x, y, z]
-                ax = float(acceleration[0])
-                ay = float(acceleration[1])
-                az = float(acceleration[2])
+            if len(acceleration_readings) >= 3:
+                ax, ay, az = acceleration_readings.iloc[-3:].tolist()   # latest [x, y, z]
                 a_forward = self._calculate_forward_acceleration(ax, az)
 
             if previous_tick_time is not None:
