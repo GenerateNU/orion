@@ -71,7 +71,7 @@ class StateEstimationService:
         ).explode("value")
         readings["timestamp"] = pd.to_datetime(readings["timestamp"], utc=True)
         readings["value"] = readings["value"].astype("float64")
-
+        
         # Each run is estimated on its own -- two sessions aren't one continuous drive
         results = []
         for run_id, run_readings in readings.groupby("runId"):
@@ -123,6 +123,8 @@ class StateEstimationService:
         Takes CLEANED_READING_SCHEMA rows; noise for R and Q comes from models/noise.py.
         Starts from previous_point if given (continuing the previous page), otherwise from the placeholders.
         Returns the forward StateEstimate (is_smoothed=False) and the last point, for the next page."""
+        
+        
         if previous_point is None:
             ukf = UKF(self.PLACEHOLDER_INITIAL_STATE.clone(), self.PLACEHOLDER_INITIAL_COVARIANCE.clone())
             previous_tick_time = None
@@ -140,9 +142,27 @@ class StateEstimationService:
                 dt = (tick_time - previous_tick_time).total_seconds()
                 ukf.predict(dt)
 
-            # update the UKF with the readings for this tick
-            # TODO: implement UKF update
-            # ukf.update(tick_readings)
+            # The temporary UKF.update() takes a full 6-value state as its measurement, so start from
+            # the prediction and overwrite the parts this tick's sensors measured.
+            # TODO: replace with a sensor-based measurement (z, H, R) once UKF.update() supports it;
+            # gyro/accel are skipped until we know which axis is yaw/forward.
+            measurement = ukf.state.clone()
+            speed = tick_readings.loc[tick_readings["name"] == "vcu_speed", "value"]
+            gps = tick_readings.loc[tick_readings["name"] == "gps_location", "value"]
+
+            if not speed.empty:
+                measurement[2] = speed.iloc[-1]
+            if len(gps) >= 2:
+                # assumes values are [lat, lon]; take the latest fix in this tick
+                x, y = self._lat_lon_to_meters(
+                    torch.tensor(gps.iloc[-2], dtype=torch.float64),
+                    torch.tensor(gps.iloc[-1], dtype=torch.float64),
+                )
+                measurement[0], measurement[1] = x, y
+
+            # Skip ticks with nothing measured, so the filter doesn't grow falsely confident
+            if not speed.empty or len(gps) >= 2:
+                ukf.update(measurement)
 
             tick_times.append(tick_time)
             states.append(ukf.state.clone())
