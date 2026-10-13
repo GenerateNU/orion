@@ -8,7 +8,7 @@ from orion_core.models.orion.base import Base
 class CleanedData(Base):
     """Cleaned data for one Penelope run (`runId`): the pipeline's unit of work."""
 
-    __tablename__ = "cleaned data"
+    __tablename__ = "cleaned_data"
 
     run_id: Mapped[UUID] = mapped_column(UUID, primary_key=True)
     time: Mapped[datetime] = mapped_column(DateTime, primary_key=True)
