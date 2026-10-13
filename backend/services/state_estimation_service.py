@@ -4,9 +4,11 @@ from typing import ClassVar
 import pandas as pd
 import torch
 from pandas import Timestamp
+from sqlalchemy import select
 
 from models.vehicle import StateEstimate
 from orion.repository import DataPointRepository
+from orion.schema import data_table
 from services.ukf import UKF
 from services.urts import urts_smooth
 
@@ -26,6 +28,9 @@ class StateEstimationService:
         "longitude",
     ]
 
+    # estimate_state output, matching the estimated_car_state table (lapId is assigned later)
+    STATE_TABLE_COLUMNS: ClassVar[list[str]] = ["runId", "time", "latitude", "longitude"]
+
     # TODO: build from first readings once cleaned data format is settled
     PLACEHOLDER_INITIAL_STATE: ClassVar[torch.Tensor] = torch.zeros(6, dtype=torch.float64)  # [x, y, v, theta, omega, a]
     PLACEHOLDER_INITIAL_COVARIANCE: ClassVar[torch.Tensor] = torch.eye(6, dtype=torch.float64)  # 6x6 identity matrix
@@ -39,49 +44,95 @@ class StateEstimationService:
     def __init__(self, orion_db_client: DataPointRepository):
         self.orion_db_client = orion_db_client
 
-    def estimate_state(self, start_time: Timestamp, end_time: Timestamp) -> pd.DataFrame:
-        """ use private method helper functions"""
-        
-        
-    def _estimate_position(self, cleaned_df: pd.DataFrame) -> pd.DataFrame:
+    def estimate_state(
+        self, start_time: Timestamp, end_time: Timestamp, previous_points: dict[str, dict] | None = None
+    ) -> tuple[pd.DataFrame, dict[str, dict]]:
+        """
+        Estimate positions for every run in [start_time, end_time) and save them to estimated_car_state.
+
+        For paginating: previous_points is the last_points returned by the previous page, keyed by run ID.
+        Runs found there continue from where they left off; new runs start fresh.
+        Returns (estimated rows, last_points) -- pass last_points into the next page.
+        """
+        # End is exclusive so back-to-back pages never read (and write) the same reading twice
+        last_points = dict(previous_points or {})
+        query = (
+            select(data_table)
+            .where(data_table.c.time >= start_time, data_table.c.time < end_time)
+            .order_by(data_table.c.time)
+        )
+        readings = pd.read_sql(query, self.orion_db_client.engine)
+        if readings.empty:
+            return pd.DataFrame(columns=self.STATE_TABLE_COLUMNS), last_points
+
+        # One value per row: a GPS row with values [lat, lon] becomes two rows
+        readings = readings.rename(
+            columns={"time": "timestamp", "dataTypeName": "name", "values": "value"}
+        ).explode("value")
+        readings["timestamp"] = pd.to_datetime(readings["timestamp"], utc=True)
+        readings["value"] = readings["value"].astype("float64")
+
+        # Each run is estimated on its own -- two sessions aren't one continuous drive
+        results = []
+        for run_id, run_readings in readings.groupby("runId"):
+            positions, last_point = self._estimate_position(run_readings, last_points.get(run_id))
+            results.append(positions.assign(runId=run_id))
+            last_points[run_id] = {"run_id": run_id, **last_point}
+
+        estimated = pd.concat(results, ignore_index=True).rename(columns={"timestamp": "time"})
+        estimated = estimated[self.STATE_TABLE_COLUMNS]
+
+        estimated.to_sql("estimated_car_state", self.orion_db_client.engine, if_exists="append", index=False)
+        return estimated, last_points
+
+    def _estimate_position(
+        self, cleaned_df: pd.DataFrame, previous_point: dict | None = None
+    ) -> tuple[pd.DataFrame, dict]:
         """
         Estimate vehicle position from cleaned sensor data.
 
         Parameters
         ----------
         cleaned_df : pd.DataFrame
-            Cleaned, wide-format sensor data from the clean service.
+            Cleaned, long-format sensor data (CLEANED_READING_SCHEMA) for one run.
+        previous_point : dict, optional
+            This run's last point from the previous page; None starts fresh.
 
         Returns
         -------
-        pd.DataFrame
-            Estimated vehicle positions with timestamp, latitude,
-            and longitude.
+        (pd.DataFrame, dict)
+            Estimated positions (timestamp, latitude, longitude), and this page's last point.
         """
 
         # Validatation so nothing breaks because of bad data
         self._validate_input(cleaned_df)
 
-        # Implement the state estimation pipeline.
         # 1. Run the UKF forward pass
-        forward_estimate = self._predict_forward(cleaned_df)
+        forward_estimate, last_point = self._predict_forward(cleaned_df, previous_point)
 
-        # 2. Run the URTS backward pass
+        # 2. Run the URTS backward pass (it never changes the last tick, so last_point holds for both)
         smoothed_estimate = self._smooth(forward_estimate)
 
         # 3. Return the smoothed estimate as a DataFrame
-        return smoothed_estimate.states[self.OUTPUT_COLUMNS]
+        return smoothed_estimate.states[self.OUTPUT_COLUMNS], last_point
 
-    def _predict_forward(self, cleaned_readings: pd.DataFrame) -> StateEstimate:
+    def _predict_forward(
+        self, cleaned_readings: pd.DataFrame, previous_point: dict | None = None
+    ) -> tuple[StateEstimate, dict]:
         """Run the UKF forward, one tick at a time (past-and-current-only).
         Takes CLEANED_READING_SCHEMA rows; noise for R and Q comes from models/noise.py.
-        Output has is_smoothed=False."""
-        ukf = UKF(self.PLACEHOLDER_INITIAL_STATE.clone(), self.PLACEHOLDER_INITIAL_COVARIANCE.clone())
+        Starts from previous_point if given (continuing the previous page), otherwise from the placeholders.
+        Returns the forward StateEstimate (is_smoothed=False) and the last point, for the next page."""
+        if previous_point is None:
+            ukf = UKF(self.PLACEHOLDER_INITIAL_STATE.clone(), self.PLACEHOLDER_INITIAL_COVARIANCE.clone())
+            previous_tick_time = None
+        else:
+            # Setting previous_tick_time makes the first tick predict forward from where the last page ended
+            ukf = UKF(previous_point["state"].clone(), previous_point["covariance"].clone())
+            previous_tick_time = previous_point["time"]
 
-        # get tick times
         tick_times, states, covariances = [], [], []
-        previous_tick_time = None
-        
+
         ticks = cleaned_readings.groupby(cleaned_readings["timestamp"].dt.floor(self.tick))
 
         for tick_time, tick_readings in ticks:
@@ -100,8 +151,21 @@ class StateEstimationService:
 
         xs = torch.stack(states)
         Px = torch.stack(covariances)
-        return self._to_state_estimate(tick_times, xs, Px, is_smoothed=False)
-        
+        forward = self._to_state_estimate(tick_times, xs, Px, is_smoothed=False)
+
+        # Filter needs time/state/covariance/origin to continue; the rest is readable copies for logging/debugging
+        last_row = forward.states.iloc[-1]
+        last_point = {
+            "time": tick_times[-1],
+            "state": xs[-1],
+            "covariance": Px[-1],
+            "origin": self.PLACEHOLDER_ORIGIN,
+            "latitude": float(last_row["latitude"]),
+            "longitude": float(last_row["longitude"]),
+            "speed_mps": float(last_row["speed_mps"]),
+            "heading_deg": float(last_row["heading_deg"]),
+        }
+        return forward, last_point
 
     def _smooth(self, forward: StateEstimate) -> StateEstimate:
         """Run the URTS backward pass over a completed forward run.
