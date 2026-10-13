@@ -32,8 +32,8 @@ class StateEstimationService:
     STATE_TABLE_COLUMNS: ClassVar[list[str]] = ["runId", "time", "latitude", "longitude"]
 
     # TODO: build from first readings once cleaned data format is settled
-    PLACEHOLDER_INITIAL_STATE: ClassVar[torch.Tensor] = torch.zeros(6, dtype=torch.float64)  # [x, y, v, theta, omega, a]
-    PLACEHOLDER_INITIAL_COVARIANCE: ClassVar[torch.Tensor] = torch.eye(6, dtype=torch.float64)  # 6x6 identity matrix
+    PLACEHOLDER_INITIAL_STATE: ClassVar[torch.Tensor] = torch.zeros(7, dtype=torch.float64)  # [x, y, v, theta, omega, a]
+    PLACEHOLDER_INITIAL_COVARIANCE: ClassVar[torch.Tensor] = torch.eye(7, dtype=torch.float64)  # 6x6 identity matrix
     PLACEHOLDER_ORIGIN: ClassVar[tuple[float, float]] = (0.0, 0.0)
     METERS_PER_DEGREE_LAT: ClassVar[float] = 111_320.0
 
@@ -116,6 +116,10 @@ class StateEstimationService:
         # 3. Return the smoothed estimate as a DataFrame
         return smoothed_estimate.states[self.OUTPUT_COLUMNS], last_point
 
+    # forward acceleration
+    def _calculate_forward_acceleration(self, ax, az):
+        return -(0.510 * ax + 0.860 * az) / 1000
+    
     def _predict_forward(
         self, cleaned_readings: pd.DataFrame, previous_point: dict | None = None
     ) -> tuple[StateEstimate, dict]:
@@ -136,10 +140,26 @@ class StateEstimationService:
         tick_times, states, covariances = [], [], []
 
         ticks = cleaned_readings.groupby(cleaned_readings["timestamp"].dt.floor(self.tick))
-
         for tick_time, tick_readings in ticks:
+            acceleration_readings = tick_readings.loc[
+                tick_readings["name"] == "VCU_Ethernet/A/Acceleration",
+                "value",
+            ]
+
+            a_forward = None
+
+            if not acceleration_readings.empty:
+                acceleration = acceleration_readings.iloc[-1]
+                # Array order: [x, y, z]
+                ax = float(acceleration[0])
+                ay = float(acceleration[1])
+                az = float(acceleration[2])
+                a_forward = self._calculate_forward_acceleration(ax, az)
+
             if previous_tick_time is not None:
                 dt = (tick_time - previous_tick_time).total_seconds()
+
+                # TODO: Pass a_forward into the UKF prediction here.
                 ukf.predict(dt)
 
             # The temporary UKF.update() takes a full 6-value state as its measurement, so start from
