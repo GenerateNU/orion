@@ -22,11 +22,14 @@ def executeQuery(conn: Connection, stmt):
 
 
 class RunRepository:
-
+    
+    def __init__(self, conn: Connection):
+        self.conn = conn
+        
     # Get all runs, most recently active first (wired to OrionDB)
     # A run is any runId in estimated_car_state. Each one is an object rather
     # than a bare ID so fields can be added later without breaking the frontend.
-    def get_runs(self, conn: Connection):
+    def get_runs(self):
         t = estimated_car_state_table
 
         stmt = (
@@ -35,21 +38,21 @@ class RunRepository:
             .order_by(func.max(t.c.time).desc())
         )
 
-        return [{"run_id": row.runId} for row in executeQuery(conn, stmt)]
+        return [{"run_id": row.runId} for row in executeQuery(self.conn, stmt)]
 
 
     # Check a run exists, so the API can 404 instead of returning [] for a typo
-    def run_exists(self, conn: Connection, run_id):
+    def run_exists(self,run_id):
         stmt = select(exists().where(estimated_car_state_table.c.runId == run_id))
-        return bool(executeQuery(conn, stmt).scalar())
+        return bool(executeQuery(self.conn, stmt).scalar())
 
     # Check a run has any data for this lap
     # (conditions go in as separate .where() arguments -- Python's `and` doesn't
     # work on SQL expressions)
-    def lap_exists(self, conn: Connection, run_id, lap_number):
+    def lap_exists(self, run_id, lap_number):
         t = estimated_car_state_table
         stmt = select(exists().where(t.c.runId == run_id, t.c.lapId == lap_number))
-        return bool(executeQuery(conn, stmt).scalar())
+        return bool(executeQuery(self.conn, stmt).scalar())
 
     # ---- STUBS: everything below except the two position queries returns sample data. ----
     # Not wired to OrionDB yet; kept so the endpoints keep responding until their
@@ -84,7 +87,6 @@ class RunRepository:
     # Get position data for a run, in time order (wired to OrionDB)
     def get_run_positions(
         self,
-        conn: Connection,
         run_id,
     ):
         t = estimated_car_state_table
@@ -94,12 +96,11 @@ class RunRepository:
             .order_by(t.c.time)
         )
 
-        return [dict(row._mapping) for row in executeQuery(conn, stmt)]
+        return [dict(row._mapping) for row in executeQuery(self.conn, stmt)]
 
     # Get position data for one lap of a run, in time order (wired to OrionDB)
     def get_lap_positions(
         self,
-        conn: Connection,
         run_id,
         lap_number
     ):
@@ -110,7 +111,7 @@ class RunRepository:
             .order_by(t.c.time)
         )
 
-        return [dict(row._mapping) for row in executeQuery(conn, stmt)]
+        return [dict(row._mapping) for row in executeQuery(self.conn, stmt)]
 
     # STUB: Get a specific run as well (not yet reading the runs table)
     def get_specific_run(self, run_id):
