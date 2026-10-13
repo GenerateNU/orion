@@ -5,10 +5,9 @@ from fastapi import APIRouter, Depends, HTTPException, Path
 from sqlalchemy.engine import Connection
 
 from orion.connection import get_connection
-from backend.services.LapNotFoundError import LapNotFoundError
-from backend.services.RunNotFoundError import RunNotFoundError
-
+from services.LapNotFoundError import LapNotFoundError
 from services.run_service import RunService
+from services.RunNotFoundError import RunNotFoundError
 
 #this file creates all the API endpoints
 
