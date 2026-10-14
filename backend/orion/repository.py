@@ -3,7 +3,7 @@ import numpy as np
 from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.engine import Engine
 
-from .schema import cleaned_data_table, data_table
+from .schema import cleaned_data_table, data_table, sensors_table, sensor_sources_table
 
 
 class DataPointRepository:
@@ -57,7 +57,7 @@ class DataPointRepository:
         with self.engine.begin() as conn:
             return len(conn.execute(stmt, dicts).all())
 
-    def write_cleaned(self, rows, conn=None) -> int:
+    def write_cleaned(self, rows: np.ndarray, conn=None) -> int:
             """Insert (runId, time, sensor, value) rows into cleaned_data.
 
             Pass conn to write inside the caller's transaction, so the caller
@@ -86,3 +86,63 @@ class DataPointRepository:
                 return len(conn.execute(stmt, dicts).all())
             with self.engine.begin() as ownconn:
                 return len(ownconn.execute(stmt, dicts).all())
+    
+    def write_sensors(self, rows: np.ndarray, conn=None):
+        """Writes (name, unit) rows to sensors table
+            
+        Pass conn to write inside the caller's transaction, so the caller
+        decides when everything commits or rolls back. Without it, this opens
+        and commits its own transaction.
+        
+        Returns:
+            The number of rows actually inserted (rows already present,
+            per the primary key, are silently skipped).
+        """
+
+        if len(rows) == 0:
+            return 0
+        
+        dicts = [
+            {"name": row[0], "unit": row[1]}
+            for row in rows
+        ]
+        
+        # Same ON CONFLICT + RETURNING approach as write_many, for the same reasons.
+        stmt = (
+            insert(sensors_table)
+            .on_conflict_do_nothing()
+            .returning(sensors_table.c.name)
+        )
+        if conn is not None:
+            return len(conn.execute(stmt, dicts).all())
+        with self.engine.begin() as ownconn:
+            return len(ownconn.execute(stmt, dicts).all())
+
+    def write_sensor_sources(self, rows: np.ndarray, conn=None):
+        """Writes (name, tag) rows to sensor_sources table
+            
+        Pass conn to write inside the caller's transaction, so the caller
+        decides when everything commits or rolls back. Without it, this opens
+        and commits its own transaction.
+        
+        Returns:
+            The number of rows actually inserted (rows already present,
+            per the primary key, are silently skipped).
+        """
+
+        if len(rows) == 0:
+            return 0
+        
+        dicts = [
+            {"sourceDataTypeName": row[0], "sensor": row[1]}
+            for row in rows
+        ]
+        stmt = (
+            insert(sensor_sources_table)
+            .on_conflict_do_nothing()
+            .returning(sensor_sources_table.c.sourceDataTypeName)
+        )
+        if conn is not None:
+            return len(conn.execute(stmt, dicts).all())
+        with self.engine.begin() as ownconn:
+            return len(ownconn.execute(stmt, dicts).all())  
