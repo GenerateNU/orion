@@ -20,3 +20,13 @@ def map_sensor_names(
             "values": df["values"],
         }
     )
+
+
+def shift_sensor_time(df: pd.DataFrame, sensor: str, offset_s: float) -> pd.DataFrame:
+    """Add `offset_s` seconds to `time` for rows of `sensor` (e.g. GPS lag correction)."""
+    if not offset_s:
+        return df
+    df = df.copy()
+    mask = df["sensor"] == sensor
+    df.loc[mask, "time"] = df.loc[mask, "time"] + pd.Timedelta(seconds=offset_s)
+    return df

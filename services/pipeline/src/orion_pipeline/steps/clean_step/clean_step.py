@@ -4,8 +4,13 @@ import pandas as pd
 
 from orion_pipeline.runner.run_context import RunContext
 from orion_pipeline.steps.base_step import PipelineStep
-from orion_pipeline.steps.clean_step.clean_utils import map_sensor_names
+from orion_pipeline.steps.clean_step.clean_utils import (
+    map_sensor_names,
+    shift_sensor_time,
+)
 from orion_pipeline.steps.step_registry import register_step
+
+GPS_LOCATION_SENSOR = "gps_location"
 
 
 @register_step
@@ -40,4 +45,6 @@ class CleanStep(PipelineStep):
         )
 
     def transform(self, df: pd.DataFrame, ctx: RunContext) -> pd.DataFrame:
-        return map_sensor_names(df, self.sensor_map, ctx.run_id)
+        cleaned = map_sensor_names(df, self.sensor_map, ctx.run_id)
+        # Lag the GPS sensor by offset_time
+        return shift_sensor_time(cleaned, GPS_LOCATION_SENSOR, ctx.gps_time_offset_s)

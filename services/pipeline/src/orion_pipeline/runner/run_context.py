@@ -10,3 +10,5 @@ class RunContext(BaseModel):
     """
 
     run_id: str
+    # Seconds added to gps_location timestamps in the clean step.
+    gps_time_offset_s: float = 0.0

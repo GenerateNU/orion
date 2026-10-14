@@ -6,9 +6,11 @@ from pathlib import Path
 from pydantic import ValidationError
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
+ENV_FILE = ".env"
+
 
 class Settings(BaseSettings):
-    model_config = SettingsConfigDict(env_file=".env", extra="ignore")
+    model_config = SettingsConfigDict(env_file=ENV_FILE, extra="ignore")
 
     # OrionDB: ours, read/write. Engines add the driver (+asyncpg / +psycopg).
     orion_database_url: str
@@ -18,6 +20,8 @@ class Settings(BaseSettings):
     pipeline_api_url: str = "http://localhost:8200"
     # How many rows each extract section can pull at once.
     pipeline_page_size: int = 100_000
+    # Seconds added to gps_location timestamps in the clean step (GPS lags the other sensors).
+    gps_time_offset_s: float = 3.0
 
 
 class SettingsError(RuntimeError):
