@@ -1,5 +1,2 @@
 # Importing a step module registers it. Add new steps here.
-from orion_pipeline.steps import (  # noqa: F401
-    example_estimate_step,
-    example_ingest_step,
-)
+from orion_pipeline.steps.clean_step import clean_step  # noqa: F401
