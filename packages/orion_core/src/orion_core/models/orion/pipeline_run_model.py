@@ -1,7 +1,7 @@
 from datetime import datetime
 from enum import StrEnum
 
-from sqlalchemy import DateTime, ForeignKey, Integer, String, func, UUID
+from sqlalchemy import DateTime, ForeignKey, Integer, String, func
 from sqlalchemy.orm import Mapped, mapped_column
 
 from orion_core.models.orion.base import Base
@@ -21,7 +21,7 @@ class PipelineRun(Base):
     __tablename__ = "pipeline_runs"
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
-    run_id: Mapped[UUID] = mapped_column(ForeignKey("runs.run_id"))
+    run_id: Mapped[str] = mapped_column(ForeignKey("runs.run_id"))
     status: Mapped[str] = mapped_column(String, default=PipelineStatus.QUEUED)
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now()

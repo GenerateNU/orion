@@ -11,4 +11,4 @@ class Sensors(Base):
     __tablename__ = "sensors"
 
     sensor: Mapped[str] = mapped_column(String, primary_key=True)
-    unit: Mapped[str] = mapped_column(String)
+    unit: Mapped[str | None] = mapped_column(String, nullable=True)

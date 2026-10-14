@@ -10,5 +10,5 @@ class SensorSources(Base):
 
     __tablename__ = "sensor_sources"
 
-    sourceDataTypeName: Mapped[str] = mapped_column(String, primary_key=True)
+    source_data_type_name: Mapped[str] = mapped_column(String, primary_key=True)
     sensor: Mapped[str] = mapped_column(String, ForeignKey("sensors.sensor"))
