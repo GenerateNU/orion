@@ -3,7 +3,7 @@ import numpy as np
 from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.engine import Engine
 
-from .schema import cleaned_data_table, data_table, sensors_table, sensor_sources_table
+from .schema import cleaned_data_table, data_table, sensor_sources_table, sensors_table
 
 
 class DataPointRepository:

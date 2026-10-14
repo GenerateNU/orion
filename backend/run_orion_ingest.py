@@ -4,14 +4,14 @@
 import logging
 import os
 from datetime import UTC, datetime
- 
+
 from dotenv import load_dotenv
 from sqlalchemy import create_engine
- 
+
 from orion.repository import DataPointRepository
-from services.clean_service import CleanService
 from penelope.client import PenelopeClient
- 
+from services.clean_service import CleanService
+
 RUN_ID = "5eee6c81-e84d-4f08-b8c4-bc1a481a5ad6"
 START = datetime(2026, 8, 15, 18, 17, tzinfo=UTC)
 END = datetime(2026, 8, 15, 18, 19, tzinfo=UTC)
