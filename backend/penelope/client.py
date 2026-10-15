@@ -1,9 +1,10 @@
 import os
+from collections.abc import Iterator
 from datetime import datetime
 
 import numpy as np
 from pydantic import ValidationError
-from sqlalchemy import MetaData, create_engine, select
+from sqlalchemy import MetaData, create_engine, func, select
 from sqlalchemy.exc import OperationalError, SQLAlchemyError
 
 from .exceptions import (
@@ -17,7 +18,7 @@ from .models import DataPoint
 
 class PenelopeClient:
     """Read-only client for querying PenelopeDB (Postgres)."""
-
+    
     def __init__(self, engine):
         """Reflect Penelope's tables off an existing SQLAlchemy engine.
 
@@ -172,11 +173,41 @@ class PenelopeClient:
         )
         return self._fetch(stmt)
 
-    def get_all_paginated(self, batch_size: int = 5000):
+    def _build_data_query(
+        self,
+        raw_tags: list[str] | None = None,
+        run_id: str | None = None,
+        start: datetime | None = None,
+        end: datetime | None = None,
+    ):
+        """Build a SELECT on `data` from plain filters, ordered by time.
+            Any filter left as None is not applied."""
+        t = self.data_table
+        stmt = select(t)
+        if raw_tags is not None: 
+            stmt = stmt.where(t.c.dataTypeName.in_(raw_tags))
+        if run_id is not None:
+            stmt = stmt.where(t.c.runId == run_id)
+        if start is not None:
+            stmt = stmt.where(t.c.time >= start)
+        if end is not None:
+            stmt = stmt.where(t.c.time <= end)
+        return stmt.order_by(t.c.time)
+
+
+
+    def get_all_paginated(self, batch_size: int = 5000, raw_tags: list[str] | None = None,
+                           run_id: str | None = None, start: datetime | None = None, end: datetime | None = None,
+    ) -> Iterator[np.ndarray]:
+        
+        """ Stream `data` rows in batches, ordered by time.
+        With no filters, streams every row; otherwise only rows matching the
+        given sensor tags, run, and time window  """
+
         if batch_size <= 0:
             raise ValueError("batch_size must be positive")
-
-        stmt = select(self.data_table).order_by(self.data_table.c.time)
+    
+        stmt = self._build_data_query(raw_tags, run_id, start, end)
 
         try:
             with self.engine.connect().execution_options(yield_per=batch_size) as conn:
@@ -193,3 +224,21 @@ class PenelopeClient:
             raise PenelopeSchemaError(
                 "Streamed query against PenelopeDB failed."
             ) from exc
+
+        
+    def get_by_run_id_and_time(
+        self, run_id: str, start: datetime, end: datetime, raw_tags: list[str], batch_size: int = 5000) -> Iterator[np.ndarray]:
+        """Stream `data` rows for one run between start and end 
+        limited to the given raw tags, in batches of batch_size rows."""
+       
+        yield from self.get_all_paginated(batch_size, raw_tags=raw_tags, run_id = run_id, start=start, end=end)
+
+    def get_max_first_value(self, run_id, start, end, data_type_name):
+        """Max of values[1] for one tag in one run's window, or None."""
+        t = self.data_table
+        stmt = select(func.max(t.c["values"][1])).where(
+            t.c.runId == run_id, t.c.time.between(start, end),
+            t.c.dataTypeName == data_type_name,
+        )
+        with self.engine.connect() as conn:
+            return conn.execute(stmt).scalar()
