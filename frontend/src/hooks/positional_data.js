@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import { apiClient } from "../api/client";
 
 export function usePositionsByBounds(
-  raceId,
+  runId,
   lapNumber,
   minLat,
   maxLat,
@@ -40,7 +40,7 @@ export function usePositionsByBounds(
         const queryString = params.toString();
 
         const endpoint =
-          `/api/races/${raceId}/laps/${lapNumber}/positions` +
+          `/api/runs/${runId}/laps/${lapNumber}/positions` +
           (queryString ? `?${queryString}` : "");
 
         const result = await apiClient(endpoint);
@@ -54,7 +54,7 @@ export function usePositionsByBounds(
     }
 
     fetchPositions();
-  }, [raceId, lapNumber, minLat, maxLat, minLon, maxLon]);
+  }, [runId, lapNumber, minLat, maxLat, minLon, maxLon]);
 
   return {
     data,

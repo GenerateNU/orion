@@ -5,7 +5,7 @@ import { describeError } from "../utils/describeError";
 // Shown when a hook returns an error, instead of crashing or rendering a blank screen.
 export default function ErrorState({ title = "Something went wrong", error }) {
   return (
-    <div role="alert" style={{ color: "#b00020" }}>
+    <div role="alert" className="state state--error">
       <strong>{title}</strong>
       <p>{describeError(error)}</p>
     </div>
