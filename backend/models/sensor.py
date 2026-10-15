@@ -31,10 +31,7 @@ CLEANED_READING_SCHEMA = {
 }
 CLEANED_READING_REQUIRED = {"session_id", "sensor_id", "name", "timestamp", "value"}
 
-# measurement noise estimate per generic sensor name; feeds the UKF's R matrix..one of the factors that tells UKF whether to trust the sensor or prediction more
-# Lives here instead of on every reading since it's a property of the sensor, not of each data point.
-# TODO: fill in from sensor datasheets / calibration runs
-SENSOR_STDDEV: dict[str, float] = {}
+# Sensor noise (SENSOR_STDDEV) lives in models/noise.py with the rest of the filter's noise settings.
 
 
 def raw_readings(df: pd.DataFrame) -> pd.DataFrame:

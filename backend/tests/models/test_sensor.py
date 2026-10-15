@@ -3,7 +3,8 @@ from datetime import UTC, datetime
 import pandas as pd
 import pytest
 
-from models.sensor import SENSOR_STDDEV, cleaned_readings, raw_readings
+from models.noise import SENSOR_STDDEV
+from models.sensor import cleaned_readings, raw_readings
 
 
 def test_raw_readings_accepts_scalar_value():
