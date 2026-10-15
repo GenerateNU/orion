@@ -1,11 +1,14 @@
 from sqlalchemy import (
+    UUID,
     Column,
     DateTime,
     Float,
+    ForeignKey,
     Integer,
     MetaData,
     String,
     Table,
+    Text,
     Uuid,
 )
 from sqlalchemy.dialects.postgresql import ARRAY, DOUBLE_PRECISION
@@ -37,6 +40,37 @@ data_table = Table(
     Column("values", ARRAY(DOUBLE_PRECISION), nullable=False),
 )
 
+sensors_table = Table(
+    "sensors", 
+    metadata,
+    Column("name", String, primary_key=True),
+    Column("unit", String, nullable=True))
+
+
+sensor_sources_table = Table(
+    "sensor_sources",
+    metadata,
+    Column("sourceDataTypeName", String, primary_key=True),
+    Column("sensor", String, ForeignKey("sensors.name"), nullable=False)
+)
+
+signals_table = Table(
+    "signals",
+    metadata,
+    Column("id", Integer, primary_key=True, autoincrement=True),
+    Column("raw_tag", String, nullable=False, unique=True),
+    Column("name", String, nullable=False, unique=True),
+    Column("display_name", String, nullable=False),
+    Column("description", Text, nullable=False),
+    Column("unit", String, nullable=True),
+)
+
+cleaned_data_table = Table("cleaned_data", metadata,       
+    Column("runId", UUID, primary_key=True),
+    Column("sensor", String, primary_key=True),
+    Column("time", DateTime(timezone=True), primary_key=True),
+    Column("value", ARRAY(DOUBLE_PRECISION), nullable=False),
+)
 
 # Output of the state estimation (Kalman filter) pipeline, one row per instant
 # per run. It's the API's only data source: GET /api/runs lists its runIds, and
