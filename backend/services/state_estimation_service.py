@@ -36,6 +36,7 @@ class StateEstimationService:
     PLACEHOLDER_INITIAL_COVARIANCE: ClassVar[torch.Tensor] = torch.eye(6, dtype=torch.float64)  # 6x6 identity matrix
     PLACEHOLDER_ORIGIN: ClassVar[tuple[float, float]] = (0.0, 0.0)
     METERS_PER_DEGREE_LAT: ClassVar[float] = 111_320.0
+    MPS_PER_MPH: ClassVar[float] = 0.44704  # vcu_speed is in mph; the filter uses m/s
 
     # Tick length
     tick: ClassVar[str] = "10ms"
@@ -165,7 +166,7 @@ class StateEstimationService:
             gps = tick_readings.loc[tick_readings["name"] == "gps_location", "value"]
 
             if not speed.empty:
-                measurement[2] = speed.iloc[-1]
+                measurement[2] = speed.iloc[-1] * self.MPS_PER_MPH
             if len(gps) >= 2:
                 # assumes values are [lat, lon]; take the latest fix in this tick
                 x, y = self._lat_lon_to_meters(
