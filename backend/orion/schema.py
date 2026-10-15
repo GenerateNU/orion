@@ -1,4 +1,16 @@
-from sqlalchemy import Column, DateTime, MetaData, String, Table
+from sqlalchemy import (
+    UUID,
+    Column,
+    DateTime,
+    Float,
+    ForeignKey,
+    Integer,
+    MetaData,
+    String,
+    Table,
+    Text,
+    Uuid,
+)
 from sqlalchemy.dialects.postgresql import ARRAY, DOUBLE_PRECISION
 from sqlalchemy.engine import Engine
 
@@ -28,7 +40,60 @@ data_table = Table(
     Column("values", ARRAY(DOUBLE_PRECISION), nullable=False),
 )
 
+sensors_table = Table(
+    "sensors", 
+    metadata,
+    Column("name", String, primary_key=True),
+    Column("unit", String, nullable=True))
+
+
+sensor_sources_table = Table(
+    "sensor_sources",
+    metadata,
+    Column("sourceDataTypeName", String, primary_key=True),
+    Column("sensor", String, ForeignKey("sensors.name"), nullable=False)
+)
+
+signals_table = Table(
+    "signals",
+    metadata,
+    Column("id", Integer, primary_key=True, autoincrement=True),
+    Column("raw_tag", String, nullable=False, unique=True),
+    Column("name", String, nullable=False, unique=True),
+    Column("display_name", String, nullable=False),
+    Column("description", Text, nullable=False),
+    Column("unit", String, nullable=True),
+)
+
+cleaned_data_table = Table("cleaned_data", metadata,       
+    Column("runId", UUID, primary_key=True),
+    Column("sensor", String, primary_key=True),
+    Column("time", DateTime(timezone=True), primary_key=True),
+    Column("value", ARRAY(DOUBLE_PRECISION), nullable=False),
+)
+
+# Output of the state estimation (Kalman filter) pipeline, one row per instant
+# per run. It's the API's only data source: GET /api/runs lists its runIds, and
+# GET /api/runs/{id}/laps/{lap}/positions serves its points to PositionMap.
+#
+# It already exists in Neon and was created outside this repo, so it's mirrored
+# here (camelCase names and all) with only the columns the API reads.
+# create_tables() deliberately skips it: create_all would build an incomplete
+# copy, without the foreign key to pipeline_runs (an internal table).
+#
+# runId is the UUID that connects the tables. lapId is nullable: points not
+# yet assigned to a lap have none.
+estimated_car_state_table = Table(
+    "estimated_car_state",
+    metadata,
+    Column("runId", Uuid, primary_key=True),
+    Column("time", DateTime(timezone=True), primary_key=True),
+    Column("lapId", Integer, nullable=True),
+    Column("latitude", Float, nullable=False),
+    Column("longitude", Float, nullable=False),
+)
+
 
 def create_tables(engine: Engine) -> None:
-    """Create all tables in this module if they don't already exist."""
-    metadata.create_all(engine, checkfirst=True)
+    """Create the tables this repo owns if they don't already exist."""
+    metadata.create_all(engine, tables=[data_table], checkfirst=True)

@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { apiClient } from "../api/client";
 
-export function useLaps(raceId) {
+export function useLaps(runId) {
   const [data, setData] = useState(null);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState(null);
@@ -9,7 +9,7 @@ export function useLaps(raceId) {
   useEffect(() => {
     async function fetchLaps() {
       try {
-        const result = await apiClient(`/api/races/${raceId}/laps`);
+        const result = await apiClient(`/api/runs/${runId}/laps`);
         setData(result);
       } catch (err) {
         setError(err);
@@ -19,7 +19,7 @@ export function useLaps(raceId) {
     }
 
     fetchLaps();
-  }, [raceId]);
+  }, [runId]);
 
   return {
     data,

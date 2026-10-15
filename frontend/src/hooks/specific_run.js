@@ -1,15 +1,15 @@
 import { useEffect, useState } from "react";
 import { apiClient } from "../api/client";
 
-export function useRaces() {
+export function useRun(runId) {
   const [data, setData] = useState(null);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState(null);
 
   useEffect(() => {
-    async function fetchRaces() {
+    async function fetchRun() {
       try {
-        const result = await apiClient("/api/races");
+        const result = await apiClient(`/api/runs/${runId}`);
         setData(result);
       } catch (err) {
         setError(err);
@@ -18,8 +18,8 @@ export function useRaces() {
       }
     }
 
-    fetchRaces();
-  }, []);
+    fetchRun();
+  }, [runId]);
 
   return {
     data,

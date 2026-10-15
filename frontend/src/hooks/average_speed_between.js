@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import { apiClient } from "../api/client";
 
 export function useAverageSpeedBetween(
-  raceId,
+  runId,
   lapNumber,
   startLatitude,
   startLongitude,
@@ -27,7 +27,7 @@ export function useAverageSpeedBetween(
         });
 
         const endpoint =
-          `/api/races/${raceId}/laps/${lapNumber}/average-speed-between?${params}`;
+          `/api/runs/${runId}/laps/${lapNumber}/average-speed-between?${params}`;
 
         const result = await apiClient(endpoint);
 
@@ -41,7 +41,7 @@ export function useAverageSpeedBetween(
 
     fetchAverageSpeedBetween();
   }, [
-    raceId,
+    runId,
     lapNumber,
     startLatitude,
     startLongitude,

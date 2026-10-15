@@ -1,0 +1,136 @@
+
+"""Unit tests for CleanService.
+ 
+These use fake Penelope and repository objects instead of real databases, so
+they run anywhere (including CI) and never read or write real data.
+"""
+ 
+from datetime import UTC, datetime, timedelta
+ 
+import numpy as np
+import pytest
+ 
+from services.clean_service import (
+    DEFAULT_GPS_LAG_SECONDS,
+    NAME_TO_UNIT,
+    TAG_TO_NAME,
+    CleanService,
+)
+ 
+RUN_ID = "test-run"
+T = datetime(2026, 8, 15, 18, 17, 3, tzinfo=UTC)
+LAG = timedelta(seconds=DEFAULT_GPS_LAG_SECONDS)
+ 
+# Real catalog tags covering each case: multi-value, GPS, and single-value
+ACCEL_TAG = "VCU_Ethernet/A/Acceleration"
+GPS_TAG = "TPU/GPS/Location"
+SPEED_TAG = "VCU/CarState/speed"
+ACCEL = TAG_TO_NAME[ACCEL_TAG]
+GPS = TAG_TO_NAME[GPS_TAG]
+SPEED = TAG_TO_NAME[SPEED_TAG]
+ 
+ 
+def make_chunk(rows):
+    """Build a chunk shaped like PenelopeClient's output: a 2D object array
+    with columns [time, dataTypeName, runId, values]. Filled cell by cell so
+    NumPy doesn't try to merge the value lists into an extra dimension."""
+    arr = np.empty((len(rows), 4), dtype=object)
+    for i, row in enumerate(rows):
+        for j, item in enumerate(row):
+            arr[i, j] = item
+    return arr
+ 
+ 
+class FakePenelope:
+    """Stands in for PenelopeClient: yields the chunks it was given."""
+ 
+    def __init__(self, chunks):
+        self.chunks = chunks
+ 
+    def get_by_run_id_and_time(self, run_id, start, end, raw_tags):
+        yield from self.chunks
+ 
+ 
+class FakeRepo:
+    """Stands in for DataPointRepository: records every write, in order."""
+ 
+    def __init__(self):
+        self.calls = []  # (method name, rows)
+ 
+    def write_sensors(self, rows, conn=None):
+        self.calls.append(("write_sensors", rows))
+        return len(rows)
+ 
+    def write_sensor_sources(self, rows, conn=None):
+        self.calls.append(("write_sensor_sources", rows))
+        return len(rows)
+ 
+    def write_cleaned(self, rows, conn=None):
+        self.calls.append(("write_cleaned", rows))
+        return len(rows)
+ 
+ 
+def make_service():
+    return CleanService(FakePenelope([]), FakeRepo())
+ 
+ 
+def run_service(chunks):
+    repo = FakeRepo()
+    df = CleanService(FakePenelope(chunks), repo).clean_data(RUN_ID, T, T + timedelta(minutes=2))
+    return df, repo
+ 
+ 
+def test_clean_chunk_renames_and_shifts_gps():
+    chunk = make_chunk([
+        (T, ACCEL_TAG, RUN_ID, [-870.0, -24.6, 486.0]),
+        (T, GPS_TAG, RUN_ID, [42.33, -71.09]),
+        (T, SPEED_TAG, RUN_ID, [42]),
+    ])
+    df = make_service()._clean_chunk(chunk)
+    by_sensor = {r.sensor: (r.time, r.value) for r in df.itertuples()}
+ 
+    # one row per reading, clean names, arrays kept whole
+    assert set(by_sensor) == {ACCEL, GPS, SPEED}
+    assert not set(TAG_TO_NAME) & set(by_sensor)               # no raw tags
+    assert by_sensor[ACCEL][1] == [-870.0, -24.6, 486.0]
+    assert by_sensor[SPEED] == (T, [42.0])                     # whole number -> float, not shifted
+    assert by_sensor[GPS][0] == T + LAG                        # GPS shifted by the lag
+    assert set(df["runId"]) == {RUN_ID}
+ 
+ 
+def test_clean_chunk_unknown_tag_raises():
+    with pytest.raises(KeyError):
+        make_service()._clean_chunk(make_chunk([(T, "NOT/A/REAL/TAG", RUN_ID, [1.0])]))
+ 
+ 
+def test_clean_data_writes_reference_tables_then_each_chunk():
+    chunks = [
+        make_chunk([(T, SPEED_TAG, RUN_ID, [1.0])]),
+        make_chunk([(T + timedelta(seconds=1), SPEED_TAG, RUN_ID, [2.0])]),
+    ]
+    _, repo = run_service(chunks)
+    names = [name for name, _ in repo.calls]
+    writes = [rows for name, rows in repo.calls if name == "write_cleaned"]
+ 
+    # sensors before sensor_sources (foreign key), both before any readings
+    assert names[:2] == ["write_sensors", "write_sensor_sources"]
+    assert dict(repo.calls[0][1]) == NAME_TO_UNIT
+    assert dict(repo.calls[1][1]) == TAG_TO_NAME
+ 
+    assert len(writes) == 2                                    # one write per chunk
+    assert list(writes[0][0]) == [RUN_ID, T, SPEED, [1.0]]     # (runId, time, sensor, values)
+ 
+ 
+def test_clean_data_returns_all_rows():
+    chunks = [
+        make_chunk([(T, ACCEL_TAG, RUN_ID, [1.0, 2.0, 3.0])]),
+        make_chunk([(T + timedelta(seconds=1), SPEED_TAG, RUN_ID, [4.0])]),
+    ]
+    df, repo = run_service(chunks)
+ 
+    # reference tables are written once per run, not once per chunk
+    assert [name for name, _ in repo.calls].count("write_sensors") == 1
+ 
+    assert {"time", "sensor", "value"} <= set(df.columns)
+    assert len(df) == 2                                        # one row per reading
+    assert list(df.index) == [0, 1]                            # renumbered across chunks
