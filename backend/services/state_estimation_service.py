@@ -8,7 +8,7 @@ from sqlalchemy import select
 
 from models.vehicle import StateEstimate
 from orion.repository import DataPointRepository
-from orion.schema import data_table
+from orion.schema import cleaned_data_table
 from services.ukf import UKF
 from services.urts import urts_smooth
 
@@ -57,9 +57,9 @@ class StateEstimationService:
         # End is exclusive so back-to-back pages never read (and write) the same reading twice
         last_points = dict(previous_points or {})
         query = (
-            select(data_table)
-            .where(data_table.c.time >= start_time, data_table.c.time < end_time)
-            .order_by(data_table.c.time)
+            select(cleaned_data_table)
+            .where(cleaned_data_table.c.time >= start_time, cleaned_data_table.c.time < end_time)
+            .order_by(cleaned_data_table.c.time)
         )
         readings = pd.read_sql(query, self.orion_db_client.engine)
         if readings.empty:
@@ -67,7 +67,7 @@ class StateEstimationService:
 
         # One value per row: a GPS row with values [lat, lon] becomes two rows
         readings = readings.rename(
-            columns={"time": "timestamp", "dataTypeName": "name", "values": "value"}
+            columns={"time": "timestamp", "sensor": "name", "values": "value"}
         ).explode("value")
         readings["timestamp"] = pd.to_datetime(readings["timestamp"], utc=True)
         readings["value"] = readings["value"].astype("float64")
@@ -142,7 +142,7 @@ class StateEstimationService:
         ticks = cleaned_readings.groupby(cleaned_readings["timestamp"].dt.floor(self.tick))
         for tick_time, tick_readings in ticks:
             acceleration_readings = tick_readings.loc[
-                tick_readings["name"] == "VCU_Ethernet/A/Acceleration",
+                tick_readings["name"] == "vcu_eth_a_accel",
                 "value",
             ]
 
