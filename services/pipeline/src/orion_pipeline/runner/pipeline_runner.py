@@ -15,6 +15,7 @@ class PipelineRunner:
     """Runs every registered step for one run_id, in dependency order."""
 
     def __init__(self, settings: Settings):
+        self.settings = settings
         self.oriondb = OrionDBClient(
             make_sync_engine(settings.orion_database_url),
             page_size=settings.pipeline_page_size,
@@ -30,7 +31,9 @@ class PipelineRunner:
 
     # Runs each step in order
     def run_all(self, run_id: str) -> None:
-        ctx = RunContext(run_id=run_id)
+        ctx = RunContext(
+            run_id=run_id, gps_time_offset_s=self.settings.gps_time_offset_s
+        )
         for step_cls in ordered_steps():
             # TODO: Switch ownership of DB to be in the step implementation directly. 
             reader = (
