@@ -12,9 +12,9 @@ from orion.repository import DataPointRepository
 from penelope.client import PenelopeClient
 from services.clean_service import CleanService
 
-RUN_ID = "5eee6c81-e84d-4f08-b8c4-bc1a481a5ad6"
-START = datetime(2026, 8, 15, 18, 17, tzinfo=UTC)
-END = datetime(2026, 8, 15, 18, 19, tzinfo=UTC)
+RUN_ID = "3adaad41-0f1a-42e3-b6d7-02db50a6644a"
+START = datetime(2026, 8, 15, 20, 10, tzinfo=UTC)
+END = datetime(2026, 8, 15, 20, 13, tzinfo=UTC)
 
 def main() -> None:
     load_dotenv()
