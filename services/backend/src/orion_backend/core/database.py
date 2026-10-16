@@ -7,18 +7,26 @@ repositories only `flush()`. Penelope sessions never commit.
 from collections.abc import AsyncIterator
 
 from fastapi import Request
-from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
+from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession, async_sessionmaker
 
 from orion_core.db.engines import make_async_engine
 from orion_core.settings import Settings
 
 
-def create_sessionmakers(settings: Settings) -> dict[str, async_sessionmaker]:
-    makers = {"orion": async_sessionmaker(make_async_engine(settings.orion_database_url))}
+def create_engines(settings: Settings) -> dict[str, AsyncEngine]:
+    """The lifespan owns these and disposes them on shutdown."""
+    engines = {"orion": make_async_engine(settings.orion_database_url)}
     if settings.penelope_database_url:
-        penelope = make_async_engine(settings.penelope_database_url, read_only=True)
-        makers["penelope"] = async_sessionmaker(penelope)
-    return makers
+        engines["penelope"] = make_async_engine(
+            settings.penelope_database_url, read_only=True
+        )
+    return engines
+
+
+def create_sessionmakers(
+    engines: dict[str, AsyncEngine],
+) -> dict[str, async_sessionmaker]:
+    return {name: async_sessionmaker(engine, expire_on_commit=False) for name, engine in engines.items()}
 
 
 async def get_orion_db(request: Request) -> AsyncIterator[AsyncSession]:

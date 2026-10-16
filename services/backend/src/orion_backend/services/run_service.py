@@ -12,10 +12,12 @@ class RunService:
         self.repository = RunRepository(db)
 
     async def list_runs(self) -> list[RunResponse]:
-        return [RunResponse.model_validate(run) for run in await self.repository.list()]
+        return [
+            RunResponse.model_validate(run) for run in await self.repository.list_runs()
+        ]
 
     async def get_run(self, run_id: str) -> RunResponse:
-        run = await self.repository.get(run_id)
+        run = await self.repository.get_run(run_id)
         if run is None:
             raise NotFoundError("Run", run_id)
         return RunResponse.model_validate(run)

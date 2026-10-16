@@ -1,4 +1,4 @@
-"""Example vertical slice over OrionDB: route → service → repository → model."""
+"""Browse sessions: route → service → repository → model, over OrionDB."""
 
 from typing import Annotated
 
@@ -19,7 +19,7 @@ def get_run_service(db: AsyncSession = Depends(get_orion_db)) -> RunService:
 
 @router.get("", response_model=list[RunResponse], summary="List runs")
 async def list_runs(service: RunService = Depends(get_run_service)) -> list[RunResponse]:
-    """Every run OrionDB knows about."""
+    """Every run OrionDB knows about, newest first, with its latest pipeline status."""
     return await service.list_runs()
 
 
