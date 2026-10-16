@@ -17,3 +17,10 @@ data_table = Table(
     Column("runId", String, primary_key=True),
     Column("values", ARRAY(DOUBLE_PRECISION)),
 )
+
+data_type_table = Table(
+    "data_type",
+    penelope_metadata,
+    Column("name", String, primary_key=True),
+    Column("unit", String),
+)
