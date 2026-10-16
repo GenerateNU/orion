@@ -28,6 +28,10 @@ class RunService:
             raise NotFoundError("Run", run_id)
         return RunResponse.model_validate(run)
 
+    # ------------------------------------------------------------------------
+    # DEPRECATED: User currently has no reason to create or update run
+    # information. This is handled by pipeline
+    # ------------------------------------------------------------------------
     async def create_run(self, body: RunCreateRequest) -> RunResponse:
         _check_bounds(body.start_time, body.end_time)
         run = await self.repository.create_run(
@@ -37,6 +41,10 @@ class RunService:
             raise AlreadyExistsError("Run", body.run_id)
         return RunResponse.model_validate(run)
 
+    # ------------------------------------------------------------------------
+    # DEPRECATED: User currently has no reason to create or update run
+    # information. This is handled by pipeline
+    # ------------------------------------------------------------------------
     async def update_run(self, run_id: str, body: RunUpdateRequest) -> RunResponse:
         run = await self.repository.get_run(run_id)
         if run is None:

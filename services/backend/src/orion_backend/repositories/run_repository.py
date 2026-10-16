@@ -33,12 +33,20 @@ class RunRepository:
     async def has_pipeline_runs(self, run_id: str) -> bool:
         return bool(await self.db.scalar(select_run_has_pipeline_runs(run_id)))
 
+    # ------------------------------------------------------------------------
+    # DEPRECATED: User currently has no reason to create or update run
+    # information. This is handled by pipeline
+    # ------------------------------------------------------------------------
     async def create_run(
         self, run_id: str, start_time: datetime | None, end_time: datetime | None
     ) -> Run | None:
         """None if `run_id` already exists."""
         return await self.db.scalar(insert_run(run_id, start_time, end_time))
 
+    # ------------------------------------------------------------------------
+    # DEPRECATED: User currently has no reason to create or update run
+    # information. This is handled by pipeline
+    # ------------------------------------------------------------------------
     async def update_run(self, run_id: str, **values: datetime | None) -> Run | None:
         """None if the run doesn't exist."""
         return await self.db.scalar(update_run(run_id, **values))

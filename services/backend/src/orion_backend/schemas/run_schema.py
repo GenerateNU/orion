@@ -45,6 +45,10 @@ class RunResponse(BaseModel):
         return (self.end_time - self.start_time).total_seconds()
 
 
+# ----------------------------------------------------------------------------
+# DEPRECATED: User currently has no reason to create or update run
+# information. This is handled by pipeline
+# ----------------------------------------------------------------------------
 class RunCreateRequest(BaseModel):
     """Body of `POST /runs`. `created_at` is set by the database."""
 
@@ -65,6 +69,10 @@ class RunCreateRequest(BaseModel):
     )
 
 
+# ----------------------------------------------------------------------------
+# DEPRECATED: User currently has no reason to create or update run
+# information. This is handled by pipeline
+# ----------------------------------------------------------------------------
 class RunUpdateRequest(BaseModel):
     """Body of `PATCH /runs/{run_id}`. Only the fields sent are changed; send
     `null` to clear one."""
