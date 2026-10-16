@@ -1,9 +1,12 @@
-"""OrionDB SELECT builders. They build statements but never run them, so the
+"""OrionDB statement builders. They build statements but never run them, so the
 async backend and the sync pipeline can share them."""
 
-from sqlalchemy import Select, select
+from datetime import datetime
 
-from orion_core.models.orion import Run, SensorSources
+from sqlalchemy import Delete, Insert, Select, Update, delete, exists, select, update
+from sqlalchemy.dialects.postgresql import insert
+
+from orion_core.models.orion import PipelineRun, Run, SensorSources
 
 
 def select_sensor_sources() -> Select:
@@ -22,3 +25,30 @@ def select_runs() -> Select:
 def select_run(run_id: str) -> Select:
     """One run by id."""
     return select(Run).where(Run.run_id == run_id)
+
+
+def select_run_has_pipeline_runs(run_id: str) -> Select:
+    """Whether any pipeline job references the run (its FK blocks a delete)."""
+    return select(exists().where(PipelineRun.run_id == run_id))
+
+
+def insert_run(
+    run_id: str, start_time: datetime | None, end_time: datetime | None
+) -> Insert:
+    """Create a run, returning it. Returns no row if `run_id` already exists."""
+    return (
+        insert(Run)
+        .values(run_id=run_id, start_time=start_time, end_time=end_time)
+        .on_conflict_do_nothing(index_elements=[Run.run_id])
+        .returning(Run)
+    )
+
+
+def update_run(run_id: str, **values: datetime | None) -> Update:
+    """Set the given columns on a run, returning it. Returns no row if it doesn't exist."""
+    return update(Run).where(Run.run_id == run_id).values(**values).returning(Run)
+
+
+def delete_run(run_id: str) -> Delete:
+    """Delete a run, returning its id. Returns no row if it doesn't exist."""
+    return delete(Run).where(Run.run_id == run_id).returning(Run.run_id)

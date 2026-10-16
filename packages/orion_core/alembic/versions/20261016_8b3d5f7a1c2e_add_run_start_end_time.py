@@ -18,12 +18,13 @@ depends_on: str | Sequence[str] | None = None
 
 
 def upgrade() -> None:
-    # NOT NULL with no default: fails if `runs` already has rows. Empty them first.
+    # Nullable: a run row is created when its first job is queued, before the
+    # clean step has read any data to set its bounds.
     op.add_column(
-        "runs", sa.Column("start_time", sa.DateTime(timezone=True), nullable=False)
+        "runs", sa.Column("start_time", sa.DateTime(timezone=True), nullable=True)
     )
     op.add_column(
-        "runs", sa.Column("end_time", sa.DateTime(timezone=True), nullable=False)
+        "runs", sa.Column("end_time", sa.DateTime(timezone=True), nullable=True)
     )
 
 

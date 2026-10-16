@@ -28,8 +28,8 @@ class RunResponse(BaseModel):
     )
     created_at: datetime = Field(
         description=(
-            "When OrionDB first saw this run (its first pipeline job was queued), not "
-            "when it was driven."
+            "When OrionDB first saw this run (`POST /runs`, or its first pipeline job "
+            "was queued), not when it was driven."
         ),
         examples=["2026-10-02T09:00:00Z"],
     )
@@ -43,3 +43,39 @@ class RunResponse(BaseModel):
         if self.start_time is None or self.end_time is None:
             return None
         return (self.end_time - self.start_time).total_seconds()
+
+
+class RunCreateRequest(BaseModel):
+    """Body of `POST /runs`. `created_at` is set by the database."""
+
+    run_id: str = Field(
+        min_length=1,
+        description="Penelope run id. Must be unique.",
+        examples=["run-123"],
+    )
+    start_time: datetime | None = Field(
+        default=None,
+        description="Timestamp of the run's first reading (UTC).",
+        examples=["2026-10-01T14:02:11Z"],
+    )
+    end_time: datetime | None = Field(
+        default=None,
+        description="Timestamp of the run's last reading (UTC).",
+        examples=["2026-10-01T14:31:40Z"],
+    )
+
+
+class RunUpdateRequest(BaseModel):
+    """Body of `PATCH /runs/{run_id}`. Only the fields sent are changed; send
+    `null` to clear one."""
+
+    start_time: datetime | None = Field(
+        default=None,
+        description="Timestamp of the run's first reading (UTC).",
+        examples=["2026-10-01T14:02:11Z"],
+    )
+    end_time: datetime | None = Field(
+        default=None,
+        description="Timestamp of the run's last reading (UTC).",
+        examples=["2026-10-01T14:31:40Z"],
+    )
