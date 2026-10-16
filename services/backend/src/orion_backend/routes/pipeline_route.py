@@ -1,8 +1,10 @@
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, Path, Request, status
+from fastapi import APIRouter, Depends, Path, Query, Request, status
 
+from orion_backend.core.openapi import error_responses
 from orion_backend.services.pipeline_service import PipelineService
+from orion_core.models import PipelineStatus
 from orion_core.schemas.pipeline_run_schema import PipelineRunCreate, PipelineRunResponse
 
 router = APIRouter(prefix="/pipeline/runs", tags=["pipeline"])
@@ -17,6 +19,7 @@ def get_pipeline_service(request: Request) -> PipelineService:
     response_model=PipelineRunResponse,
     status_code=status.HTTP_202_ACCEPTED,
     summary="Queue a pipeline job",
+    responses=error_responses(409, 502),
 )
 async def create_pipeline_run(
     body: PipelineRunCreate, service: PipelineService = Depends(get_pipeline_service)
@@ -25,7 +28,25 @@ async def create_pipeline_run(
     return await service.trigger(body)
 
 
-@router.get("/{pipeline_run_id}", response_model=PipelineRunResponse, summary="Get a pipeline job")
+@router.get("", response_model=list[PipelineRunResponse], summary="List pipeline jobs")
+async def list_pipeline_runs(
+    run_id: Annotated[str | None, Query(description="Only jobs for this Penelope run.")] = None,
+    pipeline_status: Annotated[
+        PipelineStatus | None, Query(alias="status", description="Only jobs in this status.")
+    ] = None,
+    limit: Annotated[int, Query(ge=1, le=200, description="Max jobs.")] = 50,
+    service: PipelineService = Depends(get_pipeline_service),
+) -> list[PipelineRunResponse]:
+    """Job history, newest first."""
+    raise NotImplementedError
+
+
+@router.get(
+    "/{pipeline_run_id}",
+    response_model=PipelineRunResponse,
+    summary="Get a pipeline job",
+    responses=error_responses(404),
+)
 async def get_pipeline_run(
     pipeline_run_id: Annotated[int, Path(description="Pipeline job id.")],
     service: PipelineService = Depends(get_pipeline_service),
