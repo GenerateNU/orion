@@ -10,3 +10,8 @@ class NotFoundError(DomainError):
         self.resource_type = resource_type
         self.resource_id = str(resource_id)
         super().__init__(f"{resource_type} '{resource_id}' not found")
+
+
+class AlreadyExistsError(DomainError):
+    def __init__(self, resource_type: str, resource_id: object):
+        super().__init__(f"{resource_type} '{resource_id}' already exists")
