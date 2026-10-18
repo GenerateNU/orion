@@ -15,3 +15,20 @@ class NotFoundError(DomainError):
 class AlreadyExistsError(DomainError):
     def __init__(self, resource_type: str, resource_id: object):
         super().__init__(f"{resource_type} '{resource_id}' already exists")
+
+
+class InvalidParameterError(DomainError):
+    """A request parameter is well-formed but not allowed (422)."""
+
+
+class UpstreamError(DomainError):
+    """A service we depend on (e.g. Penelope off VPN) failed or was unreachable (502)."""
+
+    def __init__(self, upstream: str, reason: object = None):
+        self.upstream = upstream
+        message = f"{upstream} is unreachable"
+        super().__init__(f"{message}: {reason}" if reason else message)
+
+
+class ServiceUnavailableError(DomainError):
+    """A dependency isn't configured on this deployment (503)."""

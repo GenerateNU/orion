@@ -8,6 +8,7 @@ TAGS_METADATA = [
     {"name": "health", "description": "Is the API up?"},
     {"name": "runs", "description": "Runs stored in OrionDB."},
     {"name": "pipeline", "description": "Trigger and inspect pipeline jobs."},
+    {"name": "sensors", "description": "Raw sensor data, read straight from Penelope."},
 ]
 
 

@@ -6,7 +6,7 @@ from datetime import datetime
 from sqlalchemy import Delete, Insert, Select, Update, delete, exists, select, update
 from sqlalchemy.dialects.postgresql import insert
 
-from orion_core.models.orion import PipelineRun, Run, SensorSources
+from orion_core.models.orion import PipelineRun, Run, SensorSources, EstimatedCarState
 
 
 def select_sensor_sources() -> Select:
@@ -17,6 +17,20 @@ def select_sensor_sources() -> Select:
     )
 
 
+def select_estimated_positions_between(run_id: str, start: datetime, end: datetime) -> Select:
+    """Estimated (lat, lon) for one run in [start, end], ordered by time."""
+    return (
+        select(
+            EstimatedCarState.time,
+            EstimatedCarState.lattitude,
+            EstimatedCarState.longitude,
+        )
+        .where(
+            EstimatedCarState.run_id == run_id,
+            EstimatedCarState.time.between(start, end),
+        )
+        .order_by(EstimatedCarState.time)
+    )
 def select_runs() -> Select:
     """Every run, newest drive first."""
     return select(Run).order_by(Run.start_time.desc(), Run.run_id)

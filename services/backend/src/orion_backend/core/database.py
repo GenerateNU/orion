@@ -9,6 +9,7 @@ from collections.abc import AsyncIterator
 from fastapi import Request
 from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession, async_sessionmaker
 
+from orion_backend.core.exceptions import ServiceUnavailableError
 from orion_core.db.engines import make_async_engine
 from orion_core.settings import Settings
 
@@ -40,5 +41,9 @@ async def get_orion_db(request: Request) -> AsyncIterator[AsyncSession]:
 
 
 async def get_penelope_db(request: Request) -> AsyncIterator[AsyncSession]:
-    async with request.app.state.sessionmakers["penelope"]() as session:
+    """503 if `PENELOPE_DATABASE_URL` is unset, since no engine was created."""
+    sessionmaker = request.app.state.sessionmakers.get("penelope")
+    if sessionmaker is None:
+        raise ServiceUnavailableError("Penelope is not configured (PENELOPE_DATABASE_URL unset)")
+    async with sessionmaker() as session:
         yield session
