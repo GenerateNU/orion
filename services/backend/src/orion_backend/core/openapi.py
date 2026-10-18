@@ -8,8 +8,8 @@ from orion_backend.schemas.error_schema import ErrorResponse
 TAGS_METADATA = [
     {"name": "health", "description": "Is the API up?"},
     {"name": "runs", "description": "Runs stored in OrionDB."},
-    {"name": "readings", "description": "Raw sensor data from Penelope (read-only)."},
     {"name": "pipeline", "description": "Trigger and inspect pipeline jobs."},
+    {"name": "sensors", "description": "Raw sensor data, read straight from Penelope."},
 ]
 
 

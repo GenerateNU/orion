@@ -13,6 +13,5 @@ class EstimatedCarState(Base):
 
     run_id: Mapped[str] = mapped_column(String, primary_key=True)
     time: Mapped[datetime] = mapped_column(DateTime, primary_key=True)
-    lap_id: Mapped[int] = mapped_column(INTEGER)
     lattitude: Mapped[float] = mapped_column(FLOAT)
     longitude: Mapped[float] = mapped_column(FLOAT)
