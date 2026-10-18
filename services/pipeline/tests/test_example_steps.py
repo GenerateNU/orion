@@ -10,13 +10,33 @@ from orion_pipeline.clients.base_client import BaseClient
 from orion_pipeline.clients.oriondb_client import OrionDBClient
 from orion_pipeline.clients.penelope_client import PenelopeClient
 from orion_pipeline.runner.run_context import RunContext
+from orion_pipeline.steps import step_registry
+from orion_pipeline.steps.base_step import PipelineStep
 from orion_pipeline.steps.example_ingest_step import ExampleIngestStep
-from orion_pipeline.steps.step_registry import ordered_steps
+from orion_pipeline.steps.step_registry import ordered_steps, register_step
 
 
-def test_dependencies_run_first():
-    names = [step.name for step in ordered_steps()]
-    assert names.index("example_ingest") < names.index("example_estimate")
+def test_dependencies_run_first(monkeypatch):
+    # An empty registry, so the test doesn't depend on which real steps exist.
+    monkeypatch.setattr(step_registry, "STEPS", {})
+
+    # Registered downstream-first, so passing means the sort did the ordering.
+    @register_step
+    class _Downstream(PipelineStep):
+        name = "downstream"
+        depends_on = ("upstream",)
+
+    @register_step
+    class _Upstream(PipelineStep):
+        name = "upstream"
+
+    assert [step.name for step in ordered_steps()] == ["upstream", "downstream"]
+
+
+def test_pipeline_registers_clean_step():
+    import orion_pipeline.steps  # noqa: F401  (importing registers every step)
+
+    assert "clean_step" in step_registry.STEPS
 
 
 def test_example_ingest_transform():
