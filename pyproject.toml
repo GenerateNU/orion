@@ -67,6 +67,10 @@ known-first-party = ["orion_core", "orion_backend", "orion_pipeline"]
 # Test helpers don't need annotations; shared ones should still get them by convention.
 "**/tests/**" = ["ANN"]
 
+[tool.ruff.lint.flake8-annotations]
+# Allow ommitting '-> None' on __init_ when its arguments are typed.
+mypy-init-return = true
+
 [tool.coverage.run]
 source_pkgs = ["orion_core", "orion_backend", "orion_pipeline"]
 branch = true

@@ -1,7 +1,16 @@
 """Every Penelope tag we know how to map, the generic sensor it maps to, and
 that sensor's unit (None if unitless). Seeded by `orion_core.db.scripts.seed_sensors`."""
 
-SENSOR_CATALOG: list[dict[str, str | None]] = [
+from typing import TypedDict
+
+
+class CatalogEntry(TypedDict):
+    raw_tag: str
+    sensor: str
+    unit: str | None  # None if unitless
+
+
+SENSOR_CATALOG: list[CatalogEntry] = [
     {
         "raw_tag": "BMS/Cells/Temp_Avg_Value",
         "sensor": "bms_temp_avg",

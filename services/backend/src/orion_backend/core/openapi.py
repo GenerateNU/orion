@@ -1,6 +1,7 @@
 """Conventions that keep /docs self-documenting."""
 
 from fastapi.routing import APIRoute
+from typing import Any
 
 from orion_backend.schemas.error_schema import ErrorResponse
 
@@ -17,6 +18,6 @@ def generate_operation_id(route: APIRoute) -> str:
     return f"{route.tags[0]}-{route.name}"
 
 
-def error_responses(*codes: int) -> dict:
+def error_responses(*codes: int) -> dict[int | str, dict[str, Any]]:
     """Document our ErrorResponse on a route: `responses=error_responses(404)`."""
     return {code: {"model": ErrorResponse} for code in codes}

@@ -13,7 +13,7 @@ from orion_core.db.engines import make_async_engine
 from orion_core.settings import Settings
 
 
-def create_sessionmakers(settings: Settings) -> dict[str, async_sessionmaker]:
+def create_sessionmakers(settings: Settings) -> dict[str, async_sessionmaker[AsyncSession]]:
     makers = {"orion": async_sessionmaker(make_async_engine(settings.orion_database_url))}
     if settings.penelope_database_url:
         penelope = make_async_engine(settings.penelope_database_url, read_only=True)

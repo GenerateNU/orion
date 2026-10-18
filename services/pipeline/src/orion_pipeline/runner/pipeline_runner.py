@@ -35,17 +35,22 @@ class PipelineRunner:
             run_id=run_id, gps_time_offset_s=self.settings.gps_time_offset_s
         )
         for step_cls in ordered_steps():
-            # TODO: Switch ownership of DB to be in the step implementation directly. 
+            # TODO: Switch ownership of DB to be in the step implementation directly.
             reader = (
                 self.penelope if step_cls.reads_from == "penelope" else self.oriondb
             )
+            if reader is None:
+                raise RuntimeError(
+                    f"{step_cls.name} reads from Penelope, "
+                    "but PENELOPE_DATABASE_URL is not set"
+                )
             logger.info("run %s: %s", run_id, step_cls.name)
             step_cls(reader=reader, writer=self.oriondb).run(ctx)
 
     # Runs single specific step
     def run_step(self, run_id: str, step: str) -> None:
-        raise NotImplemented
+        raise NotImplementedError
 
     # Runs remaining steps starting from pipeline stage.
     def run_from(self, run_id: str, start_step: str) -> None:
-        raise NotImplemented
+        raise NotImplementedError

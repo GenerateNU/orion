@@ -2,6 +2,7 @@
 async backend and the sync pipeline can share them."""
 
 from collections.abc import Collection
+from typing import Any
 
 from sqlalchemy import Select, select
 
@@ -12,7 +13,7 @@ def select_readings(
     run_id: str,
     limit: int | None = None,
     data_type_names: Collection[str] | None = None,
-) -> Select:
+) -> Select[*tuple[Any, ...]]:
     """`data_type_names`, if given, keeps only rows with those raw tags."""
     stmt = (
         select(

@@ -13,14 +13,14 @@ from sqlalchemy import delete
 from sqlalchemy.dialects.postgresql import insert
 
 from orion_core.db.engines import make_sync_engine
-from orion_core.db.sensor_catalog import SENSOR_CATALOG
+from orion_core.db.sensor_catalog import SENSOR_CATALOG, CatalogEntry
 from orion_core.models.orion import Sensors, SensorSources
 from orion_core.settings import get_settings
 
 logger = logging.getLogger(__name__)
 
 
-def _validate(catalog: list[dict[str, str | None]]) -> None:
+def _validate(catalog: list[CatalogEntry]) -> None:
     raw_tags = [row["raw_tag"] for row in catalog]
     if len(raw_tags) != len(set(raw_tags)):
         raise ValueError("SENSOR_CATALOG has duplicate raw_tags")
@@ -81,7 +81,9 @@ def seed(prune: bool = False) -> None:
 
 
 def main() -> None:
-    parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
+    parser = argparse.ArgumentParser(
+        description=__doc__.splitlines()[0] if __doc__ else None
+    )
     parser.add_argument(
         "--prune", action="store_true", help="delete rows not in the catalog"
     )

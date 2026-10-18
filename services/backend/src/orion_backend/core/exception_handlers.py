@@ -5,14 +5,16 @@ from orion_backend.core.exceptions import DomainError, NotFoundError
 from orion_backend.schemas.error_schema import ErrorResponse
 
 
-async def not_found_handler(request: Request, exc: NotFoundError) -> JSONResponse:
+async def not_found_handler(request: Request, exc: Exception) -> JSONResponse:
+    assert isinstance(exc, NotFoundError)
     body = ErrorResponse(
         detail=str(exc), resource_type=exc.resource_type, resource_id=exc.resource_id
     )
     return JSONResponse(status_code=404, content=body.model_dump())
 
 
-async def domain_error_handler(request: Request, exc: DomainError) -> JSONResponse:
+async def domain_error_handler(request: Request, exc: Exception) -> JSONResponse:
+    assert isinstance(exc, DomainError)
     return JSONResponse(status_code=400, content=ErrorResponse(detail=str(exc)).model_dump())
 
 

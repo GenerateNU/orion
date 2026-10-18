@@ -1,4 +1,6 @@
 from contextlib import asynccontextmanager
+from collections.abc import AsyncGenerator
+from typing import Any
 
 import httpx
 from fastapi import FastAPI
@@ -11,7 +13,7 @@ from orion_core.settings import get_settings
 
 
 @asynccontextmanager
-async def lifespan(app: FastAPI):
+async def lifespan(app: FastAPI) -> AsyncGenerator[None, Any]:
     settings = get_settings()
     app.state.sessionmakers = create_sessionmakers(settings)
     app.state.pipeline_http = httpx.AsyncClient(base_url=settings.pipeline_api_url)

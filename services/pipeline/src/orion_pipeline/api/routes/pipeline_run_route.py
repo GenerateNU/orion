@@ -1,3 +1,5 @@
+from typing import cast
+
 from fastapi import APIRouter, HTTPException, Request, status
 
 from orion_core.schemas.pipeline_run_schema import (
@@ -13,7 +15,7 @@ router = APIRouter(prefix="/runs", tags=["runs"])
 
 
 def _queue(request: Request) -> JobQueue:
-    return request.app.state.queue
+    return cast(JobQueue, request.app.state.queue)
 
 
 @router.post(
