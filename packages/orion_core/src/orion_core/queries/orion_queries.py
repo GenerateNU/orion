@@ -18,7 +18,9 @@ def select_sensor_sources() -> Select[*tuple[Any, ...]]:
     )
 
 
-def select_estimated_positions_between(run_id: str, start: datetime, end: datetime) -> Select:
+def select_estimated_positions_between(
+    run_id: str, start: datetime, end: datetime
+) -> Select:
     """Estimated (lat, lon) for one run in [start, end], ordered by time."""
     return (
         select(
@@ -32,6 +34,8 @@ def select_estimated_positions_between(run_id: str, start: datetime, end: dateti
         )
         .order_by(EstimatedCarState.time)
     )
+
+
 def select_runs() -> Select:
     """Every run, newest drive first."""
     return select(Run).order_by(Run.start_time.desc(), Run.run_id)
