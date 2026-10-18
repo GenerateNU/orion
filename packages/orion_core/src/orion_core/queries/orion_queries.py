@@ -1,15 +1,13 @@
 """OrionDB statement builders. They build statements but never run them, so the
 async backend and the sync pipeline can share them."""
 
-from typing import Any
-
-from sqlalchemy import Select, select
 from datetime import datetime
+from typing import Any
 
 from sqlalchemy import Delete, Insert, Select, Update, delete, exists, select, update
 from sqlalchemy.dialects.postgresql import insert
 
-from orion_core.models.orion import PipelineRun, Run, SensorSources, EstimatedCarState
+from orion_core.models.orion import EstimatedCarState, PipelineRun, Run, SensorSources
 
 
 def select_sensor_sources() -> Select[*tuple[Any, ...]]:

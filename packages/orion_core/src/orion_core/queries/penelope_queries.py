@@ -2,8 +2,8 @@
 async backend and the sync pipeline can share them."""
 
 from collections.abc import Collection
-from typing import Any
 from datetime import datetime
+from typing import Any
 
 from sqlalchemy import Select, select
 
