@@ -7,8 +7,8 @@ import {
   redirect,
   stringifySearchWith,
 } from "@tanstack/react-router";
-import EmptyState from "@components/EmptyState";
-import LoadingState from "@components/LoadingState";
+import EmptyState from "@components/ui/EmptyState";
+import LoadingState from "@components/ui/LoadingState";
 import { validateDashboardSearch } from "@features/dashboard/utils/search";
 import RunsView from "@views/RunsView";
 import App from "./App";

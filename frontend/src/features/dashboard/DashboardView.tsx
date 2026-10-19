@@ -1,8 +1,8 @@
 import { useEffect } from "react";
 import { getRouteApi } from "@tanstack/react-router";
-import EmptyState from "@components/EmptyState";
-import ErrorState from "@components/ErrorState";
-import LoadingState from "@components/LoadingState";
+import EmptyState from "@components/ui/EmptyState";
+import ErrorState from "@components/ui/ErrorState";
+import LoadingState from "@components/ui/LoadingState";
 import Breadcrumb, { BreadcrumbCurrent, BreadcrumbLink } from "@components/layout/Breadcrumb";
 import PageHeader from "@components/layout/PageHeader";
 import StatusBadge from "@components/runs/StatusBadge";

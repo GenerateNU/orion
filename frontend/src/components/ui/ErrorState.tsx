@@ -1,6 +1,6 @@
 import { describeError } from "@utils/describeError";
 import { cx } from "@utils/classNames";
-import styles from "@components/State.module.css";
+import styles from "./State.module.css";
 
 type ErrorStateProps = {
   error: unknown;

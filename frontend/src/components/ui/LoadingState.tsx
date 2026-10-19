@@ -1,4 +1,4 @@
-import styles from "@components/State.module.css";
+import styles from "./State.module.css";
 
 type LoadingStateProps = {
   message?: string;
