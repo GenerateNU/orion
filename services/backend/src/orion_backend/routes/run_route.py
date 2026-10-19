@@ -2,10 +2,10 @@
 
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, Path, status
+from fastapi import APIRouter, Depends, Path, Query, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from orion_backend.core.database import get_orion_db
+from orion_backend.core.database import get_optional_penelope_db, get_orion_db
 from orion_backend.core.openapi import error_responses
 from orion_backend.schemas.run_schema import RunResponse
 from orion_backend.services.run_service import RunService
@@ -13,16 +13,24 @@ from orion_backend.services.run_service import RunService
 router = APIRouter(prefix="/runs", tags=["runs"])
 
 
-def get_run_service(db: AsyncSession = Depends(get_orion_db)) -> RunService:
-    return RunService(db)
+def get_run_service(
+    db: AsyncSession = Depends(get_orion_db),
+    penelope_db: AsyncSession | None = Depends(get_optional_penelope_db),
+) -> RunService:
+    return RunService(db, penelope_db)
 
 
 @router.get("", response_model=list[RunResponse], summary="List runs")
 async def list_runs(
+    processed: Annotated[
+        bool,
+        Query(description="Only runs with a pipeline job that succeeded with no error."),
+    ] = False,
     service: RunService = Depends(get_run_service),
 ) -> list[RunResponse]:
-    """Every run OrionDB knows about, newest first."""
-    return await service.list_runs()
+    """Every run OrionDB knows about, newest first. `run_time` comes from Penelope and is
+    `null` when it's unreachable."""
+    return await service.list_runs(processed)
 
 
 @router.get(

@@ -8,6 +8,8 @@ from orion_core.queries.orion_queries import (
     delete_run,
     insert_run,
     select_run,
+    select_processed_run_ids,
+    select_processed_runs,
     select_run_has_pipeline_runs,
     select_runs,
     update_run,
@@ -26,6 +28,12 @@ class RunRepository:
 
     async def list_runs(self) -> Sequence[Run]:
         return (await self.db.scalars(select_runs())).all()
+
+    async def list_processed_runs(self) -> Sequence[Run]:
+        return (await self.db.scalars(select_processed_runs())).all()
+
+    async def list_processed_run_ids(self) -> set[str]:
+        return set((await self.db.scalars(select_processed_run_ids())).all())
 
     async def get_run(self, run_id: str) -> Run | None:
         return (await self.db.scalars(select_run(run_id))).one_or_none()

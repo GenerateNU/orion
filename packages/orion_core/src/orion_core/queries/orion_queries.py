@@ -48,6 +48,23 @@ def select_runs() -> Select[Run]:
     return select(Run).order_by(Run.start_time.desc(), Run.run_id)
 
 
+def select_processed_run_ids() -> Select[str]:
+    """Ids of runs with at least one pipeline job that succeeded without an error."""
+    return (
+        select(PipelineRun.run_id)
+        .where(
+            PipelineRun.status == PipelineStatus.SUCCEEDED,
+            PipelineRun.error.is_(None),
+        )
+        .distinct()
+    )
+
+
+def select_processed_runs() -> Select[Run]:
+    """`select_runs`, limited to processed runs (see `select_processed_run_ids`)."""
+    return select_runs().where(Run.run_id.in_(select_processed_run_ids()))
+
+
 def select_pipeline_runs(
     run_id: str | None = None, status: str | None = None, limit: int = 50
 ) -> Select[PipelineRun]:

@@ -4,7 +4,7 @@ Alembic only sees Orion's `Base.metadata`, so it can never touch these.
 The same definitions work for real Penelope and penelope2.
 """
 
-from sqlalchemy import Column, DateTime, MetaData, String, Table
+from sqlalchemy import Column, DateTime, Integer, MetaData, String, Table
 from sqlalchemy.dialects.postgresql import ARRAY, DOUBLE_PRECISION
 
 penelope_metadata = MetaData()
@@ -23,4 +23,18 @@ data_type_table = Table(
     penelope_metadata,
     Column("name", String, primary_key=True),
     Column("unit", String),
+)
+
+# One row per logging session. `id` (uuid text) is what `data."runId"` holds and what
+# Orion stores as `run_id`. `"runId"` is a counter that is NOT unique, so Orion
+# never uses it.
+run_table = Table(
+    "run",
+    penelope_metadata,
+    Column("id", String, primary_key=True),
+    Column("runId", Integer),
+    Column("driverName", String),
+    Column("locationName", String),
+    Column("notes", String),
+    Column("time", DateTime(timezone=True)),
 )

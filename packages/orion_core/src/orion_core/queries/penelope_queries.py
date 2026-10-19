@@ -7,7 +7,7 @@ from typing import Any
 
 from sqlalchemy import Select, select
 
-from orion_core.models.penelope import data_table, data_type_table
+from orion_core.models.penelope import data_table, data_type_table, run_table
 
 
 def select_readings(
@@ -51,3 +51,18 @@ def select_data_types() -> Select[*tuple[Any, ...]]:
     return select(data_type_table.c.name, data_type_table.c.unit).order_by(
         data_type_table.c.name
     )
+
+
+def select_penelope_runs() -> Select[*tuple[Any, ...]]:
+    """Every Penelope run, newest first: `run_id` (`run.id`, a uuid) and `time`.
+
+    `run."runId"` is left out on purpose: it isn't unique.
+    """
+    return select(run_table.c.id.label("run_id"), run_table.c.time).order_by(
+        run_table.c.time.desc().nulls_last(), run_table.c.id
+    )
+
+
+def select_penelope_runs_by_ids(run_ids: Collection[str]) -> Select[*tuple[Any, ...]]:
+    """`select_penelope_runs`, limited to the given run ids."""
+    return select_penelope_runs().where(run_table.c.id.in_(list(run_ids)))
