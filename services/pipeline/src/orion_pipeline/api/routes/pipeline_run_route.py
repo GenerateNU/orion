@@ -1,12 +1,13 @@
-from typing import cast
+from typing import Annotated, cast
 
-from fastapi import APIRouter, HTTPException, Request, status
+from fastapi import APIRouter, HTTPException, Query, Request, status
 
+from orion_core.models import PipelineStatus
 from orion_core.schemas.pipeline_run_schema import (
     PipelineRunCreate,
     PipelineRunResponse,
 )
-from orion_pipeline.jobs.job_queue import JobQueue
+from orion_pipeline.jobs.job_queue import JobAlreadyActiveError, JobQueue
 
 router = APIRouter(prefix="/runs", tags=["runs"])
 
@@ -22,8 +23,24 @@ def _queue(request: Request) -> JobQueue:
     "", response_model=PipelineRunResponse, status_code=status.HTTP_202_ACCEPTED
 )
 def create_run(body: PipelineRunCreate, request: Request) -> PipelineRunResponse:
-    """Queue a job for the worker."""
-    return PipelineRunResponse.model_validate(_queue(request).enqueue(body.run_id))
+    """Queue a job for the worker. 409 if the run already has an active job."""
+    try:
+        job = _queue(request).enqueue(body.run_id)
+    except JobAlreadyActiveError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+    return PipelineRunResponse.model_validate(job)
+
+
+@router.get("", response_model=list[PipelineRunResponse])
+def list_runs(
+    request: Request,
+    run_id: str | None = None,
+    pipeline_status: Annotated[PipelineStatus | None, Query(alias="status")] = None,
+    limit: Annotated[int, Query(ge=1, le=200)] = 50,
+) -> list[PipelineRunResponse]:
+    """Job history, newest first."""
+    jobs = _queue(request).list(run_id, pipeline_status, limit)
+    return [PipelineRunResponse.model_validate(job) for job in jobs]
 
 
 @router.get("/{job_id}", response_model=PipelineRunResponse)

@@ -8,7 +8,13 @@ from sqlalchemy import Select, delete, exists, select, update
 from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.sql.dml import ReturningDelete, ReturningInsert, ReturningUpdate
 
-from orion_core.models.orion import EstimatedCarState, PipelineRun, Run, SensorSources
+from orion_core.models.orion import (
+    EstimatedCarState,
+    PipelineRun,
+    PipelineStatus,
+    Run,
+    SensorSources,
+)
 
 
 def select_sensor_sources() -> Select[*tuple[Any, ...]]:
@@ -40,6 +46,32 @@ def select_estimated_positions_between(
 def select_runs() -> Select[Run]:
     """Every run, newest drive first."""
     return select(Run).order_by(Run.start_time.desc(), Run.run_id)
+
+
+def select_pipeline_runs(
+    run_id: str | None = None, status: str | None = None, limit: int = 50
+) -> Select[PipelineRun]:
+    """Pipeline jobs, newest first, optionally for one run and/or one status."""
+    stmt = select(PipelineRun).order_by(
+        PipelineRun.queued_at.desc(), PipelineRun.id.desc()
+    )
+    if run_id is not None:
+        stmt = stmt.where(PipelineRun.run_id == run_id)
+    if status is not None:
+        stmt = stmt.where(PipelineRun.status == status)
+    return stmt.limit(limit)
+
+
+def select_active_pipeline_run(run_id: str) -> Select[PipelineRun]:
+    """The run's queued or running job, if it has one."""
+    return (
+        select(PipelineRun)
+        .where(
+            PipelineRun.run_id == run_id,
+            PipelineRun.status.in_([PipelineStatus.QUEUED, PipelineStatus.RUNNING]),
+        )
+        .limit(1)
+    )
 
 
 def select_run(run_id: str) -> Select[Run]:
