@@ -115,18 +115,29 @@ test: ## Run tests
 	@uv run pytest
 
 .PHONY: lint
-lint: ## Lint (ruff check)
+lint: ## Lint (ruff check + pydoclint)
 	@uv run ruff check packages services
+	@uv run pydoclint packages services
 
-.PHONY: format
-format: ## Check formatting (ruff format --check)
+.PHONY: format-check
+format-check: ## Check formatting (ruff format --check)
 	@uv run ruff format --check packages services
 
-.PHONY: fix
-fix: ## Auto-fix lint and formatting
-	@uv run ruff check --fix packages services
-	@uv run ruff format packages services
-	@printf "$(GREEN)✓ Fixed$(NC)\n"
+.PHONY: typecheck
+typecheck: ## Type check (mypy)
+	@uv run mypy
+
+# Runs every tool even if an earlier one fails, so one pass shows everything left to fix.
+.PHONY: format
+format: ## Auto-fix lint and formatting, then report docstring and type errors
+	@status=0; \
+	uv run ruff check --fix packages services || status=1; \
+	uv run ruff format packages services || status=1; \
+	uv run pydoclint packages services || status=1; \
+	uv run mypy || status=1; \
+	if [ $$status -eq 0 ]; then printf "$(GREEN)✓ All checks pass$(NC)\n"; \
+	else printf "$(RED)✗ Fix the errors above by hand$(NC)\n" >&2; fi; \
+	exit $$status
 
 .PHONY: quality
-quality: lint format test ## Lint, format check, and tests (what CI runs)
+quality: lint format-check typecheck test ## Lint, format check, type check, and tests (what CI runs)

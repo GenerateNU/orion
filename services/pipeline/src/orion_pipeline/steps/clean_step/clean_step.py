@@ -2,6 +2,8 @@ from collections.abc import Iterator
 
 import pandas as pd
 
+from orion_pipeline.clients.oriondb_client import OrionDBClient
+from orion_pipeline.clients.penelope_client import PenelopeClient
 from orion_pipeline.runner.run_context import RunContext
 from orion_pipeline.steps.base_step import PipelineStep
 from orion_pipeline.steps.clean_step.clean_utils import (
@@ -26,7 +28,10 @@ class CleanStep(PipelineStep):
     output_table = "cleaned_data"
     pagination_key = ("time", "raw_tag")
 
-    def __init__(self, reader, writer):
+    # The reader for the clean step will always be PenelopeClient and never OrionDBClient
+    reader: PenelopeClient
+
+    def __init__(self, reader: PenelopeClient, writer: OrionDBClient):
         super().__init__(reader, writer)
         self.sensor_map: dict[str, str] = {}
 

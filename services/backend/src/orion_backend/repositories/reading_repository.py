@@ -1,4 +1,5 @@
 from collections.abc import Sequence
+from typing import Any
 
 from sqlalchemy import Row
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -12,5 +13,5 @@ class ReadingRepository:
     def __init__(self, db: AsyncSession):
         self.db = db
 
-    async def list(self, run_id: str, limit: int) -> Sequence[Row]:
+    async def list(self, run_id: str, limit: int) -> Sequence[Row[*tuple[Any, ...]]]:
         return (await self.db.execute(select_readings(run_id, limit))).all()

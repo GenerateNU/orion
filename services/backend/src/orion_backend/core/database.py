@@ -26,7 +26,7 @@ def create_engines(settings: Settings) -> dict[str, AsyncEngine]:
 
 def create_sessionmakers(
     engines: dict[str, AsyncEngine],
-) -> dict[str, async_sessionmaker]:
+) -> dict[str, async_sessionmaker[AsyncSession]]:
     return {name: async_sessionmaker(engine, expire_on_commit=False) for name, engine in engines.items()}
 
 

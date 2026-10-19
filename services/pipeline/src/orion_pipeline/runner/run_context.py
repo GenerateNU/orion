@@ -1,5 +1,7 @@
 from pydantic import BaseModel
+
 from orion_core.settings import get_settings
+
 
 class RunContext(BaseModel):
     """What a step knows about the job it's running in.

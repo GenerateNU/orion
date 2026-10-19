@@ -13,5 +13,7 @@ class StateRepository:
     def __init__(self, db: AsyncSession):
         self.db = db
 
-    async def list_positions(self, run_id: str, start: datetime, end: datetime) -> Sequence[Row]:
+    async def list_positions(
+        self, run_id: str, start: datetime, end: datetime
+    ) -> Sequence[Row[datetime, float, float]]:
         return (await self.db.execute(select_estimated_positions_between(run_id, start, end))).all()

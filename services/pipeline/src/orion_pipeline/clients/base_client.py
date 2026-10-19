@@ -2,7 +2,6 @@ from collections.abc import Iterator
 from typing import Any
 
 import pandas as pd
-import orion_core.settings
 from sqlalchemy import Engine, Select, tuple_
 
 
@@ -14,13 +13,13 @@ class BaseClient:
         # Most rows any one read pulls at once (`Settings.pipeline_page_size`).
         self.page_size = page_size
 
-    def read_frame(self, stmt: Select) -> pd.DataFrame:
+    def read_frame(self, stmt: Select[*tuple[Any, ...]]) -> pd.DataFrame:
         with self.engine.connect() as conn:
             return pd.read_sql(stmt, conn)
 
     def read_page(
         self,
-        stmt: Select,
+        stmt: Select[*tuple[Any, ...]],
         key: tuple[str, ...],
         after: tuple[Any, ...] | None,
     ) -> pd.DataFrame:
@@ -39,7 +38,9 @@ class BaseClient:
             stmt.order_by(None).order_by(*cols).limit(self.page_size)
         )
 
-    def iter_pages(self, stmt: Select, key: tuple[str, ...]) -> Iterator[pd.DataFrame]:
+    def iter_pages(
+        self, stmt: Select[*tuple[Any, ...]], key: tuple[str, ...]
+    ) -> Iterator[pd.DataFrame]:
         """Yield `stmt`'s rows one page at a time, paged by `key`.
 
         Each page is read on its own short connection, and the next one isn't

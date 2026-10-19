@@ -3,6 +3,7 @@ async backend and the sync pipeline can share them."""
 
 from collections.abc import Collection
 from datetime import datetime
+from typing import Any
 
 from sqlalchemy import Select, select
 
@@ -13,7 +14,7 @@ def select_readings(
     run_id: str,
     limit: int | None = None,
     data_type_names: Collection[str] | None = None,
-) -> Select:
+) -> Select[*tuple[Any, ...]]:
     """`data_type_names`, if given, keeps only rows with those raw tags."""
     stmt = (
         select(
@@ -34,7 +35,7 @@ def select_readings_between(
     data_type_names: Collection[str],
     start: datetime,
     end: datetime,
-) -> Select:
+) -> Select[*tuple[Any, ...]]:
     """Readings for the given raw tags with `start <= time <= end`.
 
     Unlike `select_readings`, every filter is required, so an API caller can't
@@ -45,7 +46,7 @@ def select_readings_between(
     )
 
 
-def select_data_types() -> Select:
+def select_data_types() -> Select[*tuple[Any, ...]]:
     """Penelope's sensor types, by name."""
     return select(data_type_table.c.name, data_type_table.c.unit).order_by(
         data_type_table.c.name

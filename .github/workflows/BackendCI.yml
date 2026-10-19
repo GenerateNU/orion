@@ -5,16 +5,63 @@ on:
     branches: ["**"]
     paths:
       - "backend/**"
+      - "packages/**"
+      - "services/**"
+      - "pyproject.toml"
+      - "uv.lock"
       - "docker-compose.yml"
       - ".github/workflows/BackendCI.yml"
   pull_request:
     branches: [main]
     paths:
       - "backend/**"
+      - "packages/**"
+      - "services/**"
+      - "pyproject.toml"
+      - "uv.lock"
       - "docker-compose.yml"
       - ".github/workflows/BackendCI.yml"
 
 jobs:
+  lint-services:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up uv
+        uses: astral-sh/setup-uv@v6
+
+      - name: Install dev tools
+        run: uv sync --frozen --only-dev
+
+      - name: Run ruff
+        run: uv run --no-sync ruff check packages services
+
+      - name: Check formatting
+        run: uv run --no-sync ruff format --check packages services
+
+      - name: Run pydoclint
+        run: uv run --no-sync pydoclint packages services
+
+  typecheck-services:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up uv
+        uses: astral-sh/setup-uv@v6
+
+      # mypy needs the workspace's runtime dependencies to check calls against them.
+      - name: Install dependencies
+        run: uv sync --frozen
+
+      - name: Run mypy
+        run: uv run --no-sync mypy
+
   lint-and-test:
     runs-on: ubuntu-latest
 

@@ -1,9 +1,8 @@
-from datetime import datetime
-
-from sqlalchemy import  String, ForeignKey
+from sqlalchemy import ForeignKey, String
 from sqlalchemy.orm import Mapped, mapped_column
 
 from orion_core.models.orion.base import Base
+
 
 class SensorSources(Base):
     """A mapping between Penelope sensor names and our cleaned sensor names."""
