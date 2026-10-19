@@ -115,3 +115,151 @@ h2 {
 .state--error {
   color: var(--color-error);
 }
+
+/* ---------- Forms ---------- */
+
+.field {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+  /* Full row: run labels are a 36-character uuid plus a date. */
+  flex: 1 1 100%;
+  min-width: 0;
+}
+
+.field__label {
+  font-size: 0.875rem;
+  color: var(--color-muted);
+}
+
+select {
+  width: 100%;
+  padding: var(--space-2);
+  font: inherit;
+  font-variant-numeric: tabular-nums;
+  color: inherit;
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius);
+}
+
+.button {
+  padding: var(--space-2) var(--space-3);
+  font: inherit;
+  font-weight: 600;
+  color: #ffffff;
+  background: var(--color-accent);
+  border: 1px solid var(--color-accent);
+  border-radius: var(--radius);
+  cursor: pointer;
+}
+
+.button:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.note {
+  flex-basis: 100%;
+  margin: 0;
+  padding: var(--space-2) var(--space-3);
+  font-size: 0.875rem;
+  border-radius: var(--radius);
+}
+
+.note--warning {
+  color: var(--color-warning);
+  background: var(--color-warning-soft);
+}
+
+/* ---------- Run select ---------- */
+
+.app-header__run {
+  font-size: 0.875rem;
+  color: var(--color-muted);
+}
+
+.run-select {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 380px), 1fr));
+  gap: var(--space-3);
+  align-items: start;
+}
+
+.panel__hint {
+  margin: calc(-1 * var(--space-2)) 0 var(--space-3);
+  font-size: 0.875rem;
+  color: var(--color-muted);
+}
+
+.picker {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: var(--space-2);
+}
+
+/* ---------- Pipeline job status ---------- */
+
+.job-status {
+  margin-top: var(--space-3);
+  padding: var(--space-3);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius);
+}
+
+.job-status__header {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+.job-status__run {
+  font-weight: 600;
+}
+
+.job-status__text {
+  margin: var(--space-2) 0 0;
+}
+
+.job-status__error {
+  margin: var(--space-2) 0 0;
+  padding: var(--space-2);
+  overflow-x: auto;
+  white-space: pre-wrap;
+  font-size: 0.8125rem;
+  color: var(--color-error);
+  background: var(--color-bg);
+  border-radius: var(--radius);
+}
+
+.job-status__meta {
+  margin: var(--space-2) 0 0;
+  font-size: 0.8125rem;
+  color: var(--color-muted);
+}
+
+.badge {
+  padding: 2px var(--space-2);
+  font-size: 0.75rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  border-radius: 999px;
+  color: var(--color-muted);
+  background: var(--color-bg);
+}
+
+.badge--running {
+  color: var(--color-info);
+  background: var(--color-info-soft);
+}
+
+.badge--succeeded {
+  color: var(--color-success);
+  background: var(--color-success-soft);
+}
+
+.badge--failed {
+  color: var(--color-error);
+  background: var(--color-error-soft);
+}
