@@ -104,13 +104,9 @@ mypy_path = [
     "services/backend/src",
     "services/pipeline/src"
 ]
-files = [
-    "packages/orion_core/src",
-    "services/backend/src",
-    "services/pipeline/src",
-    "services/backend/tests",
-    "services/pipeline/tests",
-]
+# All of services/ rather than each src/ and tests/ folder: a pattern or folder
+# with no .py files in it is an error, and test folders come and go.
+files = ["packages/orion_core/src", "services"]
 explicit_package_bases = true
 plugins = ["pydantic.mypy"]
 strict = true
@@ -120,6 +116,7 @@ strict = true
 module = ["services.*.tests.*"]
 disallow_untyped_defs = false
 disallow_incomplete_defs = false
+disallow_untyped_calls = false
 disallow_any_generics = false
 check_untyped_defs = true
 # Stubbing out a method on an instance is a normal way to fake I/O in tests.
@@ -130,5 +127,5 @@ init_typed = true
 init_forbid_extra = true
 
 [tool.pytest.ini_options]
-testpaths = ["services/backend/tests", "services/pipeline/tests"]
+testpaths = ["services/*/tests"]
 addopts = "--import-mode=importlib"

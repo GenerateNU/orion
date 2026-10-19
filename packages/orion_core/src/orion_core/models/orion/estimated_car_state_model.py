@@ -1,6 +1,6 @@
 from datetime import datetime
 
-from sqlalchemy import FLOAT, INTEGER, DateTime, String
+from sqlalchemy import FLOAT, DateTime, String
 from sqlalchemy.orm import Mapped, mapped_column
 
 from orion_core.models.orion.base import Base

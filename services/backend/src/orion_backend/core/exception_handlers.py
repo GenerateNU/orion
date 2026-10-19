@@ -1,3 +1,5 @@
+from collections.abc import Awaitable, Callable
+
 from fastapi import FastAPI, Request
 from fastapi.responses import JSONResponse
 
@@ -24,10 +26,12 @@ async def domain_error_handler(request: Request, exc: Exception) -> JSONResponse
     return JSONResponse(status_code=400, content=ErrorResponse(detail=str(exc)).model_dump())
   
   
-def _status_handler(status_code: int):
+def _status_handler(
+    status_code: int,
+) -> Callable[[Request, Exception], Awaitable[JSONResponse]]:
     """A handler that returns `ErrorResponse(detail=str(exc))` with `status_code`."""
 
-    async def handler(request: Request, exc: DomainError) -> JSONResponse:
+    async def handler(request: Request, exc: Exception) -> JSONResponse:
         return JSONResponse(
             status_code=status_code, content=ErrorResponse(detail=str(exc)).model_dump()
         )

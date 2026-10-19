@@ -34,7 +34,8 @@ class RunResponse(BaseModel):
         examples=["2026-10-02T09:00:00Z"],
     )
 
-    @computed_field(
+    # mypy can't type a decorator over @property; this is pydantic's documented fix.
+    @computed_field(  # type: ignore[prop-decorator]
         description="`end_time - start_time` in seconds. `null` if either is `null`.",
         examples=[1769.0],
     )
