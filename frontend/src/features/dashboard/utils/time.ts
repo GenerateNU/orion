@@ -49,7 +49,10 @@ export function toIsoRange(
   format: RangeFormat,
 ): { start: string; end: string } {
   const [from, to] = window ?? [0, timeline.durationMs];
-  return { start: toIso(timeline.startMs + from, format), end: toIso(timeline.startMs + to, format) };
+  return {
+    start: toIso(timeline.startMs + from, format),
+    end: toIso(timeline.startMs + to, format),
+  };
 }
 
 // Windows snap outward to a grid of 0.5% of the run, so windows a few pixels apart

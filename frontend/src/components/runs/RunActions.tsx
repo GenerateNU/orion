@@ -34,7 +34,11 @@ export default function RunActions({ row, isPending, onQueue }: RunActionsProps)
 
     case "not-processed":
     case "failed": {
-      const label = isPending ? "Queuing…" : row.status === "failed" ? "Retry pipeline" : "Queue pipeline";
+      const label = isPending
+        ? "Queuing…"
+        : row.status === "failed"
+          ? "Retry pipeline"
+          : "Queue pipeline";
       return (
         <Button
           variant={row.status === "failed" ? "secondary" : "primary"}

@@ -14,7 +14,13 @@ type PageHeaderProps = {
 };
 
 // The <h1> of every view.
-export default function PageHeader({ title, description, badge, actions, variant = "page" }: PageHeaderProps) {
+export default function PageHeader({
+  title,
+  description,
+  badge,
+  actions,
+  variant = "page",
+}: PageHeaderProps) {
   return (
     <header className={cx(styles.header, variant === "entity" && styles.entity)}>
       <div className={styles.text}>

@@ -9,7 +9,8 @@ type ProgressBarProps = {
 };
 
 export default function ProgressBar({ label, value }: ProgressBarProps) {
-  const percent = value === undefined ? undefined : Math.round(Math.min(Math.max(value, 0), 1) * 100);
+  const percent =
+    value === undefined ? undefined : Math.round(Math.min(Math.max(value, 0), 1) * 100);
 
   return (
     <div
@@ -20,7 +21,10 @@ export default function ProgressBar({ label, value }: ProgressBarProps) {
       aria-valuemax={100}
       aria-valuenow={percent}
     >
-      <div className={styles.fill} style={percent === undefined ? undefined : { width: `${percent}%` }} />
+      <div
+        className={styles.fill}
+        style={percent === undefined ? undefined : { width: `${percent}%` }}
+      />
     </div>
   );
 }

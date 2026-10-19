@@ -12,14 +12,19 @@ export type DashboardSearch = {
 
 // Values arrive as strings from the URL, or as arrays from navigate().
 const toNumbers = (value: unknown): number[] => {
-  const parts = Array.isArray(value) ? value : typeof value === "string" ? value.split(",") : [value];
+  const parts = Array.isArray(value)
+    ? value
+    : typeof value === "string"
+      ? value.split(",")
+      : [value];
   return parts.map(Number).filter(Number.isFinite);
 };
 
 function parseWindow(value: unknown): TimeWindow | undefined {
   if (value === undefined) return undefined;
   const [start, end, ...rest] = toNumbers(value);
-  if (start === undefined || end === undefined || rest.length > 0 || start < 0 || end <= start) return undefined;
+  if (start === undefined || end === undefined || rest.length > 0 || start < 0 || end <= start)
+    return undefined;
   return [start, end];
 }
 

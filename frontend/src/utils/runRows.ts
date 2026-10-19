@@ -43,7 +43,11 @@ function statusFor(latestJob: PipelineRunResponse | null, isProcessed: boolean):
 
 // Every source is optional so the table still lists what it can when one is down
 // (e.g. Penelope off the VPN still leaves the processed runs).
-export function buildRunRows({ penelopeRuns = [], processedRuns = [], jobs = [] }: RunRowSources): RunRow[] {
+export function buildRunRows({
+  penelopeRuns = [],
+  processedRuns = [],
+  jobs = [],
+}: RunRowSources): RunRow[] {
   const latestJobs = new Map<string, PipelineRunResponse>();
   for (const job of jobs) {
     if (!latestJobs.has(job.run_id)) latestJobs.set(job.run_id, job);

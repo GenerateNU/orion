@@ -53,7 +53,10 @@ export const useLaps = () => {
     (metrics: MetricsResponse): Lap[] => (timeline ? lapsFromMetrics(metrics, timeline) : []),
     [timeline],
   );
-  const { metrics, metricsIsLoading, metricsError } = useMetrics(runId, { select, enabled: !!timeline });
+  const { metrics, metricsIsLoading, metricsError } = useMetrics(runId, {
+    select,
+    enabled: !!timeline,
+  });
   return { laps: metrics, lapsIsLoading: metricsIsLoading, lapsError: metricsError };
 };
 
@@ -71,16 +74,20 @@ export const useRunPositions = (scope: DataScope) => {
   // Queries only run once the timeline is known, so `select` never sees the 0.
   const startMs = timeline?.startMs ?? 0;
   const window = useFetchWindow(scope);
-  const range = useMemo(() => (timeline ? toIsoRange(timeline, window, "naive") : undefined), [timeline, window]);
+  const range = useMemo(
+    () => (timeline ? toIsoRange(timeline, window, "naive") : undefined),
+    [timeline, window],
+  );
   const select = useCallback(
-    (data: StateDataResponse): RunPositions => ({ startMs, time: data.time, positions: data.positions }),
+    (data: StateDataResponse): RunPositions => ({
+      startMs,
+      time: data.time,
+      positions: data.positions,
+    }),
     [startMs],
   );
-  const { stateData, stateDataIsLoading, stateDataIsPlaceholderData, stateDataError } = useStateEstimation(
-    runId,
-    range,
-    { select, placeholderData: keepPreviousData },
-  );
+  const { stateData, stateDataIsLoading, stateDataIsPlaceholderData, stateDataError } =
+    useStateEstimation(runId, range, { select, placeholderData: keepPreviousData });
   return {
     positions: stateData,
     positionsIsLoading: stateDataIsLoading,
@@ -107,18 +114,18 @@ export const useSensorTrace = (sensors: readonly string[], scope: DataScope) => 
   const startMs = timeline?.startMs ?? 0;
   const window = useFetchWindow(scope);
   const range = useMemo(
-    () => (timeline ? { sensors: [...sensors].sort(), ...toIsoRange(timeline, window, "utc") } : undefined),
+    () =>
+      timeline
+        ? { sensors: [...sensors].sort(), ...toIsoRange(timeline, window, "utc") }
+        : undefined,
     [timeline, window, sensors],
   );
   const select = useCallback(
     (data: SensorDataResponse): SensorTraces => ({ startMs, series: data.series }),
     [startMs],
   );
-  const { sensorData, sensorDataIsLoading, sensorDataIsPlaceholderData, sensorDataError } = useSensorData(
-    runId,
-    range,
-    { select, placeholderData: keepPreviousData },
-  );
+  const { sensorData, sensorDataIsLoading, sensorDataIsPlaceholderData, sensorDataError } =
+    useSensorData(runId, range, { select, placeholderData: keepPreviousData });
   return {
     trace: sensorData,
     traceIsLoading: sensorDataIsLoading,

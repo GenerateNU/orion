@@ -11,7 +11,11 @@ import { ApiError } from "@api/client";
 import { formatDate, formatDuration } from "@utils/format";
 import DashboardStoreProvider from "@features/dashboard/state/DashboardStoreProvider";
 import { useLastRunStore } from "@features/dashboard/state/lastRunStore";
-import { useCommittedWindow, useDashboardRun, useSelectedLaps } from "@features/dashboard/state/useDashboard";
+import {
+  useCommittedWindow,
+  useDashboardRun,
+  useSelectedLaps,
+} from "@features/dashboard/state/useDashboard";
 import styles from "./DashboardView.module.css";
 
 const dashboardRoute = getRouteApi("/runs/$runId/dashboard");
@@ -102,7 +106,9 @@ const formatRunTime = (ms: number) => formatDuration(ms / 1000);
 function SelectionSummary() {
   const window = useCommittedWindow();
   const laps = useSelectedLaps();
-  const windowLabel = window ? `${formatRunTime(window[0])}–${formatRunTime(window[1])}` : "whole run";
+  const windowLabel = window
+    ? `${formatRunTime(window[0])}–${formatRunTime(window[1])}`
+    : "whole run";
   const lapsLabel = laps.length > 0 ? laps.join(", ") : "none";
 
   return (

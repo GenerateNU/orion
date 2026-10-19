@@ -24,7 +24,12 @@ function pageSlots(page: number, pageCount: number): PageSlot[] {
   return slots;
 }
 
-export default function Pagination({ page, pageCount, onPageChange, label = "Pagination" }: PaginationProps) {
+export default function Pagination({
+  page,
+  pageCount,
+  onPageChange,
+  label = "Pagination",
+}: PaginationProps) {
   if (pageCount <= 1) return null;
 
   return (

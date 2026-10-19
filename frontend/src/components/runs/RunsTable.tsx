@@ -20,7 +20,14 @@ type RunsTableProps = {
 };
 
 // Figma "Runs table". Presentational: rows and callbacks come from the view.
-export default function RunsTable({ rows, pendingRunId, placeholder, summary, pagination, onQueue }: RunsTableProps) {
+export default function RunsTable({
+  rows,
+  pendingRunId,
+  placeholder,
+  summary,
+  pagination,
+  onQueue,
+}: RunsTableProps) {
   return (
     <div className={styles.container}>
       <div className={styles.scroll}>

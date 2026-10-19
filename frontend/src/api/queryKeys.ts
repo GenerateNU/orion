@@ -1,7 +1,6 @@
 import type { PipelineRunFilters } from "@schemas/pipeline.schema";
 import type { RunListFilters } from "@schemas/run.schema";
 
-
 export const runKeys = {
   all: ["runs"] as const,
   lists: () => [...runKeys.all, "list"] as const,
@@ -23,7 +22,6 @@ export const pipelineRunKeys = {
   list: (filters: PipelineRunFilters) => [...pipelineRunKeys.all, "list", filters] as const,
   detail: (jobId: number | undefined) => [...pipelineRunKeys.all, "detail", jobId] as const,
 };
-
 
 export const runDataKeys = {
   root: ["run-data"] as const,

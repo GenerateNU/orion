@@ -9,8 +9,15 @@ type ButtonProps = ButtonHTMLAttributes<HTMLButtonElement> & {
   variant?: ButtonVariant;
 };
 
-export default function Button({ variant = "primary", type = "button", className, ...props }: ButtonProps) {
-  return <button type={type} className={cx(styles.button, styles[variant], className)} {...props} />;
+export default function Button({
+  variant = "primary",
+  type = "button",
+  className,
+  ...props
+}: ButtonProps) {
+  return (
+    <button type={type} className={cx(styles.button, styles[variant], className)} {...props} />
+  );
 }
 
 type ButtonAnchorProps = ComponentPropsWithRef<"a"> & {

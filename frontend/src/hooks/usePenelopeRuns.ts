@@ -1,8 +1,5 @@
 import { useQuery } from "@tanstack/react-query";
-import {
-  PenelopeRunResponseSchema,
-  type PenelopeRunResponse,
-} from "@schemas/penelopeRun.schema";
+import { PenelopeRunResponseSchema, type PenelopeRunResponse } from "@schemas/penelopeRun.schema";
 import axios from "@api/client";
 import { penelopeRunKeys } from "@api/queryKeys";
 import { apiUrls } from "@utils/urls";

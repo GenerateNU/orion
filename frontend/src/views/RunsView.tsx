@@ -15,10 +15,19 @@ const PAGE_SIZE = 8;
 
 // Figma "Runs — Landing": every run, its pipeline status and the next action.
 export default function RunsView() {
-  const { runRows, runRowsIsLoading, runRowsError, penelopeRunsError, runsError, pipelineRunsError } =
-    useRunRows();
+  const {
+    runRows,
+    runRowsIsLoading,
+    runRowsError,
+    penelopeRunsError,
+    runsError,
+    pipelineRunsError,
+  } = useRunRows();
   const { triggerPipeline, triggerPipelineError } = usePipelineMutations();
-  const { page, pageCount, pageItems, setPage, firstItem, lastItem } = usePagination(runRows, PAGE_SIZE);
+  const { page, pageCount, pageItems, setPage, firstItem, lastItem } = usePagination(
+    runRows,
+    PAGE_SIZE,
+  );
 
   const [pendingRunId, setPendingRunId] = useState<string | null>(null);
   const handleQueue = useCallback(
@@ -52,17 +61,20 @@ export default function RunsView() {
 
       {!runRowsError && penelopeRunsError && (
         <Notice tone="warning">
-          Penelope is unavailable, so only processed runs are listed. {describeError(penelopeRunsError)}
+          Penelope is unavailable, so only processed runs are listed.{" "}
+          {describeError(penelopeRunsError)}
         </Notice>
       )}
       {!runRowsError && runsError && (
         <Notice tone="warning">
-          Processed runs couldn't be loaded, so dashboards can't be opened. {describeError(runsError)}
+          Processed runs couldn't be loaded, so dashboards can't be opened.{" "}
+          {describeError(runsError)}
         </Notice>
       )}
       {pipelineRunsError && (
         <Notice tone="warning">
-          Pipeline jobs couldn't be loaded, so statuses may be out of date. {describeError(pipelineRunsError)}
+          Pipeline jobs couldn't be loaded, so statuses may be out of date.{" "}
+          {describeError(pipelineRunsError)}
         </Notice>
       )}
       {triggerPipelineError && <Notice tone="error">{describeError(triggerPipelineError)}</Notice>}
@@ -75,7 +87,12 @@ export default function RunsView() {
         summary={!placeholder && `Showing ${firstItem}–${lastItem} of ${runRows.length} runs`}
         pagination={
           !placeholder && (
-            <Pagination page={page} pageCount={pageCount} onPageChange={setPage} label="Runs pages" />
+            <Pagination
+              page={page}
+              pageCount={pageCount}
+              onPageChange={setPage}
+              label="Runs pages"
+            />
           )
         }
       />

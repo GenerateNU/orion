@@ -9,7 +9,12 @@ import { useRun } from "@hooks/useRuns";
 import { useDashboardStoreApi } from "@features/dashboard/state/dashboardStore";
 import { lapsFromMetrics, lapsToWindow } from "@features/dashboard/utils/laps";
 import type { DashboardSearch } from "@features/dashboard/utils/search";
-import { runTimeline, snapWindow, type RunTime, type TimeWindow } from "@features/dashboard/utils/time";
+import {
+  runTimeline,
+  snapWindow,
+  type RunTime,
+  type TimeWindow,
+} from "@features/dashboard/utils/time";
 
 // The dashboard's state API. Panels read and change shared state only through
 // these hooks, so a field can move between the URL and the store without
@@ -48,7 +53,8 @@ export const useVisibleWindow = (): TimeWindow | null => {
 
 // For React-rendered highlights (lap list rows). Fast-moving hover time has no
 // hook like this on purpose: use useHoverTimeSubscription.
-export const useHoverLap = (): number | null => useStore(useDashboardStoreApi(), (state) => state.hoverLap);
+export const useHoverLap = (): number | null =>
+  useStore(useDashboardStoreApi(), (state) => state.hoverLap);
 
 // Calls `onChange` whenever the hovered run time changes, outside React rendering,
 // so charts and the map can move a crosshair or marker imperatively without
@@ -97,7 +103,11 @@ export const useDashboardActions = () => {
       navigate({
         search: (prev: DashboardSearch): DashboardSearch => {
           const laps = [...new Set(update(prev.laps ?? NO_LAPS))].sort((a, b) => a - b);
-          return { ...prev, laps: laps.length > 0 ? laps : undefined, t: windowForLaps(laps, prev.t) };
+          return {
+            ...prev,
+            laps: laps.length > 0 ? laps : undefined,
+            t: windowForLaps(laps, prev.t),
+          };
         },
       });
     };
@@ -117,7 +127,9 @@ export const useDashboardActions = () => {
       // Selecting laps also zooms to their span; an empty list shows the whole run.
       selectLaps: (lapIds: readonly number[]) => setLaps(() => lapIds),
       toggleLap: (lapId: number) =>
-        setLaps((laps) => (laps.includes(lapId) ? laps.filter((id) => id !== lapId) : [...laps, lapId])),
+        setLaps((laps) =>
+          laps.includes(lapId) ? laps.filter((id) => id !== lapId) : [...laps, lapId],
+        ),
       // While a brush is dragged: panels redraw from loaded data, nothing is fetched.
       previewWindow: (window: TimeWindow) => store.getState().setDraftWindow(window),
       // On release: snapped, written to the URL, and the detail data fetched.

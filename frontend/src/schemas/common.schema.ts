@@ -13,7 +13,11 @@ export const EpochTimesSchema = z.array(z.string()).transform((times, ctx) => {
   const epochMs = Float64Array.from(times, parseBackendTime);
   const bad = epochMs.findIndex(Number.isNaN);
   if (bad !== -1) {
-    ctx.issues.push({ code: "custom", message: `Invalid timestamp at index ${bad}: ${times[bad]}`, input: times });
+    ctx.issues.push({
+      code: "custom",
+      message: `Invalid timestamp at index ${bad}: ${times[bad]}`,
+      input: times,
+    });
     return z.NEVER;
   }
   return epochMs;
