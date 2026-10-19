@@ -1,0 +1,21 @@
+[project]
+name = "orion-backend-service"
+version = "0.1.0"
+description = "Orion API: async FastAPI over OrionDB (read/write) and Penelope (read-only)"
+requires-python = ">=3.13,<3.14"
+dependencies = [
+    "orion-core",
+    "fastapi>=0.115",
+    "httpx>=0.28",
+    "uvicorn[standard]>=0.34",
+]
+
+[tool.uv.sources]
+orion-core = { workspace = true }
+
+[build-system]
+requires = ["uv_build>=0.8,<0.12"]
+build-backend = "uv_build"
+
+[tool.uv.build-backend]
+module-name = "orion_backend"

@@ -1,0 +1,62 @@
+"""Async engines + per-request sessions for the two databases.
+
+Transaction rule (from via-wms): `get_orion_db` commits once per request;
+repositories only `flush()`. Penelope sessions never commit.
+"""
+
+from collections.abc import AsyncIterator
+
+from fastapi import Request
+from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession, async_sessionmaker
+
+from orion_backend.core.exceptions import ServiceUnavailableError
+from orion_core.db.engines import make_async_engine
+from orion_core.settings import Settings
+
+
+def create_engines(settings: Settings) -> dict[str, AsyncEngine]:
+    """The lifespan owns these and disposes them on shutdown."""
+    engines = {"orion": make_async_engine(settings.orion_database_url)}
+    if settings.penelope_database_url:
+        engines["penelope"] = make_async_engine(
+            settings.penelope_database_url, read_only=True
+        )
+    return engines
+
+
+def create_sessionmakers(
+    engines: dict[str, AsyncEngine],
+) -> dict[str, async_sessionmaker[AsyncSession]]:
+    return {name: async_sessionmaker(engine, expire_on_commit=False) for name, engine in engines.items()}
+
+
+async def get_orion_db(request: Request) -> AsyncIterator[AsyncSession]:
+    async with request.app.state.sessionmakers["orion"]() as session:
+        try:
+            yield session
+            await session.commit()
+        except Exception:
+            await session.rollback()
+            raise
+
+
+async def get_penelope_db(request: Request) -> AsyncIterator[AsyncSession]:
+    """503 if `PENELOPE_DATABASE_URL` is unset, since no engine was created."""
+    sessionmaker = request.app.state.sessionmakers.get("penelope")
+    if sessionmaker is None:
+        raise ServiceUnavailableError("Penelope is not configured (PENELOPE_DATABASE_URL unset)")
+    async with sessionmaker() as session:
+        yield session
+
+
+async def get_optional_penelope_db(
+    request: Request,
+) -> AsyncIterator[AsyncSession | None]:
+    """Like `get_penelope_db`, but yields None instead of a 503 when Penelope isn't
+    configured. For routes where Penelope only adds extra detail."""
+    sessionmaker = request.app.state.sessionmakers.get("penelope")
+    if sessionmaker is None:
+        yield None
+        return
+    async with sessionmaker() as session:
+        yield session

@@ -1,0 +1,36 @@
+.progress {
+  position: relative;
+  width: 120px;
+  height: 4px;
+  overflow: hidden;
+  background: var(--bg-raised);
+  border-radius: var(--radius-xs);
+}
+
+.fill {
+  height: 100%;
+  background: var(--status-processing);
+  border-radius: var(--radius-xs);
+}
+
+.indeterminate .fill {
+  width: 40%;
+  animation: slide 1.4s ease-in-out infinite;
+}
+
+@keyframes slide {
+  from {
+    transform: translateX(-100%);
+  }
+  to {
+    transform: translateX(250%);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .indeterminate .fill {
+    width: 100%;
+    opacity: 0.5;
+    animation: none;
+  }
+}

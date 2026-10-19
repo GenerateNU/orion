@@ -1,0 +1,49 @@
+.button {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 7px 13px; /* 8px 14px in Figma, minus the 1px border every variant carries */
+  font-size: 13px;
+  font-weight: 500;
+  white-space: nowrap;
+  text-decoration: none;
+  border: 1px solid transparent;
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+}
+
+/* Variants: class names match ButtonVariant. Also used by ButtonLink (an <a>),
+   whose disabled state is aria-disabled. */
+.primary {
+  color: var(--text-on-accent);
+  background: var(--accent-red);
+}
+
+.primary:hover:not(:disabled, [aria-disabled="true"]) {
+  background: var(--accent-red-hover);
+}
+
+.secondary {
+  color: var(--text-primary);
+  background: var(--bg-raised);
+  border-color: var(--border-default);
+}
+
+.secondary:hover:not(:disabled, [aria-disabled="true"]) {
+  border-color: var(--text-muted);
+}
+
+.ghost {
+  color: var(--text-muted);
+  background: none;
+}
+
+.ghost:hover:not(:disabled, [aria-disabled="true"]) {
+  color: var(--text-primary);
+}
+
+.button:disabled,
+.button[aria-disabled="true"] {
+  opacity: 0.5;
+  cursor: not-allowed;
+}

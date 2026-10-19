@@ -1,32 +1,83 @@
-services:
-  backend:
-    build: ./backend
-    ports:
-      - "8000:8000"
-    volumes:
-      - ./backend:/app
-      - /app/.venv
-    env_file:
-      - path: .env
-        required: false
-    environment:
-      DATABASE_URL: postgresql://test_user:test_password@test-db:5432/test_db
-      UV_NO_SYNC: "1"
-    depends_on:
-      test-db:
-        condition: service_healthy
+# Orion local stack.
+#
+#   New services (uv workspace: packages/ + services/)
+#     orion-db               local OrionDB (Postgres)       localhost:5434
+#     orion-migrate          one-shot: alembic upgrade head
+#     orion-backend          FastAPI API                    http://localhost:8100/docs
+#     orion-pipeline-api     pipeline trigger/status API    http://localhost:8200/docs
+#     orion-pipeline-worker  runs pipeline jobs (sync)
+#     frontend               React + Vite dev server         http://localhost:5173
+#
+# Point at Neon / Penelope by setting ORION_DATABASE_URL and PENELOPE_DATABASE_URL
+# in .env. Without them, OrionDB defaults to the local orion-db container.
 
-  test-db:
+x-orion-env: &orion-env
+  ORION_DATABASE_URL: ${ORION_DATABASE_URL:-postgresql://orion:orion@orion-db:5432/orion}
+  PENELOPE_DATABASE_URL: ${PENELOPE_DATABASE_URL:-}
+  PIPELINE_API_URL: http://orion-pipeline-api:8000
+
+x-orion-python: &orion-python
+  build:
+    context: .
+    dockerfile: docker/python.Dockerfile
+  env_file:
+    - path: .env
+      required: false
+  environment: *orion-env
+  volumes:
+    - ./packages:/app/packages
+    - ./services:/app/services
+
+services:
+  # ==================== New stack ====================
+  orion-db:
     image: postgres:16-alpine
     environment:
-      POSTGRES_USER: test_user
-      POSTGRES_PASSWORD: test_password
-      POSTGRES_DB: test_db
+      POSTGRES_USER: orion
+      POSTGRES_PASSWORD: orion
+      POSTGRES_DB: orion
+    ports:
+      - "5434:5432"
+    volumes:
+      - orion-db-data:/var/lib/postgresql/data
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U test_user -d test_db"]
+      test: ["CMD-SHELL", "pg_isready -U orion -d orion"]
       interval: 2s
       timeout: 5s
       retries: 15
+
+  orion-migrate:
+    <<: *orion-python
+    command: alembic -c packages/orion_core/alembic.ini upgrade head
+    depends_on:
+      orion-db:
+        condition: service_healthy
+
+  orion-backend:
+    <<: *orion-python
+    command: uvicorn orion_backend.main:app --host 0.0.0.0 --port 8000 --reload
+    ports:
+      - "8100:8000"
+    depends_on:
+      orion-migrate:
+        condition: service_completed_successfully
+
+  orion-pipeline-api:
+    <<: *orion-python
+    command: orion-pipeline api --host 0.0.0.0 --port 8000 --reload
+    ports:
+      - "8200:8000"
+    depends_on:
+      orion-migrate:
+        condition: service_completed_successfully
+
+  orion-pipeline-worker:
+    <<: *orion-python
+    command: orion-pipeline worker
+    stop_signal: SIGINT
+    depends_on:
+      orion-migrate:
+        condition: service_completed_successfully
 
   frontend:
     build: ./frontend
@@ -36,6 +87,10 @@ services:
       - ./frontend:/app
       - /app/node_modules
     environment:
-      - VITE_API_URL=http://backend:8000
+      # Vite proxies the browser's /api requests to the new backend (see frontend/vite.config.ts).
+      API_PROXY_TARGET: http://orion-backend:8000
     depends_on:
-      - backend
+      - orion-backend
+
+volumes:
+  orion-db-data:

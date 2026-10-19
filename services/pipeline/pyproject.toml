@@ -1,0 +1,21 @@
+[project]
+name = "orion-pipeline"
+version = "0.1.0"
+description = "Orion data pipeline: sync worker running PipelineSteps plus a thin trigger/status API"
+requires-python = ">=3.13,<3.14"
+dependencies = [
+    "orion-core",
+    "fastapi>=0.115",
+    "pandas>=2.2",
+    "uvicorn[standard]>=0.34",
+]
+
+[project.scripts]
+orion-pipeline = "orion_pipeline.__main__:main"
+
+[tool.uv.sources]
+orion-core = { workspace = true }
+
+[build-system]
+requires = ["uv_build>=0.8,<0.12"]
+build-backend = "uv_build"

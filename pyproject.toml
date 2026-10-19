@@ -1,0 +1,131 @@
+[project]
+name = "orion"
+version = "0.1.0"
+description = "Orion workspace root: shared core package plus backend and pipeline services"
+requires-python = ">=3.13,<3.14"
+dependencies = [
+    "orion-backend-service",
+    "orion-core",
+    "orion-pipeline",
+]
+
+[tool.uv]
+package = false
+
+[tool.uv.workspace]
+members = ["packages/*", "services/*"]
+
+[tool.uv.sources]
+orion-core = { workspace = true }
+orion-backend-service = { workspace = true }
+orion-pipeline = { workspace = true }
+
+[dependency-groups]
+dev = [
+    "httpx>=0.28",
+    "mypy>=2.4,<3",
+    "pandas-stubs>=3.0,<4",
+    "pydoclint>=0.11,<0.12",
+    "pytest>=8.3,<9",
+    "pytest-cov>=6,<7",
+    "ruff>=0.9,<1",
+]
+
+[tool.ruff]
+line-length = 88
+target-version = "py313"
+extend-exclude = ["backend", "frontend"]
+
+[tool.ruff.lint]
+select = [
+    "E",
+    "W",
+    "F",
+    "I",
+    "B",
+    "C4",
+    "UP",
+    "ANN"
+]
+# E501: the formatter handles line length
+# B008: FastAPI's Depends()/Query() in argument defaults is the intended pattern.
+ignore = [
+    "E501",
+    "B008"
+]
+
+[tool.ruff.format]
+quote-style = "double"
+indent-style = "space"
+skip-magic-trailing-comma = false
+line-ending = "auto"
+
+[tool.ruff.lint.isort]
+known-first-party = ["orion_core", "orion_backend", "orion_pipeline"]
+
+[tool.ruff.lint.per-file-ignores]
+# Test helpers don't need annotations; shared ones should still get them by convention.
+"**/tests/**" = ["ANN"]
+
+[tool.ruff.lint.flake8-annotations]
+# Allow ommitting '-> None' on __init_ when its arguments are typed.
+mypy-init-return = true
+
+[tool.coverage.run]
+source_pkgs = ["orion_core", "orion_backend", "orion_pipeline"]
+branch = true
+
+[tool.coverage.report]
+show_missing = true
+exclude_also = ["@abstractmethod"]
+fail_under = 75
+
+[tool.pydoclint]
+style = "google"
+# Types live in the signature only; don't repeat them in Args/Returns/Yields.
+arg-type-hints-in-docstring = false
+check-return-types = false
+check-yield-types = false
+# Prose-only docstrings are fine. Once a docstring has sections, they must be complete.
+skip-checking-short-docstrings = true
+# Google style documents __init__ args on the class, which would otherwise force
+# an Attributes section listing every model/schema field.
+check-class-attributes = false
+check-style-mismatch = true
+quiet = true
+exclude = '\.git|\.venv|alembic/versions'
+
+[tool.mypy]
+python_version = "3.13"
+# The packages are installed editable without a py.typed marker, so point mypy at
+# the source folders directly.
+mypy_path = [
+    "packages/orion_core/src",
+    "services/backend/src",
+    "services/pipeline/src"
+]
+# All of services/ rather than each src/ and tests/ folder: a pattern or folder
+# with no .py files in it is an error, and test folders come and go.
+files = ["packages/orion_core/src", "services"]
+explicit_package_bases = true
+plugins = ["pydantic.mypy"]
+strict = true
+
+[[tool.mypy.overrides]]
+# Test helpers don't need annotations, but their bodies are still type checked.
+module = ["services.*.tests.*"]
+disallow_untyped_defs = false
+disallow_incomplete_defs = false
+disallow_untyped_calls = false
+disallow_any_generics = false
+check_untyped_defs = true
+# Stubbing out a method on an instance is a normal way to fake I/O in tests.
+disable_error_code = ["method-assign"]
+
+[tool.pydantic-mypy]
+init_typed = true
+init_forbid_extra = true
+
+[tool.pytest.ini_options]
+testpaths = ["services/*/tests"]
+addopts = "--import-mode=importlib"
