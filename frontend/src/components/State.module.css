@@ -1,0 +1,13 @@
+/* Shared by LoadingState, ErrorState and EmptyState. */
+
+.state {
+  margin: 0;
+  padding: var(--space-3);
+  font-size: 13px;
+  text-align: center;
+  color: var(--text-muted);
+}
+
+.error {
+  color: var(--status-failed);
+}

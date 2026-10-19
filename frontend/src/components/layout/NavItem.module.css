@@ -1,0 +1,38 @@
+/* A router link (<a>): disabled items have no href and carry aria-disabled. */
+.navItem {
+  display: block;
+  width: 100%;
+  padding: 9px 12px;
+  font-size: 14px;
+  font-weight: 500;
+  text-align: left;
+  white-space: nowrap;
+  color: var(--text-muted);
+  background: none;
+  border: 0;
+  text-decoration: none;
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+}
+
+.navItem:hover:not([aria-disabled="true"]) {
+  color: var(--text-primary);
+}
+
+.active {
+  font-weight: 600;
+  color: var(--text-primary);
+  background: var(--bg-raised);
+}
+
+.navItem[aria-disabled="true"] {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+/* Narrow screens: items sit in a row in the top bar. Same breakpoint as App and Sidebar. */
+@media (max-width: 768px) {
+  .navItem {
+    width: auto;
+  }
+}

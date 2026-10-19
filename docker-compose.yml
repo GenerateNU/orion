@@ -6,9 +6,10 @@
 #     orion-backend          FastAPI API                    http://localhost:8100/docs
 #     orion-pipeline-api     pipeline trigger/status API    http://localhost:8200/docs
 #     orion-pipeline-worker  runs pipeline jobs (sync)
+#     frontend               React + Vite dev server         http://localhost:5173
 #
 #   Legacy services (backend/, kept until it is retired; BackendCI uses them)
-#     backend, test-db, frontend
+#     backend, test-db
 #
 # Point at Neon / Penelope by setting ORION_DATABASE_URL and PENELOPE_DATABASE_URL
 # in .env. Without them, OrionDB defaults to the local orion-db container.
@@ -119,10 +120,10 @@ services:
       - ./frontend:/app
       - /app/node_modules
     environment:
-      # Still the legacy backend: the frontend's hooks use /api/races (see REFACTOR_PLAN Q2).
-      - VITE_API_URL=http://backend:8000
+      # Vite proxies the browser's /api requests to the new backend (see frontend/vite.config.ts).
+      API_PROXY_TARGET: http://orion-backend:8000
     depends_on:
-      - backend
+      - orion-backend
 
 volumes:
   orion-db-data:

@@ -47,3 +47,16 @@ async def get_penelope_db(request: Request) -> AsyncIterator[AsyncSession]:
         raise ServiceUnavailableError("Penelope is not configured (PENELOPE_DATABASE_URL unset)")
     async with sessionmaker() as session:
         yield session
+
+
+async def get_optional_penelope_db(
+    request: Request,
+) -> AsyncIterator[AsyncSession | None]:
+    """Like `get_penelope_db`, but yields None instead of a 503 when Penelope isn't
+    configured. For routes where Penelope only adds extra detail."""
+    sessionmaker = request.app.state.sessionmakers.get("penelope")
+    if sessionmaker is None:
+        yield None
+        return
+    async with sessionmaker() as session:
+        yield session

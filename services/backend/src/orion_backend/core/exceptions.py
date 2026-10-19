@@ -17,6 +17,10 @@ class AlreadyExistsError(DomainError):
         super().__init__(f"{resource_type} '{resource_id}' already exists")
 
 
+class ConflictError(DomainError):
+    """The request clashes with current state, e.g. a run already being processed (409)."""
+
+
 class InvalidParameterError(DomainError):
     """A request parameter is well-formed but not allowed (422)."""
 

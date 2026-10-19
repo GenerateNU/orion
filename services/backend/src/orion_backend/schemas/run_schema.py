@@ -33,6 +33,14 @@ class RunResponse(BaseModel):
         ),
         examples=["2026-10-02T09:00:00Z"],
     )
+    run_time: datetime | None = Field(
+        default=None,
+        description=(
+            "Penelope `run.time`: when the run was recorded (UTC). `null` if Penelope "
+            "is not configured or unreachable."
+        ),
+        examples=["2026-07-11T16:42:18Z"],
+    )
 
     # mypy can't type a decorator over @property; this is pydantic's documented fix.
     @computed_field(  # type: ignore[prop-decorator]

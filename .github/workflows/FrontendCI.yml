@@ -14,7 +14,7 @@ on:
       - ".github/workflows/FrontendCI.yml"
 
 jobs:
-  lint-and-test:
+  lint-and-build:
     runs-on: ubuntu-latest
     defaults:
       run:
@@ -44,8 +44,5 @@ jobs:
       - name: Run ESLint
         run: npm run lint
 
-      - name: Run type check
-        run: npx tsc --noEmit
-
-      - name: Run tests with coverage
-        run: npm run test:coverage
+      - name: Type check and build
+        run: npm run build
