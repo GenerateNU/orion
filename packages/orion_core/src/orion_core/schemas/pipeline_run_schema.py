@@ -2,7 +2,7 @@
 
 from datetime import datetime
 
-from pydantic import UUID4, BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field
 
 
 class PipelineRunCreate(BaseModel):
@@ -13,7 +13,7 @@ class PipelineRunResponse(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
     id: int = Field(description="Pipeline job id (not the Penelope run_id).")
-    run_id: UUID4
+    run_id: str
     status: str = Field(examples=["queued"])
     error: str | None
     queued_at: datetime
