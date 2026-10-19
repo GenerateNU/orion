@@ -4,6 +4,7 @@ import {
   type PenelopeRunResponse,
 } from "@schemas/penelopeRun.schema";
 import axios from "@api/client";
+import { penelopeRunKeys } from "@api/queryKeys";
 import { apiUrls } from "@utils/urls";
 import { z } from "zod";
 
@@ -13,7 +14,7 @@ const PenelopeRunListSchema = z.array(PenelopeRunResponseSchema);
 // Fails with 503 if Penelope isn't configured, or 502 if it's unreachable (VPN off).
 export const usePenelopeRuns = () => {
   const query = useQuery({
-    queryKey: ["penelope-runs"],
+    queryKey: penelopeRunKeys.all,
     queryFn: async (): Promise<PenelopeRunResponse[]> => {
       const { data } = await axios.get(apiUrls.penelopeRuns());
 
@@ -23,8 +24,6 @@ export const usePenelopeRuns = () => {
       }
       return result.data;
     },
-    // Penelope being down is not something a quick retry fixes.
-    retry: false,
   });
 
   return {

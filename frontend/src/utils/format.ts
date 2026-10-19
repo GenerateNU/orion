@@ -12,6 +12,18 @@ export function formatDateTime(iso: string | null): string {
   return iso ? dateTimeFormat.format(new Date(iso)) : "—";
 }
 
+const pad2 = (n: number) => String(n).padStart(2, "0");
+
+// "06:30" (mm:ss), or "1:02:41" past an hour.
+export function formatDuration(seconds: number | null): string {
+  if (seconds === null) return "—";
+  const total = Math.round(seconds);
+  const hours = Math.floor(total / 3600);
+  const minutes = Math.floor((total % 3600) / 60);
+  const rest = `${pad2(minutes)}:${pad2(total % 60)}`;
+  return hours > 0 ? `${hours}:${rest}` : rest;
+}
+
 // "00d5d5a4-b368-4452-b6c7-278311190931 · Jul 11, 2026". The id is Penelope's
 // run.id, which every part of Orion uses (Penelope's numeric runId isn't unique).
 export function formatRunLabel(run: { run_id: string; time: string | null }): string {

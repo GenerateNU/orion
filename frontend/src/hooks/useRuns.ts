@@ -5,6 +5,8 @@ import {
   type RunResponse,
 } from "@schemas/run.schema";
 import axios from "@api/client";
+import { penelopeRunKeys, runDataKeys, runKeys } from "@api/queryKeys";
+import type { DataQueryOptions } from "@api/queryOptions";
 import { apiUrls } from "@utils/urls";
 import { z } from "zod";
 
@@ -14,7 +16,7 @@ const RunListSchema = z.array(RunResponseSchema);
 // with a pipeline job that succeeded with no error.
 export const useRuns = (filters: RunListFilters = {}) => {
   const query = useQuery({
-    queryKey: ["runs", filters],
+    queryKey: runKeys.list(filters),
     queryFn: async (): Promise<RunResponse[]> => {
       const { data } = await axios.get(apiUrls.runs(), { params: filters });
 
@@ -35,9 +37,13 @@ export const useRuns = (filters: RunListFilters = {}) => {
 };
 
 // Hook for getting a single run
-export const useRun = (runId: string | undefined) => {
+export const useRun = <TData = RunResponse>(
+  runId: string | undefined,
+  options: DataQueryOptions<RunResponse, TData> = {},
+) => {
   const query = useQuery({
-    queryKey: ["runs", runId],
+    ...options,
+    queryKey: runKeys.detail(runId),
     queryFn: async (): Promise<RunResponse> => {
       if (!runId) {
         throw new Error("Run ID is required");
@@ -51,12 +57,13 @@ export const useRun = (runId: string | undefined) => {
       }
       return result.data;
     },
-    enabled: !!runId,
+    enabled: !!runId && (options.enabled ?? true),
   });
 
   return {
     run: query.data,
     runIsLoading: query.isLoading,
+    runIsFetching: query.isFetching,
     runError: query.error,
     runRefetch: query.refetch,
   };
@@ -70,9 +77,11 @@ export const useRunMutations = () => {
     mutationFn: async (runId: string) => {
       await axios.delete(apiUrls.run(runId));
     },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["runs"] });
-      queryClient.invalidateQueries({ queryKey: ["penelope-runs"] });
+    onSuccess: (_data, runId) => {
+      queryClient.removeQueries({ queryKey: runKeys.detail(runId) });
+      queryClient.removeQueries({ queryKey: runDataKeys.all(runId) });
+      queryClient.invalidateQueries({ queryKey: runKeys.lists() });
+      queryClient.invalidateQueries({ queryKey: penelopeRunKeys.all });
     },
   });
 

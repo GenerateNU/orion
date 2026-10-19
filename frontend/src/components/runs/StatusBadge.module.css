@@ -1,0 +1,45 @@
+.badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 10px;
+  font-size: 12px;
+  font-weight: 500;
+  white-space: nowrap;
+  border-radius: var(--radius-pill);
+  color: var(--badge-color);
+  background: var(--badge-tint);
+}
+
+.dot {
+  flex-shrink: 0;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: currentColor;
+}
+
+.loaded {
+  --badge-color: var(--status-loaded);
+  --badge-tint: var(--status-loaded-tint);
+}
+
+.processing {
+  --badge-color: var(--status-processing);
+  --badge-tint: var(--status-processing-tint);
+}
+
+.queued {
+  --badge-color: var(--status-queued);
+  --badge-tint: var(--status-queued-tint);
+}
+
+.notProcessed {
+  --badge-color: var(--status-idle);
+  --badge-tint: var(--status-idle-tint);
+}
+
+.failed {
+  --badge-color: var(--status-failed);
+  --badge-tint: var(--status-failed-tint);
+}

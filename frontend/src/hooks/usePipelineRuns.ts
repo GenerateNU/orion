@@ -1,13 +1,15 @@
-import { useEffect } from "react";
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useEffect, useMemo, useRef } from "react";
+import { useMutation, useQuery, useQueryClient, type QueryClient } from "@tanstack/react-query";
 import {
   PipelineRunResponseSchema,
   isPipelineActive,
   type PipelineRunCreate,
   type PipelineRunFilters,
   type PipelineRunResponse,
+  type PipelineStatus,
 } from "@schemas/pipeline.schema";
 import axios from "@api/client";
+import { penelopeRunKeys, pipelineRunKeys, runDataKeys, runKeys } from "@api/queryKeys";
 import { apiUrls } from "@utils/urls";
 import { z } from "zod";
 
@@ -16,10 +18,25 @@ const PipelineRunListSchema = z.array(PipelineRunResponseSchema);
 // How often a queued/running job is re-fetched. There's no SSE endpoint yet.
 const PIPELINE_POLL_MS = 2000;
 
-// Hook for listing pipeline jobs, newest first
+// After a job finishes, the run lists show its new status. A successful job also
+// rewrote the run's data, so that one run's cached metadata and traces are refetched.
+// Other runs' cached traces are left alone.
+function invalidateAfterJob(queryClient: QueryClient, runId: string, status: PipelineStatus) {
+  queryClient.invalidateQueries({ queryKey: runKeys.lists() });
+  queryClient.invalidateQueries({ queryKey: penelopeRunKeys.all });
+  if (status === "succeeded") {
+    queryClient.invalidateQueries({ queryKey: runKeys.detail(runId) });
+    queryClient.invalidateQueries({ queryKey: runDataKeys.all(runId) });
+  }
+}
+
+// Hook for listing pipeline jobs, newest first. Polls while any listed job is queued
+// or running; when one finishes, the affected queries are refreshed (invalidateAfterJob).
 export const usePipelineRuns = (filters: PipelineRunFilters = {}) => {
+  const queryClient = useQueryClient();
+
   const query = useQuery({
-    queryKey: ["pipeline-runs", filters],
+    queryKey: pipelineRunKeys.list(filters),
     queryFn: async (): Promise<PipelineRunResponse[]> => {
       const { data } = await axios.get(apiUrls.pipelineRuns(), { params: filters });
 
@@ -29,7 +46,22 @@ export const usePipelineRuns = (filters: PipelineRunFilters = {}) => {
       }
       return result.data;
     },
+    refetchInterval: (query) =>
+      query.state.data?.some((job) => isPipelineActive(job.status)) ? PIPELINE_POLL_MS : false,
   });
+
+  const activeJobIds = useMemo(
+    () => query.data?.filter((job) => isPipelineActive(job.status)).map((job) => job.id) ?? [],
+    [query.data],
+  );
+  const previousActiveJobIds = useRef<number[]>([]);
+  useEffect(() => {
+    const finishedJobIds = previousActiveJobIds.current.filter((id) => !activeJobIds.includes(id));
+    previousActiveJobIds.current = activeJobIds;
+    for (const job of query.data ?? []) {
+      if (finishedJobIds.includes(job.id)) invalidateAfterJob(queryClient, job.run_id, job.status);
+    }
+  }, [activeJobIds, query.data, queryClient]);
 
   return {
     pipelineRuns: query.data,
@@ -40,12 +72,12 @@ export const usePipelineRuns = (filters: PipelineRunFilters = {}) => {
 };
 
 // Hook for one pipeline job. Polls while it is queued or running; once it
-// succeeds, the run lists are refreshed so the run shows up as processed.
+// finishes, the affected queries are refreshed (invalidateAfterJob).
 export const usePipelineRun = (jobId: number | undefined) => {
   const queryClient = useQueryClient();
 
   const query = useQuery({
-    queryKey: ["pipeline-runs", jobId],
+    queryKey: pipelineRunKeys.detail(jobId),
     queryFn: async (): Promise<PipelineRunResponse> => {
       if (jobId === undefined) {
         throw new Error("Pipeline job ID is required");
@@ -64,16 +96,13 @@ export const usePipelineRun = (jobId: number | undefined) => {
       isPipelineActive(query.state.data?.status) ? PIPELINE_POLL_MS : false,
   });
 
+  const runId = query.data?.run_id;
   const status = query.data?.status;
   useEffect(() => {
-    if (status === "succeeded") {
-      queryClient.invalidateQueries({ queryKey: ["runs"] });
-      queryClient.invalidateQueries({ queryKey: ["penelope-runs"] });
-    }
-    if (status === "succeeded" || status === "failed") {
-      queryClient.invalidateQueries({ queryKey: ["pipeline-runs"], exact: false });
-    }
-  }, [status, queryClient]);
+    if (!runId || (status !== "succeeded" && status !== "failed")) return;
+    invalidateAfterJob(queryClient, runId, status);
+    queryClient.invalidateQueries({ queryKey: pipelineRunKeys.all });
+  }, [runId, status, queryClient]);
 
   return {
     pipelineRun: query.data,
@@ -100,7 +129,7 @@ export const usePipelineMutations = () => {
       return result.data;
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["pipeline-runs"] });
+      queryClient.invalidateQueries({ queryKey: pipelineRunKeys.all });
     },
   });
 

@@ -1,0 +1,110 @@
+/* Generic table chrome first, then the Runs columns. Split the chrome into a
+   DataTable component once a second table needs it. */
+
+.container {
+  overflow: hidden;
+  background: var(--bg-surface);
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-md);
+}
+
+.scroll {
+  overflow-x: auto;
+}
+
+.table {
+  width: 100%;
+  min-width: 760px;
+  table-layout: fixed;
+  border-collapse: collapse;
+}
+
+.table thead th {
+  height: 40px;
+  padding: 0;
+  font-size: 11px;
+  font-weight: 500;
+  letter-spacing: 0.06em;
+  text-align: left;
+  text-transform: uppercase;
+  color: var(--text-muted);
+  background: var(--bg-raised);
+  border-bottom: 1px solid var(--border-default);
+}
+
+.table tbody :is(th, td) {
+  height: 60px;
+  padding: 0;
+  font-size: 13px;
+  font-weight: 400;
+  text-align: left;
+  border-bottom: 1px solid var(--border-default);
+}
+
+.table :is(th, td):first-child {
+  padding-left: 20px;
+}
+
+.table :is(th, td):last-child {
+  padding-right: 20px;
+}
+
+.table tbody tr:hover {
+  background: color-mix(in srgb, var(--bg-raised) 40%, transparent);
+}
+
+.table td.actions {
+  text-align: right;
+}
+
+.table td.placeholder {
+  height: auto;
+  padding: var(--space-4) 20px;
+}
+
+.footer {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-2);
+  padding: 14px 20px;
+}
+
+.summary {
+  font-size: 12px;
+  color: var(--text-muted);
+}
+
+/* Figma column widths, plus the 20px row inset on the first column. */
+.colRun {
+  width: 210px;
+}
+
+.colDate {
+  width: 120px;
+}
+
+.colDuration {
+  width: 90px;
+}
+
+.colPipeline {
+  width: 160px;
+}
+
+/* Run ids are 36-char uuids; the full id stays in the DOM and the title tooltip. */
+.table tbody th.run {
+  padding-right: var(--space-3);
+  overflow: hidden;
+  font-family: var(--font-mono);
+  font-weight: 500;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.duration {
+  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
+  color: var(--text-muted);
+}

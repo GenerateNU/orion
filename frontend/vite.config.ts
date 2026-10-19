@@ -3,7 +3,7 @@ import { defineConfig, loadEnv } from 'vite'
 import react from '@vitejs/plugin-react'
 
 // Keep in sync with "paths" in tsconfig.app.json.
-const srcAliases = ['api', 'components', 'hooks', 'schemas', 'utils', 'views']
+const srcAliases = ['api', 'components', 'features', 'hooks', 'schemas', 'utils', 'views']
 const alias = Object.fromEntries(
   srcAliases.map((dir) => [`@${dir}`, fileURLToPath(new URL(`./src/${dir}`, import.meta.url))]),
 )

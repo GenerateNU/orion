@@ -1,4 +1,6 @@
 import { describeError } from "@utils/describeError";
+import { cx } from "@utils/classNames";
+import styles from "@components/State.module.css";
 
 type ErrorStateProps = {
   error: unknown;
@@ -6,7 +8,7 @@ type ErrorStateProps = {
 
 export default function ErrorState({ error }: ErrorStateProps) {
   return (
-    <p className="state state--error" role="alert">
+    <p className={cx(styles.state, styles.error)} role="alert">
       {describeError(error)}
     </p>
   );

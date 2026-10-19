@@ -22,6 +22,7 @@
     "paths": {
       "@api/*": ["./src/api/*"],
       "@components/*": ["./src/components/*"],
+      "@features/*": ["./src/features/*"],
       "@hooks/*": ["./src/hooks/*"],
       "@schemas/*": ["./src/schemas/*"],
       "@utils/*": ["./src/utils/*"],

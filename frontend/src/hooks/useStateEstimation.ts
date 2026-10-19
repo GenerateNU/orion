@@ -5,13 +5,20 @@ import {
   type StateDataResponse,
 } from "@schemas/state.schema";
 import axios from "@api/client";
+import { runDataKeys } from "@api/queryKeys";
+import type { DataQueryOptions } from "@api/queryOptions";
 import { apiUrls } from "@utils/urls";
 
 // Hook for the state estimation stage's output (OrionDB `estimated_car_state`):
 // estimated [lat, lon] positions for one run between `start` and `end`.
-export const useStateEstimation = (runId: string | undefined, range: StateDataQuery | undefined) => {
+export const useStateEstimation = <TData = StateDataResponse>(
+  runId: string | undefined,
+  range: StateDataQuery | undefined,
+  options: DataQueryOptions<StateDataResponse, TData> = {},
+) => {
   const query = useQuery({
-    queryKey: ["runs", runId, "state", range],
+    ...options,
+    queryKey: runDataKeys.state(runId, range),
     queryFn: async (): Promise<StateDataResponse> => {
       if (!runId || !range) {
         throw new Error("Run ID and range are required");
@@ -25,12 +32,14 @@ export const useStateEstimation = (runId: string | undefined, range: StateDataQu
       }
       return result.data;
     },
-    enabled: !!runId && !!range,
+    enabled: !!runId && !!range && (options.enabled ?? true),
   });
 
   return {
     stateData: query.data,
     stateDataIsLoading: query.isLoading,
+    stateDataIsFetching: query.isFetching,
+    stateDataIsPlaceholderData: query.isPlaceholderData,
     stateDataError: query.error,
     stateDataRefetch: query.refetch,
   };

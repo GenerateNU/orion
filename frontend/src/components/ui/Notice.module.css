@@ -1,0 +1,16 @@
+.notice {
+  padding: var(--space-2) var(--space-3);
+  font-size: 13px;
+  border-radius: var(--radius-sm);
+}
+
+/* Tones: class names match NoticeProps["tone"]. */
+.warning {
+  color: var(--status-queued);
+  background: var(--status-queued-tint);
+}
+
+.error {
+  color: var(--status-failed);
+  background: var(--status-failed-tint);
+}
