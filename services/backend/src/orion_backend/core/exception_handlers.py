@@ -4,6 +4,7 @@ from fastapi import FastAPI, Request
 from fastapi.responses import JSONResponse
 
 from orion_backend.core.exceptions import (
+    ConflictError,
     DomainError,
     InvalidParameterError,
     NotFoundError,
@@ -42,6 +43,7 @@ def _status_handler(
 def register_exception_handlers(app: FastAPI) -> None:
     # Specific handlers first, catch-all last.
     app.add_exception_handler(NotFoundError, not_found_handler)
+    app.add_exception_handler(ConflictError, _status_handler(409))
     app.add_exception_handler(InvalidParameterError, _status_handler(422))
     app.add_exception_handler(UpstreamError, _status_handler(502))
     app.add_exception_handler(ServiceUnavailableError, _status_handler(503))

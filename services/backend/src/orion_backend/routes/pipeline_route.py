@@ -28,7 +28,12 @@ async def create_pipeline_run(
     return await service.trigger(body)
 
 
-@router.get("", response_model=list[PipelineRunResponse], summary="List pipeline jobs")
+@router.get(
+    "",
+    response_model=list[PipelineRunResponse],
+    summary="List pipeline jobs",
+    responses=error_responses(502),
+)
 async def list_pipeline_runs(
     run_id: Annotated[str | None, Query(description="Only jobs for this Penelope run.")] = None,
     pipeline_status: Annotated[
@@ -38,14 +43,14 @@ async def list_pipeline_runs(
     service: PipelineService = Depends(get_pipeline_service),
 ) -> list[PipelineRunResponse]:
     """Job history, newest first."""
-    raise NotImplementedError
+    return await service.list(run_id, pipeline_status, limit)
 
 
 @router.get(
     "/{pipeline_run_id}",
     response_model=PipelineRunResponse,
     summary="Get a pipeline job",
-    responses=error_responses(404),
+    responses=error_responses(404, 502),
 )
 async def get_pipeline_run(
     pipeline_run_id: Annotated[int, Path(description="Pipeline job id.")],
