@@ -1,5 +1,5 @@
 from collections.abc import Collection, Sequence
-from datetime import datetime
+from datetime import datetime, timedelta
 from typing import Any
 
 from sqlalchemy import Executable, Result, Row
@@ -25,8 +25,13 @@ class SensorRepository:
         data_type_names: Collection[str],
         start: datetime,
         end: datetime,
+        lagged_names: Collection[str] = (),
+        offset: timedelta = timedelta(0),
     ) -> Sequence[Row[*tuple[Any, ...]]]:
-        return (await self._execute(select_readings_between(run_id, data_type_names, start, end))).all()
+        stmt = select_readings_between(
+            run_id, data_type_names, start, end, lagged_names, offset
+        )
+        return (await self._execute(stmt)).all()
 
     async def _execute(self, stmt: Executable) -> Result[*tuple[Any, ...]]:
         # Handled differently because Penelope is externally managed. So it will call

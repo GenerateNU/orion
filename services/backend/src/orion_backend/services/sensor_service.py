@@ -1,4 +1,4 @@
-from datetime import datetime
+from datetime import datetime, timedelta
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -9,6 +9,8 @@ from orion_backend.schemas.sensor_schema import (
     SensorResponse,
     SensorSeries,
 )
+from orion_core.db.sensor_catalog import lagged_raw_tags
+from orion_core.settings import get_settings
 
 
 class SensorService:
@@ -20,10 +22,17 @@ class SensorService:
         return [SensorResponse.model_validate(row) for row in rows]
 
     async def get_sensor_data(
-        self, run_id: str, sensors: list[str], start: datetime, end: datetime
+        self,
+        run_id: str,
+        sensors: list[str],
+        start: datetime,
+        end: datetime,
+        gps_offset_on: bool = True,
     ) -> SensorDataResponse:
         """Every reading of `sensors` in `[start, end]`, one series per sensor.
 
+        With `gps_offset_on`, `gps_time_offset_s` is added to the times of lagged
+        sensors (see `sensor_catalog`), and the window applies to the shifted times.
         A sensor with no rows in the range (or an unknown run) comes back empty.
         """
         sensors = list(dict.fromkeys(sensors))
@@ -32,10 +41,15 @@ class SensorService:
         if start > end:
             raise InvalidParameterError("`start` must be at or before `end`")
 
+        offset = timedelta(seconds=get_settings().gps_time_offset_s if gps_offset_on else 0)
+        lagged = lagged_raw_tags() if offset else frozenset()
+
         series = {name: SensorSeries(time=[], values=[]) for name in sensors}
-        for row in await self.repository.list_readings(run_id, sensors, start, end):
+        rows = await self.repository.list_readings(run_id, sensors, start, end, lagged, offset)
+        for row in rows:
             reading = row._mapping
-            series[reading["raw_tag"]].time.append(reading["time"])
+            time = reading["time"] + offset if reading["raw_tag"] in lagged else reading["time"]
+            series[reading["raw_tag"]].time.append(time)
             series[reading["raw_tag"]].values.append(reading["values"])
 
         return SensorDataResponse(run_id=run_id, start=start, end=end, series=series)
