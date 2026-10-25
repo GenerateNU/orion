@@ -1,0 +1,11 @@
+.chart {
+  width: 100%;
+}
+
+.chart :global(.u-select) {
+  background: color-mix(in srgb, var(--text-primary) 12%, transparent);
+}
+
+.chart :global(.u-cursor-x) {
+  border-right-color: var(--text-muted);
+}
