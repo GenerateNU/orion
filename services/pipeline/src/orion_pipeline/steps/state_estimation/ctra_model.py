@@ -7,10 +7,10 @@ from .state import A, OMEGA, PX, PY, STATE_SIZE, THETA, V, wrap_angle
 FloatArray = NDArray[np.float64]
 
 class CTRAModel:
-    def __init__(self, config):
+    def __init__(self, config: any) -> None:
         self.config = config
 
-    def predict(self, state, control_input, dt):
+    def predict(self, state: FloatArray, dt: float = 0.1) -> FloatArray:
 
         """Move the state forward by dt seconds.
 
