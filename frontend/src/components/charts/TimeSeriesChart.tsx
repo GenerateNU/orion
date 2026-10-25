@@ -125,7 +125,7 @@ export const TimeSeriesChart = ({ series, height = 600, yLabel = "" }: TimeSerie
         ],
       },
     }),
-    [height, yLabel, series, formatReading],
+    [height, yLabel, series, commitWindow, setHoverTime],
   );
 
   useEffect(() => {
