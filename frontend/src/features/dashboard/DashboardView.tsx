@@ -17,6 +17,7 @@ import {
   useSelectedLaps,
 } from "@features/dashboard/state/useDashboard";
 import styles from "./DashboardView.module.css";
+import { TrackMap } from "../dashboard/panels/TrackMap";
 
 const dashboardRoute = getRouteApi("/runs/$runId/dashboard");
 
@@ -91,9 +92,7 @@ function RunDashboard() {
         <h2 id="run-dashboard-title" className={styles.placeholderTitle}>
           Run dashboard
         </h2>
-        <p className={styles.placeholderText}>
-          Charts, track map and sensor panels for this run will be designed here.
-        </p>
+        <TrackMap />
         <SelectionSummary />
       </section>
     </>
