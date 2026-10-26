@@ -71,12 +71,8 @@ class KalmanStep(PipelineStep):
         super().prepare(ctx)
         self.ukf: UnscentedKalmanFilter | None = None
         self.tick_time: pd.Timestamp | None = None
-        # (lat, lon) of the run's first GPS fix. Local x/y meters are measured from here.
         self.origin: tuple[float, float] | None = None
-        # (time, xy) of a GPS fix waiting for a second one to get a heading
         self.first_fix: tuple[pd.Timestamp, np.ndarray] | None = None
-        # One (time, x, P, x_pred, P_pred, C) per tick not yet written. The
-        # prediction is None on ticks where the filter (re)started.
         self.ticks: list[
             tuple[
                 pd.Timestamp,
@@ -123,7 +119,6 @@ class KalmanStep(PipelineStep):
         leftover = None
         for page in self.extract(ctx):
             readings = pd.concat([leftover, page])
-            # A page can end mid-tick, so hold the last tick back for the next page
             tick_times = readings["time"].dt.floor(TICK)
             last_tick = tick_times == tick_times.iloc[-1]
             self._filter(readings[~last_tick])

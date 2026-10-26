@@ -39,7 +39,7 @@ def integrate_numerically(state: np.ndarray, dt: float, n: int = 100_000) -> np.
 def test_straight_line_uses_distance_formula(model):
     heading = 0.5
     state = make_state(v=10.0, theta=heading, a=2.0)
-    out = model.predict(state, dt=2.0)
+    out = model.predict_forward(state, dt=2.0)
 
     distance = 10.0 * 2.0 + 0.5 * 2.0 * 2.0**2
     assert out[PX] == pytest.approx(distance * np.cos(heading))
@@ -50,7 +50,7 @@ def test_straight_line_uses_distance_formula(model):
 
 def test_constant_turn_matches_numerical_integration(model):
     state = make_state(v=10.0, theta=0.3, omega=0.2, a=1.0)
-    out = model.predict(state, dt=0.5)
+    out = model.predict_forward(state, dt=0.5)
 
     expected = integrate_numerically(state, dt=0.5)
     np.testing.assert_allclose(out[[PX, PY]], expected, rtol=1e-6)
@@ -60,7 +60,7 @@ def test_constant_turn_matches_numerical_integration(model):
 
 def test_omega_and_acceleration_carry_over(model):
     state = make_state(v=5.0, omega=0.1, a=-1.0)
-    out = model.predict(state, dt=0.1)
+    out = model.predict_forward(state, dt=0.1)
 
     assert out[OMEGA] == state[OMEGA]
     assert out[A] == state[A]
@@ -69,7 +69,7 @@ def test_omega_and_acceleration_carry_over(model):
 def test_input_state_is_not_modified(model):
     state = make_state(v=5.0, omega=0.1)
     before = state.copy()
-    model.predict(state, dt=0.1)
+    model.predict_forward(state, dt=0.1)
 
     np.testing.assert_array_equal(state, before)
 
@@ -82,22 +82,22 @@ def test_batch_matches_single_states(model):
             make_state(v=7.0, theta=2.0, omega=-0.4, a=-1.0),
         ]
     )
-    batch = model.predict(states, dt=0.3)
+    batch = model.predict_forward(states, dt=0.3)
 
     assert batch.shape == states.shape
     for row, out in zip(states, batch, strict=True):
-        np.testing.assert_allclose(out, model.predict(row, dt=0.3))
+        np.testing.assert_allclose(out, model.predict_forward(row, dt=0.3))
 
 
 def test_wrong_state_size_raises(model):
     with pytest.raises(ValueError):
-        model.predict(np.zeros(STATE_SIZE - 1), dt=0.1)
+        model.predict_forward(np.zeros(STATE_SIZE - 1), dt=0.1)
 
 
 def test_just_above_threshold_is_close_to_straight(model):
     threshold = model.config.straight_threshold
-    straight = model.predict(make_state(v=10.0, theta=0.3, a=1.0), dt=0.1)
-    turning = model.predict(
+    straight = model.predict_forward(make_state(v=10.0, theta=0.3, a=1.0), dt=0.1)
+    turning = model.predict_forward(
         make_state(v=10.0, theta=0.3, omega=threshold * 10, a=1.0), dt=0.1
     )
 
