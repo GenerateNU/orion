@@ -11,7 +11,11 @@ from orion_pipeline.steps.state_estimation.ctra_model import CTRAModel
 from orion_pipeline.steps.state_estimation.kalman_step.kalman_filter import (
     UnscentedKalmanFilter,
 )
-from orion_pipeline.steps.state_estimation.phys_model_config import PhysicsModelConfig
+from orion_pipeline.steps.state_estimation.phys_model_config import (
+    METERS_PER_DEGREE_LAT,
+    MPS_PER_MPH,
+    PhysicsModelConfig,
+)
 from orion_pipeline.steps.state_estimation.state import PX, PY, V
 from orion_pipeline.steps.step_registry import register_step
 
@@ -21,9 +25,7 @@ MAX_GAP = pd.Timedelta("1s")
 # The first two GPS fixes must be this far apart to give a starting heading
 MIN_HEADING_DISTANCE_M = 2.0
 
-METERS_PER_DEGREE_LAT = 111_320.0
-MPS_PER_MPH = 0.44704
-
+# TODO: Revise placeholder values
 GPS_STD_M = 1.5
 SPEED_STD_MPS = 0.5
 
@@ -44,19 +46,20 @@ SENSORS = {
 # Starting uncertainty for [px, py, v, theta, omega, a]
 P0 = np.diag([GPS_STD_M**2, GPS_STD_M**2, 1.0**2, 0.3**2, 0.5**2, 2.0**2])
 
-
 @register_step
 class KalmanStep(PipelineStep):
-    """Estimate the car's state from cleaned sensor data with a UKF on a 10ms grid.
-    DB TABLES: FROM Orion[cleaned_data] -> TO Orion[estimated_car_state]
+    """Forward pass: run a UKF over cleaned sensor data on a 10ms grid.
+    The RTS step smooths its output into estimated_car_state.
+    DB TABLES: FROM Orion[cleaned_data] -> TO Orion[ukf_states]
 
-    Schema: FROM [time, sensor, values] -> TO [run_id, time, lattitude, longitude]
+    Schema: FROM [time, sensor, values]
+    -> TO [run_id, time, origin_lat, origin_lon, x, p, x_pred, p_pred, cross_cov]
     """
 
     name = "kalman_step"
     depends_on = ("clean_step",)
     reads_from = "oriondb"
-    output_table = "estimated_car_state"
+    output_table = "ukf_states"
     pagination_key = ("time", "sensor")
 
     def __init__(self, reader: OrionDBClient, writer: OrionDBClient):
@@ -71,8 +74,8 @@ class KalmanStep(PipelineStep):
         self.origin: tuple[float, float] | None = None
         # (time, xy) of a GPS fix waiting for a second one to get a heading
         self.first_fix: tuple[pd.Timestamp, np.ndarray] | None = None
-        # One (time, x, P, x_pred, P_pred, C) per tick. The prediction is None
-        # on ticks where the filter (re)started.
+        # One (time, x, P, x_pred, P_pred, C) per tick not yet written. The
+        # prediction is None on ticks where the filter (re)started.
         self.ticks: list[tuple] = []
 
     def extract(self, ctx: RunContext) -> Iterator[pd.DataFrame]:
@@ -81,19 +84,27 @@ class KalmanStep(PipelineStep):
         )
 
     def transform(self, df: pd.DataFrame, ctx: RunContext) -> pd.DataFrame:
-        """Filtered states [time, px, py] -> estimated_car_state rows."""
-        lat, lon = self._to_lat_lon(df["px"].to_numpy(), df["py"].to_numpy())
+        """Ticks [time, x, P, x_pred, P_pred, C] -> ukf_states rows, arrays flattened."""
+
+        def flat(arrays: pd.Series) -> list[list[float] | None]:
+            return [None if a is None else a.ravel().tolist() for a in arrays]
+
         return pd.DataFrame(
             {
                 "run_id": ctx.run_id,
                 "time": df["time"],
-                "lattitude": lat,
-                "longitude": lon,
+                "origin_lat": self.origin[0],
+                "origin_lon": self.origin[1],
+                "x": flat(df["x"]),
+                "p": flat(df["P"]),
+                "x_pred": flat(df["x_pred"]),
+                "p_pred": flat(df["P_pred"]),
+                "cross_cov": flat(df["C"]),
             }
         )
 
     def run(self, ctx: RunContext) -> None:
-        """Run the filter over every page, then write the whole run at once."""
+        """Run the filter over every page, writing each page's ticks as it goes."""
         self.prepare(ctx)
 
         leftover = None
@@ -103,20 +114,21 @@ class KalmanStep(PipelineStep):
             tick_times = readings["time"].dt.floor(TICK)
             last_tick = tick_times == tick_times.iloc[-1]
             self._filter(readings[~last_tick])
+            self._write_ticks(ctx)
             leftover = readings[last_tick]
         if leftover is not None:
             self._filter(leftover)
+            self._write_ticks(ctx)
 
+    def _write_ticks(self, ctx: RunContext) -> None:
+        """Write the ticks recorded so far and clear them."""
         if not self.ticks:
             return
-
-        # TODO: smooth self.ticks with URTS here
-
-        xs = np.array([tick[1] for tick in self.ticks])
-        states = pd.DataFrame(
-            {"time": [tick[0] for tick in self.ticks], "px": xs[:, PX], "py": xs[:, PY]}
+        ticks = pd.DataFrame(
+            self.ticks, columns=["time", "x", "P", "x_pred", "P_pred", "C"]
         )
-        self.write(self.transform(states, ctx), ctx)
+        self.write(self.transform(ticks, ctx), ctx)
+        self.ticks = []
 
     def _filter(self, readings: pd.DataFrame) -> None:
         """Run the filter over readings, one 10ms tick at a time."""
@@ -196,12 +208,3 @@ class KalmanStep(PipelineStep):
         x = (lon - origin_lon) * METERS_PER_DEGREE_LAT * np.cos(np.radians(origin_lat))
         y = (lat - origin_lat) * METERS_PER_DEGREE_LAT
         return np.array([x, y])
-
-    def _to_lat_lon(
-        self, x: np.ndarray, y: np.ndarray
-    ) -> tuple[np.ndarray, np.ndarray]:
-        """Inverse of _to_xy."""
-        origin_lat, origin_lon = self.origin
-        lat = origin_lat + y / METERS_PER_DEGREE_LAT
-        lon = origin_lon + x / (METERS_PER_DEGREE_LAT * np.cos(np.radians(origin_lat)))
-        return lat, lon
