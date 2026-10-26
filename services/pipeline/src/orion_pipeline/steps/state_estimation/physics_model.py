@@ -1,4 +1,6 @@
 from abc import ABC, abstractmethod
+from .phys_model_config import PhysicsModelConfig
+
 
 import numpy as np
 
@@ -10,7 +12,7 @@ class PhysicsModel(ABC):
     States follow the layout in state.py: shape (STATE_SIZE,) or (N, STATE_SIZE).
     """
 
-    def __init__(self, config):
+    def __init__(self, config: PhysicsModelConfig) -> None:
         self.config = config
 
     @abstractmethod
