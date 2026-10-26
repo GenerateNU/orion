@@ -96,6 +96,9 @@ class KalmanStep(PipelineStep):
     def transform(self, df: pd.DataFrame, ctx: RunContext) -> pd.DataFrame:
         """Ticks [time, x, P, x_pred, P_pred, C] -> ukf_states rows, arrays flattened."""
 
+        if self.origin is None:
+            raise RuntimeError("Origin not set: no GPS fix was seen.")
+
         def flat(arrays: pd.Series) -> list[list[float] | None]:
             return [None if a is None else a.ravel().tolist() for a in arrays]
 
@@ -142,13 +145,16 @@ class KalmanStep(PipelineStep):
 
     def _filter(self, readings: pd.DataFrame) -> None:
         """Run the filter over readings, one 10ms tick at a time."""
+
         for tick_time, tick_readings in readings.groupby(
             readings["time"].dt.floor(TICK)
         ):
-            if self.ukf is not None and tick_time - self.tick_time > MAX_GAP:
+            if (self.ukf is not None 
+                and self.tick_time is not None 
+                and tick_time - self.tick_time > MAX_GAP):
                 self.ukf = None
 
-            if self.ukf is None:
+            if self.ukf is None or self.tick_time is None:
                 self._try_start(tick_time, tick_readings)
                 continue
 
@@ -214,6 +220,8 @@ class KalmanStep(PipelineStep):
 
     def _to_xy(self, lat: float, lon: float) -> np.ndarray:
         """Latitude/longitude -> [x east, y north] meters from the origin. Fine at track scale."""
+        if self.origin is None:
+            raise RuntimeError("Origin not set.")
         origin_lat, origin_lon = self.origin
         x = (lon - origin_lon) * METERS_PER_DEGREE_LAT * np.cos(np.radians(origin_lat))
         y = (lat - origin_lat) * METERS_PER_DEGREE_LAT
