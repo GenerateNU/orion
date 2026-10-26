@@ -109,17 +109,18 @@ class UnscentedKalmanFilter:
 
     def _state_mean(self, sigmas: np.ndarray) -> np.ndarray:
         """Weighted mean of states, averaging heading as offsets from the center point."""
-        mean = self.Wm @ sigmas
+        mean: np.ndarray = self.Wm @ sigmas
         offsets = wrap_angle(sigmas[:, THETA] - sigmas[0, THETA])
         mean[THETA] = wrap_angle(sigmas[0, THETA] + self.Wm @ offsets)
         return mean
 
     def _state_residuals(self, sigmas: np.ndarray, mean: np.ndarray) -> np.ndarray:
         """sigmas - mean, with heading wrapped."""
-        d = sigmas - mean
+        d: np.ndarray = sigmas - mean
         d[:, THETA] = wrap_angle(d[:, THETA])
         return d
 
     def _weighted_cov(self, a: np.ndarray, b: np.ndarray) -> np.ndarray:
         """Sum of Wc_i * a_i b_i^T."""
-        return (self.Wc[:, None] * a).T @ b
+        result: np.ndarray = (self.Wc[:, None] * a).T @ b
+        return result

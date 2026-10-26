@@ -172,8 +172,13 @@ class KalmanStep(PipelineStep):
         self, tick_time: pd.Timestamp, readings: Iterable[tuple[str, list[float]]]
     ) -> None:
         """Predict to tick_time, apply each reading, and record the tick."""
-        dt = (tick_time - self.tick_time).total_seconds()
-        x_pred, P_pred, C = self.ukf.predict(dt)
+        ukf = self.ukf
+        prev = self.tick_time
+        if ukf is None or prev is None:
+            raise RuntimeError("Filter stepped before it was started.")
+
+        dt = (tick_time - prev).total_seconds()
+        x_pred, P_pred, C = ukf.predict(dt)
 
         for sensor, values in readings:
             h, R, gate = SENSORS[sensor]
