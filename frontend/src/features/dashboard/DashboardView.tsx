@@ -88,13 +88,30 @@ function RunDashboard() {
           </ButtonLink>
         }
       />
-      <section className={styles.placeholder} aria-labelledby="run-dashboard-title">
-        <h2 id="run-dashboard-title" className={styles.placeholderTitle}>
-          Run dashboard
-        </h2>
-        <TrackMap />
-        <SelectionSummary />
-      </section>
+
+      <div style={{ display: "flex", gap: "0", minHeight: "100vh" }}>
+        <div
+          style={{
+            width: "450px",
+            backgroundColor: "white",
+            padding: "24px",
+            flexShrink: 0,
+            borderRadius: "8px",
+            overflowY: "auto",
+          }}
+        >
+          <h3 style={{ margin: "0 0 12px 0", fontSize: "14px", fontWeight: "600" }}></h3>
+          <div style={{ marginTop: "48px" }}>
+            <TrackMap />
+          </div>
+        </div>
+        <div style={{ flex: 1, padding: "24px" }}>
+          {breadcrumb}
+          <section className={styles.placeholder}>
+            <SelectionSummary />
+          </section>
+        </div>
+      </div>
     </>
   );
 }
