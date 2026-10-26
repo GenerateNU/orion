@@ -182,11 +182,9 @@ class KalmanStep(PipelineStep):
 
         for sensor, values in readings:
             h, R, gate = SENSORS[sensor]
-            self.ukf.update(self._measurement(sensor, values), h, R, gate)
+            ukf.update(self._measurement(sensor, values), h, R, gate)
 
-        self.ticks.append(
-            (tick_time, self.ukf.x.copy(), self.ukf.P.copy(), x_pred, P_pred, C)
-        )
+        self.ticks.append((tick_time, ukf.x.copy(), ukf.P.copy(), x_pred, P_pred, C))
         self.tick_time = tick_time
 
     def _try_start(self, tick_time: pd.Timestamp, readings: pd.DataFrame) -> None:
