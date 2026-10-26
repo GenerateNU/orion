@@ -43,15 +43,15 @@ class UnscentedKalmanFilter:
         cross covariance between the old and the moved sigma points.
         """
         sigmas = self._sigma_points()
-        #TODO: control_input in ctra is not used - remove?
+        # TODO: control_input in ctra is not used - remove?
         moved = self.model.predict_forward(sigmas, None, dt)
 
         x_pred = self._state_mean(moved)
         d_sigmas = self._state_residuals(sigmas, self.x)
         d_moved = self._state_residuals(moved, x_pred)
 
-        #TODO: currently no process noise function
-        P_pred = self._weighted_cov(d_moved, d_moved) #+ self.model.process_noise(dt)
+        # TODO: currently no process noise function
+        P_pred = self._weighted_cov(d_moved, d_moved)  # + self.model.process_noise(dt)
         C = self._weighted_cov(d_sigmas, d_moved)
 
         self.x, self.P = x_pred, P_pred

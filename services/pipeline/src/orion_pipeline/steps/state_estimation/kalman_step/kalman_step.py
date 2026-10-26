@@ -46,6 +46,7 @@ SENSORS = {
 # Starting uncertainty for [px, py, v, theta, omega, a]
 P0 = np.diag([GPS_STD_M**2, GPS_STD_M**2, 1.0**2, 0.3**2, 0.5**2, 2.0**2])
 
+
 @register_step
 class KalmanStep(PipelineStep):
     """Forward pass: run a UKF over cleaned sensor data on a 10ms grid.

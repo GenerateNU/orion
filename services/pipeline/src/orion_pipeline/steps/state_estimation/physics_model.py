@@ -1,8 +1,8 @@
 from abc import ABC, abstractmethod
-from .phys_model_config import PhysicsModelConfig
-
 
 import numpy as np
+
+from .phys_model_config import PhysicsModelConfig
 
 
 class PhysicsModel(ABC):

@@ -4,14 +4,15 @@ import pytest
 from orion_pipeline.steps.state_estimation.ctra_model import CTRAModel
 from orion_pipeline.steps.state_estimation.phys_model_config import PhysicsModelConfig
 from orion_pipeline.steps.state_estimation.state import (
-    A,
     OMEGA,
     PX,
     PY,
     STATE_SIZE,
     THETA,
+    A,
     V,
 )
+
 
 @pytest.fixture
 def model() -> CTRAModel:
@@ -84,7 +85,7 @@ def test_batch_matches_single_states(model):
     batch = model.predict(states, dt=0.3)
 
     assert batch.shape == states.shape
-    for row, out in zip(states, batch):
+    for row, out in zip(states, batch, strict=True):
         np.testing.assert_allclose(out, model.predict(row, dt=0.3))
 
 
