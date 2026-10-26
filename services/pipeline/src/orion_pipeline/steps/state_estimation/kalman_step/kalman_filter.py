@@ -44,7 +44,7 @@ class UnscentedKalmanFilter:
         """
         sigmas = self._sigma_points()
         # TODO: control_input in ctra is not used - remove?
-        moved = self.model.predict_forward(sigmas, None, dt)
+        moved = self.model.predict_forward(sigmas, dt)
 
         x_pred = self._state_mean(moved)
         d_sigmas = self._state_residuals(sigmas, self.x)

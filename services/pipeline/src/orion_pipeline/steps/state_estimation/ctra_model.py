@@ -11,7 +11,7 @@ class CTRAModel:
     def __init__(self, config: PhysicsModelConfig) -> None:
         self.config = config
 
-    def predict_forward(self, state, control_input, dt):
+    def predict_forward(self, state: FloatArray, dt: float) -> FloatArray:
         """Move the state forward by dt seconds.
 
         Args:
@@ -78,8 +78,10 @@ class CTRAModel:
 
         Position (PX, PY) gets no direct noise. It becomes uncertain indirectly,
         because errors in speed and heading carry into position.
-        Args: 
+
+        Args:
             dt: Time step
+
         Returns:
             Array of shape (STATE_SIZE, STATE_SIZE).
         """

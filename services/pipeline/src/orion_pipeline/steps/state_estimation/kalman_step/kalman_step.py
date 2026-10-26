@@ -77,8 +77,7 @@ class KalmanStep(PipelineStep):
         self.first_fix: tuple[pd.Timestamp, np.ndarray] | None = None
         # One (time, x, P, x_pred, P_pred, C) per tick not yet written. The
         # prediction is None on ticks where the filter (re)started.
-        self.ticks: list[tuple] = []
-
+        self.ticks: list[tuple[pd.Timestamp, np.ndarray, np.ndarray, np.ndarray | None, np.ndarray | None, np.ndarray | None]] = []
     def extract(self, ctx: RunContext) -> Iterator[pd.DataFrame]:
         return self.reader.iter_pages(
             select_cleaned_readings(ctx.run_id, SENSORS.keys()), self.pagination_key

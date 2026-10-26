@@ -1,7 +1,9 @@
+from typing import Any
+
 # Unit conversions
 METERS_PER_DEGREE_LAT = 111_320.0
 MPS_PER_MPH = 0.44704
-from typing import Any
+
 
 class PhysicsModelConfig:
     def __init__(
