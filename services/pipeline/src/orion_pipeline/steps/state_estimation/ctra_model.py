@@ -68,3 +68,32 @@ class CTRAModel:
         out[..., THETA] = wrap_angle(new_heading)
 
         return out
+
+    def process_noise(self, dt: float) -> FloatArray:
+        """Process noise Q for a step of dt seconds.
+
+        Q adds a little extra doubt for that:
+
+        - sigma_jerk: how much acceleration can randomly change (affects speed).
+        - sigma_alpha: how much turn rate can randomly change (affects heading).
+
+        Position (PX, PY) gets no direct noise. It becomes uncertain indirectly,
+        because errors in speed and heading carry into position.
+
+        Returns:
+            Array of shape (STATE_SIZE, STATE_SIZE).
+        """
+        accel_jerk = self.config.model_params.get("sigma_jerk", 1.0)
+        heading_jerk = self.config.model_params.get("sigma_alpha", 0.1)
+
+        q = np.zeros((STATE_SIZE, STATE_SIZE))
+        for rate, integrated, sigma in (
+            (A, V, accel_jerk),
+            (OMEGA, THETA, heading_jerk),
+        ):
+            var = sigma**2
+            q[integrated, integrated] = var * dt**3 / 3
+            q[integrated, rate] = q[rate, integrated] = var * dt**2 / 2
+            q[rate, rate] = var * dt
+
+        return q
