@@ -149,9 +149,11 @@ class KalmanStep(PipelineStep):
         for tick_time, tick_readings in readings.groupby(
             readings["time"].dt.floor(TICK)
         ):
-            if (self.ukf is not None 
-                and self.tick_time is not None 
-                and tick_time - self.tick_time > MAX_GAP):
+            if (
+                self.ukf is not None
+                and self.tick_time is not None
+                and tick_time - self.tick_time > MAX_GAP
+            ):
                 self.ukf = None
 
             if self.ukf is None or self.tick_time is None:
