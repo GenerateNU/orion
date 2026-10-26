@@ -5,6 +5,7 @@ import {
   useDashboardActions,
   useHoverTimeSubscription,
 } from "../state/useDashboard";
+import { useMockPositions } from "../panels/useMockPositions";
 import EmptyState from "../../../components/ui/EmptyState";
 
 export function TrackMap() {
@@ -16,30 +17,7 @@ export function TrackMap() {
   const { previewWindow, commitWindow } = useDashboardActions();
   const committedWindow = useCommittedWindow();
 
-  // Mock data: 100 x,y points on oval, equally spaced over 120 seconds
-  const mockRawPositions = useMemo(() => {
-    return Array.from({ length: 100 }, (_, i) => {
-      const angle = (i / 100) * 2 * Math.PI;
-      const x = 150 + 150 * Math.cos(angle);
-      const y = 100 + 100 * Math.sin(angle);
-      return [x, y] as [number, number];
-    });
-  }, []);
-
-  // Mock time scaled to match the URL run duration (~115 seconds in microseconds)
-  // eslint-disable-next-line no-loss-of-precision
-  const runDurationUs = 115642993357766642;
-  const mockTime = useMemo(() => {
-    return Array.from({ length: 100 }, (_, i) => (i / 100) * runDurationUs);
-  }, []);
-
-  // Convert x,y to track progress (0-100)
-  const mockPositions = useMemo(() => {
-    return mockRawPositions.map((_, i) => (i / 100) * 100);
-  }, [mockRawPositions]);
-
-  const positions = mockPositions;
-  const time = mockTime;
+  const { time, positions } = useMockPositions();
 
   // Listen for hover time from other panels
   useHoverTimeSubscription((t) => {
@@ -134,15 +112,6 @@ export function TrackMap() {
     );
     const endIdx = Math.round(
       (committedWindow[1] / time[time.length - 1]) * (positions.length - 1),
-    );
-
-    console.log(
-      "committedWindow segments: startIdx",
-      startIdx,
-      "endIdx",
-      endIdx,
-      "count:",
-      endIdx - startIdx,
     );
 
     const segments: Array<{ x1: number; y1: number; x2: number; y2: number }> = [];
@@ -270,10 +239,6 @@ export function TrackMap() {
           {carPos && <Circle x={carPos.x} y={carPos.y} radius={6} fill="white" />}
         </Layer>
       </Stage>
-
-      <p style={{ margin: "0", fontSize: "12px", color: "var(--text-secondary)" }}>
-        Window: whole run · Laps: none
-      </p>
     </div>
   );
 }
