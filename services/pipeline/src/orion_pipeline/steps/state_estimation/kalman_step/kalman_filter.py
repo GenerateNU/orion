@@ -11,6 +11,14 @@ class UnscentedKalmanFilter:
 
     Pushes 2n + 1 sigma points through the physics model instead of
     linearizing it. Each sensor is applied as its own update.
+
+    Args:
+        model: The physics model
+        x0: starting state
+        P0: Starting uncertainty
+        alpha: spread around current state
+        beta: shape of error based on prior distribution
+        kappa: spread
     """
 
     def __init__(
@@ -21,8 +29,7 @@ class UnscentedKalmanFilter:
         alpha: float = 0.5,
         beta: float = 2.0,
         kappa: float = 0.0,
-    ):
-        """Set the initial state and precompute the sigma point weights."""
+    ) -> None:
         self.model = model
         self.x = np.array(x0, dtype=np.float64)
         self.P = np.array(P0, dtype=np.float64)
