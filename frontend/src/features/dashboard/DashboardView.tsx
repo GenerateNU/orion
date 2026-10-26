@@ -102,6 +102,9 @@ function RunDashboard() {
         >
           <h3 style={{ margin: "0 0 12px 0", fontSize: "14px", fontWeight: "600" }}></h3>
           <div style={{ marginTop: "48px" }}>
+            <h3 style={{ margin: "0 0 12px 0", fontSize: "14px", fontWeight: "600" }}>
+              Track position
+            </h3>
             <TrackMap />
           </div>
         </div>
