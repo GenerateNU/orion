@@ -2,105 +2,117 @@ from collections.abc import Callable
 
 import numpy as np
 
-from orion_pipeline.steps.state_estimation.state import THETA
+from orion_pipeline.steps.state_estimation.ctra_model import CTRAModel
+from orion_pipeline.steps.state_estimation.state import THETA, wrap_angle
 
 
 class UnscentedKalmanFilter:
-    """Unscented Kalman filter over the car's 6-value state.
+    """Unscented Kalman filter over the car's state (layout in state.py).
 
-    The physics model (CTRA) is nonlinear, so instead of linearizing it we push
-    a small set of "sigma points" through it and rebuild a mean and covariance
-    from where they land. Each sensor is applied as its own update, so a tick
-    can use any subset of sensors.
+    Pushes 2n + 1 sigma points through the physics model instead of
+    linearizing it. Each sensor is applied as its own update.
     """
 
     def __init__(
         self,
-        f: Callable[[np.ndarray, float], np.ndarray],
+        model: CTRAModel,
         x0: np.ndarray,
         P0: np.ndarray,
-        Q: Callable[[float], np.ndarray],
-        alpha: float = 1e-3,
+        alpha: float = 0.5,
         beta: float = 2.0,
         kappa: float = 0.0,
     ):
-        """Set up the filter.
+        """Set the initial state and precompute the sigma point weights."""
+        self.model = model
+        self.x = np.array(x0, dtype=np.float64)
+        self.P = np.array(P0, dtype=np.float64)
 
-        f: physics model, f(state, dt) -> next state (e.g. CTRA predict_forward).
-        x0, P0: initial state (n,) and covariance (n, n), float64.
-        Q: process noise as a function of dt, Q(dt) -> (n, n), so irregular
-            gaps between ticks get the right amount of added uncertainty.
-        alpha, beta, kappa: sigma point spread. alpha sets how far the points
-            sit from the mean, beta=2 is optimal for Gaussian noise, and kappa
-            is usually 0.
+        n = len(self.x)
+        lam = alpha**2 * (n + kappa) - n
+        self.c = n + lam
 
-        Precomputes lambda = alpha^2 (n + kappa) - n, plus the mean weights
-        (Wm) and covariance weights (Wc) for the 2n + 1 sigma points. They
-        depend only on n and the parameters, so they never change.
+        self.Wm = np.full(2 * n + 1, 1 / (2 * self.c))
+        self.Wc = np.full(2 * n + 1, 1 / (2 * self.c))
+        self.Wm[0] = lam / self.c
+        self.Wc[0] = lam / self.c + (1 - alpha**2 + beta)
+
+    def predict(self, dt: float) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
+        """Move the state forward dt seconds.
+
+        Returns copies of (x_pred, P_pred, C) for the smoother, where C is the
+        cross covariance between the old and the moved sigma points.
         """
-        pass
+        sigmas = self._sigma_points()
+        #TODO: control_input in ctra is not used - remove?
+        moved = self.model.predict_forward(sigmas, None, dt)
 
-    def predict(self, dt: float) -> None:
-        """Move the state forward by dt seconds with the physics model.
+        x_pred = self._state_mean(moved)
+        d_sigmas = self._state_residuals(sigmas, self.x)
+        d_moved = self._state_residuals(moved, x_pred)
 
-        1. Generate sigma points around the current state (_sigma_points).
-        2. Run each one through f(point, dt).
-        3. Rebuild the predicted mean as the weighted sum of those points. The
-           heading takes a circular mean, atan2(sum w sin, sum w cos), so
-           points on either side of +/-pi don't average to 0.
-        4. Rebuild the covariance from weighted outer products of
-           (point - mean), with heading residuals wrapped to [-pi, pi], and
-           add Q(dt).
+        #TODO: currently no process noise function
+        P_pred = self._weighted_cov(d_moved, d_moved) #+ self.model.process_noise(dt)
+        C = self._weighted_cov(d_sigmas, d_moved)
 
-        Runs on every tick, even ticks with no readings, so the covariance grows
-        while no data comes in.
-        """
-        pass
+        self.x, self.P = x_pred, P_pred
+        return x_pred.copy(), P_pred.copy(), C
 
     def update(
         self,
         z: np.ndarray,
         h: Callable[[np.ndarray], np.ndarray],
         R: np.ndarray,
-    ) -> None:
+        gate: float | None = None,
+    ) -> bool:
         """Correct the state with one sensor's measurement.
 
-        z: the measurement (m,), e.g. [px, py] for GPS or [v] for speed.
-        h: measurement model, h(state) -> what this sensor would read (m,).
-        R: that sensor's measurement noise (m, m).
-
-        1. Draw sigma points around the predicted state and map each through h.
-        2. Predicted measurement z_hat is their weighted mean. The innovation
-           covariance S is their weighted spread plus R.
-        3. Cross covariance Pxz links the state spread to the measurement spread.
-        4. Kalman gain K = Pxz S^-1. The new state is x + K (z - z_hat) and the
-           new covariance is P - K S K^T.
-        5. Symmetrize P, (P + P^T) / 2, to stop floating point drift.
-
-        Call once for each sensor that reported in the tick.
+        z (m,) is the reading, h maps states (N, n) -> (N, m), R (m, m) is the
+        sensor noise. If gate is set, readings with NIS above it are skipped.
+        Returns whether the reading was applied.
         """
-        pass
+        sigmas = self._sigma_points()
+        Z = h(sigmas)
 
-    def nis(
-        self,
-        z: np.ndarray,
-        h: Callable[[np.ndarray], np.ndarray],
-        R: np.ndarray,
-    ) -> float:
-        """Normalized innovation squared, (z - z_hat)^T S^-1 (z - z_hat).
+        z_hat = self.Wm @ Z
+        dZ = Z - z_hat
+        dX = self._state_residuals(sigmas, self.x)
 
-        Measures how surprising a measurement is given the current state and
-        its uncertainty. Callers compare it to a chi-square threshold for the
-        sensor's dimension and skip update() when it's too large, which drops
-        GPS jumps and other outliers. Doesn't change the filter's state.
-        """
-        pass
+        S = self._weighted_cov(dZ, dZ) + R
+        Pxz = self._weighted_cov(dX, dZ)
+
+        y = z - z_hat
+        if gate is not None and y @ np.linalg.solve(S, y) > gate:
+            return False
+
+        K = np.linalg.solve(S, Pxz.T).T
+
+        self.x = self.x + K @ y
+        self.x[THETA] = wrap_angle(self.x[THETA])
+
+        self.P = self.P - K @ S @ K.T
+        self.P = (self.P + self.P.T) / 2
+        return True
 
     def _sigma_points(self) -> np.ndarray:
-        """Return the 2n + 1 sigma points around the current state, shape (2n + 1, n).
+        """2n + 1 points around x: x, then x +/- each column of chol(c P)."""
+        L = np.linalg.cholesky(self.c * self.P)
+        sigmas = np.vstack([self.x, self.x + L.T, self.x - L.T])
+        sigmas[:, THETA] = wrap_angle(sigmas[:, THETA])
+        return sigmas
 
-        The first point is the mean. The rest are mean +/- each column of
-        L = cholesky((n + lambda) P). Before factoring, add a small jitter to
-        the diagonal so Cholesky doesn't fail when P is nearly singular.
-        """
-        pass
+    def _state_mean(self, sigmas: np.ndarray) -> np.ndarray:
+        """Weighted mean of states, averaging heading as offsets from the center point."""
+        mean = self.Wm @ sigmas
+        offsets = wrap_angle(sigmas[:, THETA] - sigmas[0, THETA])
+        mean[THETA] = wrap_angle(sigmas[0, THETA] + self.Wm @ offsets)
+        return mean
+
+    def _state_residuals(self, sigmas: np.ndarray, mean: np.ndarray) -> np.ndarray:
+        """sigmas - mean, with heading wrapped."""
+        d = sigmas - mean
+        d[:, THETA] = wrap_angle(d[:, THETA])
+        return d
+
+    def _weighted_cov(self, a: np.ndarray, b: np.ndarray) -> np.ndarray:
+        """Sum of Wc_i * a_i b_i^T."""
+        return (self.Wc[:, None] * a).T @ b

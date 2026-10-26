@@ -11,7 +11,8 @@ class CTRAModel:
     def __init__(self, config: PhysicsModelConfig) -> None:
         self.config = config
 
-    def predict(self, state: FloatArray, dt: float = 0.1) -> FloatArray:
+    def predict_forward(self, state, control_input, dt):
+
         """Move the state forward by dt seconds.
 
         Args:
