@@ -5,7 +5,7 @@ import {
   useDashboardActions,
   useHoverTimeSubscription,
 } from "../state/useDashboard";
-import { useMockPositions } from "../panels/useMockPositions";
+import { useMockPositions, formatTime } from "../panels/useMockPositions";
 import EmptyState from "../../../components/ui/EmptyState";
 
 export function TrackMap() {
@@ -14,9 +14,14 @@ export function TrackMap() {
   const [hoverTime, setHoverTime] = useState<number | null>(null);
   const [dragStart, setDragStart] = useState<number | null>(null);
   const [dragEnd, setDragEnd] = useState<number | null>(null);
-  const { previewWindow, commitWindow } = useDashboardActions();
+  const {
+    previewWindow,
+    commitWindow,
+    setHoverTime: setDashboardHoverTime,
+  } = useDashboardActions();
   const committedWindow = useCommittedWindow();
 
+  // Get mock position (now x,y) and time data
   const { time, positions } = useMockPositions();
 
   // Listen for hover time from other panels
@@ -24,27 +29,39 @@ export function TrackMap() {
     setHoverTime(t);
   });
 
-  // Convert mouse position to time based on track angle
+  // Convert mouse position to time based on closest track point
   const getTimeFromMouse = () => {
     if (!stageRef.current) return 0;
     const pointerPos = stageRef.current.getPointerPosition();
     if (!pointerPos) return 0;
 
-    const dx = pointerPos.x - 150;
-    const dy = pointerPos.y - 100;
-    let angle = Math.atan2(dy, dx);
+    const mouseX = pointerPos.x;
+    const mouseY = pointerPos.y;
 
-    // Normalize angle to 0-2π
-    if (angle < 0) angle += 2 * Math.PI;
+    // Find closest point on track
+    let minDist = Infinity;
+    let closestIdx = 0;
 
-    // Convert angle to progress (0-100)
-    const progress = (angle / (2 * Math.PI)) * 100;
+    for (let i = 0; i < positions.length; i++) {
+      const [x, y] = positions[i];
+      const dist = Math.hypot(mouseX - x, mouseY - y);
+      if (dist < minDist) {
+        minDist = dist;
+        closestIdx = i;
+      }
+    }
 
-    // Convert progress to time
-    return (progress / 100) * time[time.length - 1];
+    // Interpolate time at closest index
+    if (closestIdx === positions.length - 1) {
+      return time[closestIdx];
+    }
+
+    // Simple linear interpolation between closest points
+    const t = Math.min(1, minDist / 20); // Interpolate within 20px
+    return time[closestIdx] + (time[closestIdx + 1] - time[closestIdx]) * t;
   };
 
-  // Get car position by interpolating between mock data points
+  // Get car position by interpolating x,y directly
   const getCarPosition = (hoverTimeVal: number | null) => {
     if (hoverTimeVal === null) return null;
 
@@ -57,50 +74,36 @@ export function TrackMap() {
 
     if (idx === time.length - 1) {
       // At or past the end
-      const pos = positions[idx];
-      const angle = (pos / 100) * 2 * Math.PI;
-      return {
-        x: 150 + 150 * Math.cos(angle),
-        y: 100 + 100 * Math.sin(angle),
-      };
+      const [x, y] = positions[idx];
+      return { x, y };
     }
 
     // Interpolate between idx and idx+1
     const t0 = time[idx];
     const t1 = time[idx + 1];
-    const pos0 = positions[idx];
-    const pos1 = positions[idx + 1];
+    const [x0, y0] = positions[idx];
+    const [x1, y1] = positions[idx + 1];
 
     // Linear interpolation factor
     const factor = (hoverTimeVal - t0) / (t1 - t0);
-    const interpolatedPos = pos0 + (pos1 - pos0) * factor;
+    const x = x0 + (x1 - x0) * factor;
+    const y = y0 + (y1 - y0) * factor;
 
-    const angle = (interpolatedPos / 100) * 2 * Math.PI;
-    return {
-      x: 150 + 150 * Math.cos(angle),
-      y: 100 + 100 * Math.sin(angle),
-    };
+    return { x, y };
   };
 
-  // Generate oval track path
+  // Generate track path from x,y positions
   const trackPath = useMemo(() => {
-    const points: [number, number][] = [];
-    for (let i = 0; i <= 360; i += 10) {
-      const angle = (i * Math.PI) / 180;
-      const x = 150 + 150 * Math.cos(angle);
-      const y = 100 + 100 * Math.sin(angle);
-      points.push([x, y]);
+    if (!positions || positions.length === 0) return "";
+
+    let pathData = `M ${positions[0][0]} ${positions[0][1]}`;
+    for (let i = 1; i < positions.length; i++) {
+      pathData += ` L ${positions[i][0]} ${positions[i][1]}`;
     }
     // Close the path
-    points.push(points[0]);
-
-    // Convert to path string
-    let pathData = `M ${points[0][0]} ${points[0][1]}`;
-    for (let i = 1; i < points.length; i++) {
-      pathData += ` L ${points[i][0]} ${points[i][1]}`;
-    }
+    pathData += ` L ${positions[0][0]} ${positions[0][1]}`;
     return pathData;
-  }, []);
+  }, [positions]);
 
   // Generate committed window line segments
   const committedSegments = useMemo(() => {
@@ -117,15 +120,8 @@ export function TrackMap() {
     const segments: Array<{ x1: number; y1: number; x2: number; y2: number }> = [];
 
     for (let i = startIdx; i < endIdx && i < positions.length - 1; i++) {
-      const pos1 = positions[i];
-      const pos2 = positions[i + 1];
-      const angle1 = (pos1 / 100) * 2 * Math.PI;
-      const angle2 = (pos2 / 100) * 2 * Math.PI;
-      const x1 = 150 + 150 * Math.cos(angle1);
-      const y1 = 100 + 100 * Math.sin(angle1);
-      const x2 = 150 + 150 * Math.cos(angle2);
-      const y2 = 100 + 100 * Math.sin(angle2);
-
+      const [x1, y1] = positions[i];
+      const [x2, y2] = positions[i + 1];
       segments.push({ x1, y1, x2, y2 });
     }
 
@@ -145,15 +141,8 @@ export function TrackMap() {
     const segments: Array<{ x1: number; y1: number; x2: number; y2: number }> = [];
 
     for (let i = startIdx; i < endIdx && i < positions.length - 1; i++) {
-      const pos1 = positions[i];
-      const pos2 = positions[i + 1];
-      const angle1 = (pos1 / 100) * 2 * Math.PI;
-      const angle2 = (pos2 / 100) * 2 * Math.PI;
-      const x1 = 150 + 150 * Math.cos(angle1);
-      const y1 = 100 + 100 * Math.sin(angle1);
-      const x2 = 150 + 150 * Math.cos(angle2);
-      const y2 = 100 + 100 * Math.sin(angle2);
-
+      const [x1, y1] = positions[i];
+      const [x2, y2] = positions[i + 1];
       segments.push({ x1, y1, x2, y2 });
     }
 
@@ -168,20 +157,10 @@ export function TrackMap() {
 
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: "12px" }}>
-      <div>
-        <h3 style={{ margin: "0 0 4px 0", fontSize: "14px", fontWeight: "600" }}>Track position</h3>
-        {committedWindow && (
-          <p style={{ margin: "0", fontSize: "12px", color: "var(--text-secondary)" }}>
-            Window {Math.round((committedWindow[0] / time[time.length - 1]) * 100)}% –{" "}
-            {Math.round((committedWindow[1] / time[time.length - 1]) * 100)}%
-          </p>
-        )}
-      </div>
-
       <Stage
         ref={stageRef}
-        width={600}
-        height={400}
+        width={400}
+        height={300}
         style={{
           backgroundColor: "var(--bg-dark)",
           cursor: dragStart !== null ? "grabbing" : "grab",
@@ -192,11 +171,17 @@ export function TrackMap() {
           setDragEnd(timeVal);
         }}
         onMouseMove={() => {
-          if (dragStart === null) return;
-          const timeVal = getTimeFromMouse();
-          setDragEnd(timeVal);
-          const [start, end] = dragStart < timeVal ? [dragStart, timeVal] : [timeVal, dragStart];
-          previewWindow([start, end]);
+          if (dragStart === null) {
+            // Not dragging, just update hover time
+            const timeVal = getTimeFromMouse();
+            setDashboardHoverTime(timeVal);
+          } else {
+            // Dragging, update preview
+            const timeVal = getTimeFromMouse();
+            setDragEnd(timeVal);
+            const [start, end] = dragStart < timeVal ? [dragStart, timeVal] : [timeVal, dragStart];
+            previewWindow([start, end]);
+          }
         }}
         onMouseUp={() => {
           if (dragStart === null || dragEnd === null) return;
@@ -239,6 +224,12 @@ export function TrackMap() {
           {carPos && <Circle x={carPos.x} y={carPos.y} radius={6} fill="white" />}
         </Layer>
       </Stage>
+
+      {committedWindow && (
+        <p style={{ margin: "0", fontSize: "12px", color: "var(--text-secondary)" }}>
+          {formatTime(committedWindow[0])}–{formatTime(committedWindow[1])}
+        </p>
+      )}
     </div>
   );
 }
