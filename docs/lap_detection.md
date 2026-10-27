@@ -500,8 +500,8 @@ merge with the next one.
 
 ## 12. Tunable constants
 
-These are class attributes at the top of `LapStep`, passed into the
-`lap_utils` functions as arguments so `lap_utils` stays pure. They are
+These live in `lap_constants.py` and are passed into the `lap_utils`
+functions as arguments so `lap_utils` stays pure. They are
 **untuned starting guesses** and should potentially move to `Settings` later.
 
 | Name | Value | Meaning | Tradeoff |
@@ -538,8 +538,9 @@ These are deliberately not handled in this design.
 
 | File | What it is |
 | --- | --- |
-| `services/pipeline/src/orion_pipeline/steps/lap_step/lap_step.py` | `LapStep`: attributes, constants, `extract`, and the two-pass plumbing. Real code. |
-| `services/pipeline/src/orion_pipeline/steps/lap_step/lap_utils.py` | Pure geometry helpers. The dataclasses and `EARTH_RADIUS_M` are real; every function is a documented stub. |
+| `services/pipeline/src/orion_pipeline/steps/lap_step/lap_step.py` | `LapStep`: attributes, `extract`, and the two-pass plumbing. Real code. |
+| `services/pipeline/src/orion_pipeline/steps/lap_step/lap_constants.py` | `EARTH_RADIUS_M` and the tunable constants from section 12. |
+| `services/pipeline/src/orion_pipeline/steps/lap_step/lap_utils.py` | Pure geometry helpers. The dataclasses are real; every function is a documented stub. |
 | `packages/orion_core/src/orion_core/models/orion/laps_model.py` | The `Lap` model (`laps` table). It replaced the unused `Metrics` draft that was in this file. |
 | `packages/orion_core/alembic/versions/20261026_466a05a95692_add_laps_table.py` | Migration that creates (and on downgrade drops) `laps`. |
 
