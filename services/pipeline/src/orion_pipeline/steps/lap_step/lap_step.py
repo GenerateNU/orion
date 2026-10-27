@@ -9,6 +9,15 @@ from orion_pipeline.clients.base_client import BaseClient
 from orion_pipeline.clients.oriondb_client import OrionDBClient
 from orion_pipeline.runner.run_context import RunContext
 from orion_pipeline.steps.base_step import PipelineStep
+from orion_pipeline.steps.lap_step.lap_constants import (
+    GATE_HALF_WIDTH_M,
+    HITBOX_RADIUS_M,
+    MIN_HEADING_SPAN_M,
+    MIN_LAP_TIME_S,
+    MIN_REVISIT_DISTANCE_M,
+    MIN_REVISIT_TIME_S,
+    PASS1_SAMPLE_EVERY,
+)
 from orion_pipeline.steps.lap_step.lap_utils import (
     Gate,
     RevisitMemory,
@@ -53,15 +62,6 @@ class LapStep(PipelineStep):
     reads_from = "oriondb"
     output_table = "laps"
     pagination_key = ("time",)
-
-    # Untuned starting guesses. These can and should move to Settings later.
-    HITBOX_RADIUS_M = 3.0
-    MIN_REVISIT_TIME_S = 5.0
-    MIN_REVISIT_DISTANCE_M = 50.0
-    PASS1_SAMPLE_EVERY = 5
-    MIN_HEADING_SPAN_M = 0.1
-    GATE_HALF_WIDTH_M = 5.0
-    MIN_LAP_TIME_S = 10.0
 
     def __init__(self, reader: BaseClient, writer: OrionDBClient):
         super().__init__(reader, writer)
@@ -143,7 +143,7 @@ class LapStep(PipelineStep):
                 self._run_start = first["time"]
             self._run_end = page["time"].iloc[-1]
 
-            sampled = downsample(page, global_index, self.PASS1_SAMPLE_EVERY)
+            sampled = downsample(page, global_index, PASS1_SAMPLE_EVERY)
             global_index += len(page)
             origin_lat, origin_lon = self._origin()
             x, y = to_local_xy(
@@ -156,15 +156,15 @@ class LapStep(PipelineStep):
                 y,
                 time_s,
                 memory,
-                self.HITBOX_RADIUS_M,
-                self.MIN_REVISIT_TIME_S,
-                self.MIN_REVISIT_DISTANCE_M,
-                self.MIN_HEADING_SPAN_M,
+                HITBOX_RADIUS_M,
+                MIN_REVISIT_TIME_S,
+                MIN_REVISIT_DISTANCE_M,
+                MIN_HEADING_SPAN_M,
             )
             if revisit is not None:
                 index, heading = revisit
                 return build_gate(
-                    memory.x[index], memory.y[index], heading, self.GATE_HALF_WIDTH_M
+                    memory.x[index], memory.y[index], heading, GATE_HALF_WIDTH_M
                 )
         return None
 
@@ -192,9 +192,7 @@ class LapStep(PipelineStep):
         origin_lat, origin_lon = self._origin()
         x, y = to_local_xy(df["lattitude"], df["longitude"], origin_lat, origin_lon)
         crossings = find_crossings(x, y, df["time"], self._gate, self._previous)
-        crossings = apply_min_lap_time(
-            crossings, self._last_counted, self.MIN_LAP_TIME_S
-        )
+        crossings = apply_min_lap_time(crossings, self._last_counted, MIN_LAP_TIME_S)
         rows, self._lap_id, self._lap_start = build_lap_rows(
             ctx.run_id, self._lap_id, self._lap_start, crossings
         )

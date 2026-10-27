@@ -5,8 +5,7 @@ from datetime import datetime
 
 import pandas as pd
 
-# Mean Earth radius, used to turn latitude/longitude angles into meters.
-EARTH_RADIUS_M = 6_371_000.0
+from orion_pipeline.steps.lap_step.lap_constants import EARTH_RADIUS_M  # noqa: F401
 
 
 @dataclass(frozen=True)
