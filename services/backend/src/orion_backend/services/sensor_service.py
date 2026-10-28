@@ -16,6 +16,8 @@ from orion_core.settings import get_settings
 class SensorService:
     def __init__(self, penelope_db: AsyncSession):
         self.repository = SensorRepository(penelope_db)
+        self.offset = timedelta(seconds=get_settings().gps_time_offset_s)
+        self.lagged = lagged_raw_tags()
 
     async def list_sensors(self) -> list[SensorResponse]:
         rows = await self.repository.list_data_types()
@@ -41,14 +43,17 @@ class SensorService:
         if start > end:
             raise InvalidParameterError("`start` must be at or before `end`")
 
-        offset = timedelta(seconds=get_settings().gps_time_offset_s if gps_offset_on else 0)
-        lagged = lagged_raw_tags() if offset else frozenset()
+        lagged = self.lagged if gps_offset_on else frozenset()
 
         series = {name: SensorSeries(time=[], values=[]) for name in sensors}
-        rows = await self.repository.list_readings(run_id, sensors, start, end, lagged, offset)
+        rows = await self.repository.list_readings(
+            run_id, sensors, start, end, lagged, self.offset
+        )
         for row in rows:
             reading = row._mapping
-            time = reading["time"] + offset if reading["raw_tag"] in lagged else reading["time"]
+            time = reading["time"]
+            if reading["raw_tag"] in lagged:
+                time += self.offset
             series[reading["raw_tag"]].time.append(time)
             series[reading["raw_tag"]].values.append(reading["values"])
 

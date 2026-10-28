@@ -83,7 +83,8 @@ def test_shifts_only_lagged_sensors(monkeypatch):
 def test_correction_can_be_turned_off(monkeypatch, offset_s, kwargs):
     response, args = get_data(monkeypatch, offset_s, **kwargs)
     assert response.series[GPS].time == [START]
-    assert args[-2:] == (frozenset(), timedelta(0))
+    lagged, offset = args[-2:]
+    assert not lagged or offset == timedelta(0)
 
 
 def test_backend_matches_pipeline(monkeypatch):

@@ -7,7 +7,10 @@ from sqlalchemy.exc import InterfaceError, OperationalError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from orion_backend.core.exceptions import UpstreamError
-from orion_core.queries.penelope_queries import select_data_types, select_readings_between
+from orion_core.queries.penelope_queries import (
+    select_data_types,
+    select_readings_between,
+)
 
 
 class SensorRepository:
@@ -28,10 +31,13 @@ class SensorRepository:
         lagged_names: Collection[str] = (),
         offset: timedelta = timedelta(0),
     ) -> Sequence[Row[*tuple[Any, ...]]]:
-        stmt = select_readings_between(
-            run_id, data_type_names, start, end, lagged_names, offset
-        )
-        return (await self._execute(stmt)).all()
+        return (
+            await self._execute(
+                select_readings_between(
+                    run_id, data_type_names, start, end, lagged_names, offset
+                )
+            )
+        ).all()
 
     async def _execute(self, stmt: Executable) -> Result[*tuple[Any, ...]]:
         # Handled differently because Penelope is externally managed. So it will call
