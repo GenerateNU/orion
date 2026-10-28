@@ -2,11 +2,11 @@ import { useMemo, type ReactNode } from "react";
 import EmptyState from "@components/ui/EmptyState";
 import ErrorState from "@components/ui/ErrorState";
 import LoadingState from "@components/ui/LoadingState";
-import { TimeSeriesChart } from "@components/charts/TimeSeriesChart";
 import { useSensorTrace } from "@features/dashboard/data/useDashboardData";
 import { useDashboardActions, useVisibleWindow } from "@features/dashboard/state/useDashboard";
 import type { RunTime } from "@features/dashboard/utils/time";
 import styles from "./SensorChartPanel.module.css";
+import TimeSeriesChartFunctionality from "./TimeSeriesChartFunctionality";
 
 export type PanelSensor = {
   name: string;
@@ -60,7 +60,7 @@ export default function SensorChartsPanel({
         <h4 className={styles.chartTitle}>
           {chart.name} ({chart.unit})
         </h4>
-        <TimeSeriesChart series={chart.series} height={height} yLabel={chart.unit} />
+        <TimeSeriesChartFunctionality series={chart.series} height={height} yLabel={chart.unit} />
       </div>
     ));
 
