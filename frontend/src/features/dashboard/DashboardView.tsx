@@ -93,7 +93,7 @@ function RunDashboard() {
         <div
           style={{
             width: "450px",
-            backgroundColor: "white",
+            backgroundColor: "var(--bg-surface)",
             padding: "24px",
             flexShrink: 0,
             borderRadius: "8px",
