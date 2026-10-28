@@ -112,3 +112,14 @@ export function generateSegments(
 
   return segments;
 }
+export function getMousePosOnSVG(
+  event: React.MouseEvent<SVGSVGElement>,
+  stageRef: React.RefObject<SVGSVGElement | null>,
+): { x: number; y: number } | null {
+  if (!stageRef.current) return null;
+  const rect = stageRef.current.getBoundingClientRect();
+  return {
+    x: event.clientX - rect.left,
+    y: event.clientY - rect.top,
+  };
+}
