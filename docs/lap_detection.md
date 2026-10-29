@@ -46,7 +46,7 @@ without anyone having to configure anything for the track.
 | **Page** | The pipeline never loads a whole run at once. It reads it in pages of up to `PIPELINE_PAGE_SIZE` rows (100,000 by default), in time order. |
 | **Pass** | One read of the whole run from start to end, page by page. This step reads the run twice. |
 | **Local x/y** | A position in meters east (x) and north (y) of the run's first point. |
-| **Hitbox** | A small circle (3 m radius) around a remembered point. If the car later comes back inside it, it has revisited that spot. |
+| **Hitbox** | A small circle (3 m radius) around a visited point. If the car later comes back inside it, it has revisited that spot. |
 | **Revisit** | The car coming back to a spot it already drove over. |
 | **Gate** | The start/finish line: a 10 m line segment across the track, perpendicular to the car's direction of travel, placed at the first revisit. |
 | **Heading** | The direction the car is driving, as a unit vector (length 1). |
@@ -175,15 +175,17 @@ deliberate speed decision.
 
 Why: a 30-minute run at 100 Hz has about **180,000 points**. In the worst case
 (no revisit is ever found), every point is compared with every earlier point.
+That comparison is vectorized (see "Why vectorized" below), so even the worst
+case takes a second or two rather than minutes.
 
 Usually Pass 1 stops after the first lap, so in practice it's much cheaper.
 At 100 Hz and 10 m/s, every 5th point is still a point every 50 cm, much
-finer than the 3 m hitbox. The remembered points take only a few MB.
+finer than the 3 m hitbox. The visited points take only a few MB.
 
-### Memory
+### Visited points
 
-Every sampled point that isn't a revisit is appended to a `RevisitMemory`,
-which stores, for each point:
+Every sampled point is stored in a `VisitedPoints`: four parallel numpy
+arrays, where index i of each array is the same point.
 
 | Field | Meaning |
 | --- | --- |
@@ -191,20 +193,46 @@ which stores, for each point:
 | `time_s` | Seconds since the run's first point |
 | `distance_m` | Total distance driven up to this point |
 
-The memory persists across pages.
+These are the candidates a later point can revisit, not revisits themselves.
+`VisitedPoints` persists across pages, and is extended **once per page** (by
+concatenating the whole page onto each array), not once per point.
+
+### Why vectorized
+
+Pass 1 previously compared each new point against every remembered point in a
+Python loop. That's about 650 million iterations in the worst case (a long run
+with no revisit), which takes minutes. Storing points in a growing DataFrame
+would be worse, because adding a row copies the whole frame.
+
+The plan instead:
+
+- store points as numpy arrays,
+- extend them once per page instead of once per point,
+- compare each point against all earlier points in a single vectorized step.
+
+Same result, but the worst case drops to a second or two. The math uses numpy
+arrays rather than pandas Series because the loop runs tens of thousands of
+times, and pandas adds a fixed overhead to every operation.
+
+The outer loop over points stays a loop. Each point may only be compared with
+earlier points, the search needs the earliest revisit, and comparing all
+points with all points at once would need gigabytes of memory.
 
 ### Distance driven
 
-Each new sampled point adds the straight-line distance from the previous
-sampled point:
+Distance driven is worked out for a whole page at once. The step length
+between consecutive sampled points is the straight-line distance:
 
 ```
-distance_m[new] = distance_m[prev] + sqrt((x - x_prev)^2 + (y - y_prev)^2)
+step = sqrt(dx^2 + dy^2)
 ```
 
-The first point has `distance_m = 0`. The distance driven between two
-remembered points P and Q is then simply `distance_m[Q] - distance_m[P]`,
-which costs only one extra number per point.
+The page's first step is measured from the last point already in
+`VisitedPoints`, if there is one. `distance_m` is then the running total
+(cumsum) of the steps, starting from the last `distance_m` in
+`VisitedPoints`, or 0 for the run's first point. The distance driven between
+two visited points P and Q is simply `distance_m[Q] - distance_m[P]`, which
+costs only one extra number per point.
 
 **Example:** sampled points (0, 0), (3, 4), (6, 8) have `distance_m` 0, 5, 10.
 (Each step is a 3-4-5 triangle.)
@@ -222,7 +250,9 @@ Q is inside P's hitbox when the distance between them is at most
 (xQ - xP)^2 + (yQ - yP)^2 <= HITBOX_RADIUS_M^2
 ```
 
-Comparing squared distances avoids a square root.
+Comparing squared distances avoids a square root. `squared_distances`
+computes the left-hand side from Q to many points P at once, as one numpy
+operation.
 
 **Example** (radius 3, so radius² = 9), with P = (10, 10):
 
@@ -231,8 +261,8 @@ Comparing squared distances avoids a square root.
 
 ### The revisit rule
 
-For each new sampled point Q, in time order, an earlier remembered point P is
-a **candidate** when all three of these are true:
+An earlier visited point P is a **candidate** for a later point Q when all
+three of these are true:
 
 1. **Q is inside P's hitbox:** `(xQ - xP)^2 + (yQ - yP)^2 <= HITBOX_RADIUS_M^2`.
 2. **Enough time has passed:** `time_s[Q] - time_s[P] >= MIN_REVISIT_TIME_S`
@@ -241,19 +271,42 @@ a **candidate** when all three of these are true:
 3. **Enough distance was driven:** `distance_m[Q] - distance_m[P] >= MIN_REVISIT_DISTANCE_M`
    (50 m). This excludes a parked or crawling car.
 
-**Closest first.** Q may be inside several remembered points' hitboxes. The
-candidates are tried in order of smallest squared distance to Q. The first
-candidate with a **valid heading** (below) becomes the gate center, and Pass 1
-stops reading pages. If no candidate has a valid heading, Q is appended to
-memory and Pass 1 carries on.
+For each page, `find_revisit`:
+
+1. Works out the page's `distance_m` (above) and extends `VisitedPoints` with
+   the whole page. This happens first, so every index below refers to
+   `VisitedPoints` itself.
+2. For each of the page's points Q, at position q, in time order:
+   1. **Cutoff.** `time_s` and `distance_m` only ever increase. So every point
+      before some position is at least 5 s and 50 m of driving earlier than
+      Q, and every point after that position isn't. Binary search finds it:
+
+      ```
+      time_cut = searchsorted(time_s[:q], time_s[q] - MIN_REVISIT_TIME_S, side="right")
+      dist_cut = searchsorted(distance_m[:q], distance_m[q] - MIN_REVISIT_DISTANCE_M, side="right")
+      cutoff   = min(time_cut, dist_cut)
+      ```
+
+      Only points before `cutoff` can be candidates, so this replaces checking
+      rules 2 and 3 point by point.
+   2. **Hitbox test.** `d2 = squared_distances(Q, x[:cutoff], y[:cutoff])`.
+      The candidates are the indices where `d2 <= HITBOX_RADIUS_M^2`.
+   3. **Closest first.** Q may be inside several visited points' hitboxes.
+      The candidates are tried in order of smallest `d2`. The first candidate
+      with a **valid heading** (below) becomes the gate center, and Pass 1
+      stops reading pages. If no candidate has a valid heading, Pass 1 moves
+      on to the next Q.
+
+`VisitedPoints` keeps the whole page either way. That's fine, because Pass 1
+stops reading pages as soon as a gate is found.
 
 ### Heading at P
 
-The car's direction at P comes from P's neighbors in memory:
+The car's direction at P comes from P's neighbors in `VisitedPoints`:
 
-- `before` is the remembered point at P's index − 1, or P itself if P is
+- `before` is the visited point at P's index − 1, or P itself if P is
   index 0.
-- `after` is the remembered point at P's index + 1, or P itself if there
+- `after` is the visited point at P's index + 1, or P itself if there
   isn't one.
 - `h = after − before`.
 - If `|h| < MIN_HEADING_SPAN_M` (0.1 m), the heading is **invalid**: the car
@@ -457,7 +510,7 @@ skipped in both passes.
 
 | Carried across pages | Why |
 | --- | --- |
-| The `RevisitMemory` | A revisit is usually of a point on an earlier page. The running distance driven is the last `distance_m` in memory. |
+| The `VisitedPoints` | A revisit is usually of a point on an earlier page. The running distance driven continues from the last `distance_m` in `VisitedPoints`. |
 | The global row index | So downsampling keeps every 5th row of the *run*, not of each page. |
 | The origin (`lat0`, `lon0`) and run start time | Recorded from the first row of the first page. Every later x/y and `time_s` is relative to them. |
 
@@ -506,7 +559,7 @@ functions as arguments so `lap_utils` stays pure. They are
 
 | Name | Value | Meaning | Tradeoff |
 | --- | --- | --- | --- |
-| `HITBOX_RADIUS_M` | 3.0 | Radius of each remembered point's hitbox | Bigger finds a revisit more easily (the driver's line varies lap to lap), but risks false revisits where two parts of the track come close. Smaller is stricter but may miss the revisit if the line changes. |
+| `HITBOX_RADIUS_M` | 3.0 | Radius of each visited point's hitbox | Bigger finds a revisit more easily (the driver's line varies lap to lap), but risks false revisits where two parts of the track come close. Smaller is stricter but may miss the revisit if the line changes. |
 | `MIN_REVISIT_TIME_S` | 5.0 | Minimum time between two points for a hit to count | Too small lets slow driving match itself. Too large could skip a very short loop. |
 | `MIN_REVISIT_DISTANCE_M` | 50.0 | Minimum distance driven between two points for a hit to count | Too small lets a slowly creeping car match itself. Too large misses tracks shorter than it (not realistic for FSAE). |
 | `PASS1_SAMPLE_EVERY` | 5 | Pass 1 only looks at every Nth point | Bigger is faster but spaces sampled points further apart. Set to 1 to use every point. |
@@ -529,8 +582,11 @@ These are deliberately not handled in this design.
   could pass the distance check.
 - **Figure-eights.** A layout like skidpad, where the car loops in both
   directions through the same center, gives odd laps.
-- **Slow worst case.** Pass 1's worst case (no revisit on a very long run) is
-  slow. See the grid idea in section 6.
+- **Worst-case search time.** Pass 1's worst case (no revisit on a very long
+  run) compares every point with every earlier point. The comparisons are
+  vectorized (section 6), so this takes about a second or two. If that's ever
+  too slow, a spatial grid (only comparing against points in nearby cells) is
+  still an option.
 - **Untuned constants.** None of the constants have been checked against real
   runs.
 
@@ -551,9 +607,9 @@ These are deliberately not handled in this design.
 | `to_local_xy` | Latitude/longitude → local x/y meters (equirectangular, section 5). |
 | `seconds_since` | Seconds from the run's start to each time. |
 | `downsample` | Keep rows whose global index is divisible by `every_n`. |
-| `in_hitbox` | The squared-distance hitbox test. |
-| `heading_at` | Unit heading at a remembered point from its neighbors, or None. |
-| `find_revisit` | Walk one page's sampled points, update memory, and return the first valid revisit. |
+| `squared_distances` | Squared distance from one point to many points at once, for the hitbox test. |
+| `heading_at` | Unit heading at a visited point from its neighbors, or None. |
+| `find_revisit` | Extend `VisitedPoints` with one page's sampled points, then search them in order and return the first valid revisit. |
 | `build_gate` | Build a `Gate` (G1 left, G2 right) from a center, heading, and half width. |
 | `cross_2d` | The 2D cross product `ux·vy − uy·vx`. |
 | `side_of_gate` | side(P): negative behind the gate line, zero or positive on or past it. |
@@ -563,8 +619,8 @@ These are deliberately not handled in this design.
 | `build_lap_rows` | Turn crossings into finished-lap rows, and return the next lap_id and lap start. |
 | `make_lap_row` | A one-row DataFrame for a single lap. |
 
-The dataclasses are `Gate` (left end G1 and right end G2), `RevisitMemory`
-(parallel lists `x`, `y`, `time_s`, `distance_m`), and `TrackPoint` (x, y,
+The dataclasses are `Gate` (left end G1 and right end G2), `VisitedPoints`
+(parallel numpy float arrays `x`, `y`, `time_s`, `distance_m`), and `TrackPoint` (x, y,
 time: the point Pass 2 carries between pages).
 
 ### How `LapStep.run` drives the two passes
