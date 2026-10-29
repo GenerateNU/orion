@@ -89,27 +89,14 @@ function RunDashboard() {
         }
       />
 
-      <div style={{ display: "flex", gap: "0", minHeight: "100vh" }}>
-        <div
-          style={{
-            width: "450px",
-            backgroundColor: "var(--bg-surface)",
-            padding: "24px",
-            flexShrink: 0,
-            borderRadius: "8px",
-            overflowY: "auto",
-          }}
-        >
-          <h3 style={{ margin: "0 0 12px 0", fontSize: "14px", fontWeight: "600" }}></h3>
-          <div style={{ marginTop: "48px" }}>
-            <h3 style={{ margin: "0 0 12px 0", fontSize: "14px", fontWeight: "600" }}>
-              Track position
-            </h3>
+      <div className={styles.mainContainer}>
+        <div className={styles.leftPanel}>
+          <div className={styles.trackSection}>
+            <h3 className={styles.panelHeading}>Track position</h3>
             <TrackMap />
           </div>
         </div>
-        <div style={{ flex: 1, padding: "24px" }}>
-          {breadcrumb}
+        <div className={styles.rightPanel}>
           <section className={styles.placeholder}>
             <SelectionSummary />
           </section>
