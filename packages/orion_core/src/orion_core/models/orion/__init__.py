@@ -7,6 +7,7 @@ from orion_core.models.orion.pipeline_run_model import PipelineRun, PipelineStat
 from orion_core.models.orion.run_model import Run
 from orion_core.models.orion.sensor_sources import SensorSources
 from orion_core.models.orion.sensors import Sensors
+from orion_core.models.orion.ukf_state_model import UkfState
 
 __all__ = [
     "Base",
@@ -17,4 +18,5 @@ __all__ = [
     "EstimatedCarState",
     "SensorSources",
     "Sensors",
+    "UkfState",
 ]
