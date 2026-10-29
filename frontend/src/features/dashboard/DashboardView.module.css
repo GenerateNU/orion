@@ -24,3 +24,35 @@
   font-size: 13px;
   color: var(--text-muted);
 }
+
+/* DashboardView.module.css */
+
+.leftPanel {
+  width: 450px;
+  background-color: var(--bg-surface);
+  padding: 24px;
+  flex-shrink: 0;
+  border-radius: 8px;
+  overflow-y: auto;
+}
+
+.panelHeading {
+  margin: 0 0 12px 0;
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.trackSection {
+  margin-top: 48px;
+}
+
+.mainContainer {
+  display: flex;
+  gap: 0;
+  min-height: 100vh;
+}
+
+.rightPanel {
+  flex: 1;
+  padding: 24px;
+}

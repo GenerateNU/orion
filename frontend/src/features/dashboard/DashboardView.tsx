@@ -17,6 +17,7 @@ import {
   useSelectedLaps,
 } from "@features/dashboard/state/useDashboard";
 import styles from "./DashboardView.module.css";
+import { TrackMap } from "../dashboard/panels/TrackMap";
 
 const dashboardRoute = getRouteApi("/runs/$runId/dashboard");
 
@@ -87,15 +88,20 @@ function RunDashboard() {
           </ButtonLink>
         }
       />
-      <section className={styles.placeholder} aria-labelledby="run-dashboard-title">
-        <h2 id="run-dashboard-title" className={styles.placeholderTitle}>
-          Run dashboard
-        </h2>
-        <p className={styles.placeholderText}>
-          Charts, track map and sensor panels for this run will be designed here.
-        </p>
-        <SelectionSummary />
-      </section>
+
+      <div className={styles.mainContainer}>
+        <div className={styles.leftPanel}>
+          <div className={styles.trackSection}>
+            <h3 className={styles.panelHeading}>Track position</h3>
+            <TrackMap />
+          </div>
+        </div>
+        <div className={styles.rightPanel}>
+          <section className={styles.placeholder}>
+            <SelectionSummary />
+          </section>
+        </div>
+      </div>
     </>
   );
 }
