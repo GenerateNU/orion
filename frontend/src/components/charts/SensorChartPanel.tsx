@@ -48,8 +48,7 @@ export default function SensorChartsPanel({
   }, [trace, sensors]);
 
   let content: ReactNode;
-  if (traceIsLoading) content = <LoadingState message="Loading sensor data…" />;
-  else if (traceIsLoading || (!trace && !traceError))
+  if (traceIsLoading || (!trace && !traceError))
     content = <LoadingState message="Loading sensor data…" />;
   else if (traceError) content = <ErrorState error={traceError} />;
   else if (charts.length === 0)

@@ -9,12 +9,12 @@ export default function DashboardTimeSeriesChart(props: DashboardTimeSeriesChart
 
   return (
     <TimeSeriesChart
-    {...props}
-    visibleWindow={visibleWindow}
-    onPreviewWindow={previewWindow}
-    onCommitWindow={commitWindow}
-    onResetWindow={resetWindow}
-    onHoverTime={setHoverTime}
+      {...props}
+      visibleWindow={visibleWindow}
+      onPreviewWindow={previewWindow}
+      onCommitWindow={commitWindow}
+      onResetWindow={resetWindow}
+      onHoverTime={setHoverTime}
     />
   );
 }
