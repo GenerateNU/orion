@@ -20,7 +20,8 @@ class Settings(BaseSettings):
     pipeline_api_url: str = "http://localhost:8200"
     # How many rows each extract section can pull at once.
     pipeline_page_size: int = 100_000
-    # Seconds added to gps_location timestamps in the clean step (GPS lags the other sensors).
+    # Seconds added to lagged sensors' timestamps (gps_lagged in sensor_catalog), by both
+    # the clean step and the backend sensors API. 0 disables the correction.
     gps_time_offset_s: float = 3.0
 
 

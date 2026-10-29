@@ -1,13 +1,14 @@
 """Every Penelope tag we know how to map, the generic sensor it maps to, and
 that sensor's unit (None if unitless). Seeded by `orion_core.db.scripts.seed_sensors`."""
 
-from typing import TypedDict
+from typing import NotRequired, TypedDict
 
 
 class CatalogEntry(TypedDict):
     raw_tag: str
     sensor: str
     unit: str | None  # None if unitless
+    gps_lagged: NotRequired[bool]  # True if timestamps need gps_time_offset_s
 
 
 SENSOR_CATALOG: list[CatalogEntry] = [
@@ -135,26 +136,31 @@ SENSOR_CATALOG: list[CatalogEntry] = [
         "raw_tag": "TPU/GPS/Altitude",
         "sensor": "gps_altitude",
         "unit": "meter",
+        "gps_lagged": True,
     },
     {
         "raw_tag": "TPU/GPS/GroundSpeed",
         "sensor": "gps_ground_speed",
         "unit": "knot",
+        "gps_lagged": True,
     },
     {
         "raw_tag": "TPU/GPS/Location",
         "sensor": "gps_location",
         "unit": "coordinate",
+        "gps_lagged": True,
     },
     {
         "raw_tag": "TPU/GPS/Mode",
         "sensor": "gps_mode",
         "unit": "enum",
+        "gps_lagged": True,
     },
     {
         "raw_tag": "TPU/GPS/PPS",
         "sensor": "gps_pps",
         "unit": "NTP precison",
+        "gps_lagged": True,
     },
     {
         "raw_tag": "VCU/CarState/functional_state",
@@ -267,3 +273,11 @@ SENSOR_CATALOG: list[CatalogEntry] = [
         "unit": "mdps",
     },
 ]
+
+
+def lagged_raw_tags() -> frozenset[str]:
+    return frozenset(e["raw_tag"] for e in SENSOR_CATALOG if e.get("gps_lagged"))
+
+
+def lagged_sensors() -> frozenset[str]:
+    return frozenset(e["sensor"] for e in SENSOR_CATALOG if e.get("gps_lagged"))

@@ -1,3 +1,5 @@
+from collections.abc import Collection
+
 import pandas as pd
 
 
@@ -22,11 +24,13 @@ def map_sensor_names(
     )
 
 
-def shift_sensor_time(df: pd.DataFrame, sensor: str, offset_s: float) -> pd.DataFrame:
-    """Add `offset_s` seconds to `time` for rows of `sensor` (e.g. GPS lag correction)."""
+def shift_sensor_time(
+    df: pd.DataFrame, sensors: Collection[str], offset_s: float
+) -> pd.DataFrame:
+    """Add `offset_s` seconds to `time` for rows of `sensors` (e.g. GPS lag correction)."""
     if not offset_s:
         return df
     df = df.copy()
-    mask = df["sensor"] == sensor
+    mask = df["sensor"].isin(list(sensors))
     df.loc[mask, "time"] = df.loc[mask, "time"] + pd.Timedelta(seconds=offset_s)
     return df
