@@ -3,7 +3,9 @@
 from dataclasses import dataclass, field
 from datetime import datetime
 
+import numpy as np
 import pandas as pd
+from numpy.typing import NDArray
 
 from orion_pipeline.steps.lap_step.lap_constants import EARTH_RADIUS_M  # noqa: F401
 
@@ -24,18 +26,19 @@ class Gate:
 
 
 @dataclass
-class RevisitMemory:
-    """Every sampled Pass 1 point that wasn't a revisit, in time order.
+class VisitedPoints:
+    """Every sampled Pass 1 point so far, in time order.
 
-    The lists are parallel: index i of each list describes the same point.
-    `time_s` is seconds since the run's first point, and `distance_m` is the
-    total distance driven up to that point.
+    These are the candidates a later point can revisit, not revisits
+    themselves. The arrays are parallel: index i of each array is the same
+    point. `time_s` is seconds since the run's first point, and `distance_m`
+    is the total distance driven up to that point.
     """
 
-    x: list[float] = field(default_factory=list)
-    y: list[float] = field(default_factory=list)
-    time_s: list[float] = field(default_factory=list)
-    distance_m: list[float] = field(default_factory=list)
+    x: NDArray[np.float64] = field(default_factory=lambda: np.empty(0))
+    y: NDArray[np.float64] = field(default_factory=lambda: np.empty(0))
+    time_s: NDArray[np.float64] = field(default_factory=lambda: np.empty(0))
+    distance_m: NDArray[np.float64] = field(default_factory=lambda: np.empty(0))
 
 
 @dataclass(frozen=True)
@@ -118,12 +121,15 @@ def downsample(
     raise NotImplementedError
 
 
-def in_hitbox(qx: float, qy: float, px: float, py: float, radius_m: float) -> bool:
-    """Whether Q is inside the circular hitbox of radius `radius_m` around P.
+def squared_distances(
+    qx: float, qy: float, xs: NDArray[np.float64], ys: NDArray[np.float64]
+) -> NDArray[np.float64]:
+    """Squared distance from Q to every point P in `xs`/`ys`, all at once.
 
-    Compares squared distances, so no square root is needed:
+        (xs - qx)^2 + (ys - qy)^2
 
-        (qx - px)^2 + (qy - py)^2 <= radius_m^2
+    Q is inside P's hitbox when this is `<= HITBOX_RADIUS_M^2`. Comparing
+    squared distances means no square root is needed.
 
     Example: P=(10, 10), radius 3. Q=(12, 11) gives 4 + 1 = 5 <= 9, so it's
     inside. Q=(13, 13) gives 9 + 9 = 18 > 9, so it's outside.
@@ -131,12 +137,12 @@ def in_hitbox(qx: float, qy: float, px: float, py: float, radius_m: float) -> bo
     Args:
         qx: Q's x, in meters.
         qy: Q's y, in meters.
-        px: P's x, in meters.
-        py: P's y, in meters.
-        radius_m: Hitbox radius, in meters.
+        xs: x of each point P, in meters.
+        ys: y of each point P, in meters.
 
     Returns:
-        True if Q is inside or on the edge of P's hitbox.
+        The squared distance to each P, in square meters, in the same order
+        as `xs` and `ys`.
 
     Raises:
         NotImplementedError: Not implemented yet.
@@ -145,11 +151,11 @@ def in_hitbox(qx: float, qy: float, px: float, py: float, radius_m: float) -> bo
 
 
 def heading_at(
-    memory: RevisitMemory, index: int, min_span_m: float
+    visited: VisitedPoints, index: int, min_span_m: float
 ) -> tuple[float, float] | None:
-    """The unit direction of travel at a remembered point, from its neighbors.
+    """The unit direction of travel at a visited point, from its neighbors.
 
-    `before` is the remembered point at `index - 1`, or the point itself if
+    `before` is the visited point at `index - 1`, or the point itself if
     `index` is 0. `after` is the point at `index + 1`, or the point itself if
     it's the last one. Then:
 
@@ -162,8 +168,8 @@ def heading_at(
     heading (1, 0).
 
     Args:
-        memory: The remembered Pass 1 points.
-        index: Index of the point in `memory`.
+        visited: The visited Pass 1 points.
+        index: Index of the point in `visited`.
         min_span_m: Smallest `|h|` that gives a valid heading, in meters.
 
     Returns:
@@ -179,7 +185,7 @@ def find_revisit(
     x: pd.Series,
     y: pd.Series,
     time_s: pd.Series,
-    memory: RevisitMemory,
+    visited: VisitedPoints,
     hitbox_radius_m: float,
     min_revisit_time_s: float,
     min_revisit_distance_m: float,
@@ -187,37 +193,54 @@ def find_revisit(
 ) -> tuple[int, tuple[float, float]] | None:
     """Look for the first place the car drives over a spot it already passed.
 
-    Walks this page's sampled points Q in order. For each Q:
+    Converts `x`, `y`, and `time_s` with `.to_numpy()`, then:
 
-    1. Work out Q's distance driven: the last `distance_m` in memory plus the
-       straight-line distance from the previous sampled point (the last one
-       in memory), `sqrt((x - x_prev)^2 + (y - y_prev)^2)`. If memory is
-       empty, it's 0. Example: (0,0), (3,4), (6,8) give 0, 5, 10.
-    2. Find every remembered point P that is a candidate, meaning all of:
-       - `in_hitbox(Q, P, hitbox_radius_m)`,
-       - `time_s[Q] - time_s[P] >= min_revisit_time_s`,
-       - `distance_m[Q] - distance_m[P] >= min_revisit_distance_m`.
-    3. Try the candidates closest-first (smallest squared distance to Q). The
-       first one where `heading_at(memory, P, min_heading_span_m)` isn't None
-       is the gate center: return its index and heading right away.
-    4. Otherwise append Q (x, y, time_s, distance_m) to memory and move on.
+    1. Distance driven for this page, all at once. Step lengths are
+       `sqrt(dx^2 + dy^2)` between consecutive points, and the page's first
+       step is measured from the last point in `visited`, if there is one.
+       `distance_m` is the running total (cumsum) of the steps, starting from
+       the last `distance_m` in `visited`, or 0 if `visited` is empty.
+       Example: (0,0), (3,4), (6,8) give 0, 5, 10.
+    2. Extend `visited` once, in place: concatenate this page's x, y, time_s,
+       and distance_m onto its four arrays. This happens first, so any index
+       returned below refers to `visited` itself.
+    3. For each of this page's points Q, at position q in `visited`, in time
+       order:
+       1. Cutoff. `time_s` and `distance_m` only ever increase, so every
+          point before some position is at least `min_revisit_time_s` and
+          `min_revisit_distance_m` of driving earlier than Q, and every point
+          after it isn't:
+              time_cut = searchsorted(time_s[:q],
+                                      time_s[q] - min_revisit_time_s,
+                                      side="right")
+              dist_cut = (the same, with distance_m and min_revisit_distance_m)
+              cutoff = min(time_cut, dist_cut)
+          Only points before `cutoff` can be candidates.
+       2. Hitbox test. `d2 = squared_distances(Q, x[:cutoff], y[:cutoff])`.
+          The candidates are the indices where `d2 <= hitbox_radius_m^2`.
+       3. Closest first. Try the candidates sorted by `d2`, smallest first.
+          The first one where `heading_at(visited, index, min_heading_span_m)`
+          isn't None is the gate center: return `(index, heading)` right
+          away, without checking the rest of the page.
+    4. Return None if no point on this page found a revisit.
 
-    The memory is updated in place, so it carries over to the next page.
+    `visited` keeps the whole page either way, so it carries over to the next
+    page.
 
     Args:
         x: x of this page's sampled points, in meters.
         y: y of this page's sampled points, in meters.
         time_s: Seconds since the run's first point, for each sampled point.
-        memory: Every earlier sampled point that wasn't a revisit. Updated in place.
-        hitbox_radius_m: Radius of each remembered point's hitbox.
+        visited: Every earlier sampled point. Extended in place with this page.
+        hitbox_radius_m: Radius of each visited point's hitbox.
         min_revisit_time_s: Minimum time between P and Q for a hit to count.
         min_revisit_distance_m: Minimum distance driven between P and Q for a
             hit to count.
         min_heading_span_m: Passed to `heading_at`.
 
     Returns:
-        (memory index of the gate center, unit heading at it) for the first
-        valid revisit, or None if this page has none.
+        (index in `visited` of the gate center, unit heading at it) for the
+        first valid revisit, or None if this page has none.
 
     Raises:
         NotImplementedError: Not implemented yet.

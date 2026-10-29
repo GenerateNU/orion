@@ -20,8 +20,8 @@ from orion_pipeline.steps.lap_step.lap_constants import (
 )
 from orion_pipeline.steps.lap_step.lap_utils import (
     Gate,
-    RevisitMemory,
     TrackPoint,
+    VisitedPoints,
     apply_min_lap_time,
     build_gate,
     build_lap_rows,
@@ -131,7 +131,7 @@ class LapStep(PipelineStep):
         Returns:
             The gate, or None if the car never revisits a spot.
         """
-        memory = RevisitMemory()
+        visited = VisitedPoints()
         global_index = 0
         for page in self.extract(ctx):
             if page.empty:
@@ -155,7 +155,7 @@ class LapStep(PipelineStep):
                 x,
                 y,
                 time_s,
-                memory,
+                visited,
                 HITBOX_RADIUS_M,
                 MIN_REVISIT_TIME_S,
                 MIN_REVISIT_DISTANCE_M,
@@ -164,7 +164,10 @@ class LapStep(PipelineStep):
             if revisit is not None:
                 index, heading = revisit
                 return build_gate(
-                    memory.x[index], memory.y[index], heading, GATE_HALF_WIDTH_M
+                    float(visited.x[index]),
+                    float(visited.y[index]),
+                    heading,
+                    GATE_HALF_WIDTH_M,
                 )
         return None
 
