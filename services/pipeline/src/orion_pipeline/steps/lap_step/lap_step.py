@@ -13,7 +13,6 @@ from orion_pipeline.steps.lap_step.lap_constants import (
     GATE_HALF_WIDTH_M,
     GATE_SEARCH_SAMPLE_EVERY,
     HITBOX_RADIUS_M,
-    MIN_HEADING_SPAN_M,
     MIN_LAP_TIME_S,
     MIN_REVISIT_DISTANCE_M,
     MIN_REVISIT_TIME_S,
@@ -158,7 +157,6 @@ class LapStep(PipelineStep):
             HITBOX_RADIUS_M,
             MIN_REVISIT_TIME_S,
             MIN_REVISIT_DISTANCE_M,
-            MIN_HEADING_SPAN_M,
         )
         if revisit is None:
             return None

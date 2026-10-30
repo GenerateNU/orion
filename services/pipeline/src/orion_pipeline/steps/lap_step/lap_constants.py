@@ -15,8 +15,6 @@ MIN_REVISIT_TIME_S = 5.0
 MIN_REVISIT_DISTANCE_M = 50.0
 # Searching for the gate only looks at every Nth point. Set to 1 to use every point.
 GATE_SEARCH_SAMPLE_EVERY = 5
-# Minimum distance between the two neighbors used for a heading, in meters.
-MIN_HEADING_SPAN_M = 0.1
 # The gate reaches this far on each side of its center, in meters.
 GATE_HALF_WIDTH_M = 5.0
 # Minimum time between two counted gate crossings, in seconds.
