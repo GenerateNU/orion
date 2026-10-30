@@ -151,8 +151,8 @@ def squared_distances(
 
 
 def heading_at(
-    visited: VisitedPoints, index: int, min_span_m: float
-) -> tuple[float, float] | None:
+    visited: VisitedPoints, index: int
+) -> tuple[float, float]:
     """The unit direction of travel at a visited point, from its neighbors.
 
     `before` is the visited point at `index - 1`, or the point itself if
@@ -162,15 +162,9 @@ def heading_at(
         h = after - before
         heading = h / |h|
 
-    If `|h| < min_span_m`, the car was essentially standing still at the
-    point (e.g. parked on the line before driving), so there's no usable
-    heading. Example: before=(-1, 0), after=(1, 0) gives h=(2, 0), |h|=2, and
-    heading (1, 0).
-
     Args:
         visited: The visited Pass 1 points.
         index: Index of the point in `visited`.
-        min_span_m: Smallest `|h|` that gives a valid heading, in meters.
 
     Returns:
         The unit heading (hx, hy), or None if the span is too small.
@@ -189,7 +183,6 @@ def find_revisit(
     hitbox_radius_m: float,
     min_revisit_time_s: float,
     min_revisit_distance_m: float,
-    min_heading_span_m: float,
 ) -> tuple[int, tuple[float, float]] | None:
     """Look for the first place the car drives over a spot it already passed.
 
@@ -236,7 +229,6 @@ def find_revisit(
         min_revisit_time_s: Minimum time between P and Q for a hit to count.
         min_revisit_distance_m: Minimum distance driven between P and Q for a
             hit to count.
-        min_heading_span_m: Passed to `heading_at`.
 
     Returns:
         (index in `visited` of the gate center, unit heading at it) for the
