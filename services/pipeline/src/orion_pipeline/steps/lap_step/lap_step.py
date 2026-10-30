@@ -71,7 +71,7 @@ class LapStep(PipelineStep):
         self._last_point = None
         self._last_crossing_time = None
         ctx.found_gate = False
-        
+
         find_end_time_stmt = select(func.max(EstimatedCarState.time)).where(
             EstimatedCarState.run_id == ctx.run_id
         )
@@ -98,31 +98,31 @@ class LapStep(PipelineStep):
             One row per lap finished in this page (possibly none), including
             the final lap on the run's last page.
         """
-        #sets up origin point and start time
+        # sets up origin point and start time
         if not self._started:
             self._setup_origin(df)
 
-        #Add X,Y local coordinate columns to our DF
+        # Add X,Y local coordinate columns to our DF
         page = self._add_xy(df)
 
-        #Must find gate before finding crossings
+        # Must find gate before finding crossings
         if not ctx.found_gate:
             self._gate = self._search_for_gate(page)
             ctx.found_gate = self._gate is not None
 
-        #crossings for this page (Empty if no gate)
+        # crossings for this page (Empty if no gate)
         crossings = (
             self._find_crossings(page, self._gate) if self._gate is not None else []
         )
 
-        #If this is the last page, the end time is a "crossing" so it can be counted as a lap
+        # If this is the last page, the end time is a "crossing" so it can be counted as a lap
         if page["time"].iloc[-1] == self._run_end_time:
             crossings.append(self._run_end_time)  # the run's end closes the final lap
 
-        #Reset the last point of page so it can be transfered to the next page
+        # Reset the last point of page so it can be transfered to the next page
         self._last_point = self._last_point_of(page)
 
-        #Return the rows to be written to the laps table
+        # Return the rows to be written to the laps table
         return self._close_laps(crossings, ctx.run_id)
 
     def _setup_origin(self, df: pd.DataFrame) -> None:
