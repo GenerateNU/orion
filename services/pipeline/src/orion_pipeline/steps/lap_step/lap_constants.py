@@ -13,8 +13,8 @@ HITBOX_RADIUS_M = 3.0
 MIN_REVISIT_TIME_S = 5.0
 # Minimum distance driven between two points for a revisit to count, in meters.
 MIN_REVISIT_DISTANCE_M = 50.0
-# Pass 1 only looks at every Nth point. Set to 1 to use every point.
-PASS1_SAMPLE_EVERY = 5
+# Searching for the gate only looks at every Nth point. Set to 1 to use every point.
+GATE_SEARCH_SAMPLE_EVERY = 5
 # Minimum distance between the two neighbors used for a heading, in meters.
 MIN_HEADING_SPAN_M = 0.1
 # The gate reaches this far on each side of its center, in meters.

@@ -1,22 +1,22 @@
 from collections.abc import Iterator
 from datetime import datetime
+from typing import cast
 
 import pandas as pd
-from sqlalchemy import select
+from sqlalchemy import func, select
 
 from orion_core.models import EstimatedCarState
-from orion_pipeline.clients.base_client import BaseClient
 from orion_pipeline.clients.oriondb_client import OrionDBClient
 from orion_pipeline.runner.run_context import RunContext
 from orion_pipeline.steps.base_step import PipelineStep
 from orion_pipeline.steps.lap_step.lap_constants import (
     GATE_HALF_WIDTH_M,
+    GATE_SEARCH_SAMPLE_EVERY,
     HITBOX_RADIUS_M,
     MIN_HEADING_SPAN_M,
     MIN_LAP_TIME_S,
     MIN_REVISIT_DISTANCE_M,
     MIN_REVISIT_TIME_S,
-    PASS1_SAMPLE_EVERY,
 )
 from orion_pipeline.steps.lap_step.lap_utils import (
     Gate,
@@ -28,7 +28,6 @@ from orion_pipeline.steps.lap_step.lap_utils import (
     downsample,
     find_crossings,
     find_revisit,
-    make_lap_row,
     seconds_since,
     to_local_xy,
 )
@@ -37,49 +36,48 @@ from orion_pipeline.steps.step_registry import register_step
 
 @register_step
 class LapStep(PipelineStep):
-    """Lap detection step. Splits a run into laps by finding a start/finish gate.
-    DB TABLES: FROM Orion[estimated_car_state] -> TO Orion[laps]
-
-    Schema: FROM [time, lattitude, longitude] -> TO [run_id, lap_id, start_time, end_time]
-
-    The run is read twice:
-    - Pass 1 (`_find_gate`) finds the first spot the car drives over twice and
-      puts a short line across the track there, perpendicular to the car's
-      heading: the gate.
-    - Pass 2 (`transform`, one page at a time) reads the run again from the
-      start and ends a lap every time the car drives forward through the gate.
-
-    See docs/lap_detection.md for the full design.
-
-    Deliberately NOT imported in `steps/__init__.py` yet: registering it would
-    make every pipeline job fail, because `state_step` doesn't exist and every
-    lap_utils helper is still a stub.
-    """
-
     name = "lap_step"
-    # state_step doesn't exist yet.
     depends_on = ("state_step",)
     reads_from = "oriondb"
     output_table = "laps"
     pagination_key = ("time",)
 
-    def __init__(self, reader: BaseClient, writer: OrionDBClient):
-        super().__init__(reader, writer)
-        self._reset_state()
+    # The reader for the lap step will always be OrionDBClient and never PenelopeClient
+    reader: OrionDBClient
 
-    def _reset_state(self) -> None:
-        """Clear the state carried across pages, before a new run."""
-        # Pass 1: the run's first point (the x/y origin) and its time bounds.
-        self._origin_lat: float | None = None
-        self._origin_lon: float | None = None
-        self._run_start: datetime | None = None
-        self._run_end: datetime | None = None
-        # Pass 2.
-        self._gate: Gate | None = None
-        self._previous: TrackPoint | None = None
-        self._lap_id = 1
-        self._lap_start: datetime | None = None
-        self._last_counted: datetime | None = None
+    # Carried between pages. These are set by `_setup_origin` on the first page.
+    _origin_lat: float
+    _origin_lon: float
+    _start_time: datetime
+    _current_lap_id: int
+    _current_lap_start: datetime
+    # These are set by `_reset_state` and `prepare`.
+    _started: bool
+    _run_end_time: datetime | None
+    _gate: Gate | None
+    _visited: VisitedPoints
+    _rows_seen: int
+    _last_point: TrackPoint | None
+    _last_crossing_time: datetime | None
+
+    def prepare(self, ctx: RunContext) -> None:
+        super().prepare(ctx)
+
+        self._started = False
+        self._run_end_time = None
+        self._gate = None
+        self._visited = VisitedPoints()
+        self._rows_seen = 0
+        self._last_point = None
+        self._last_crossing_time = None
+        ctx.found_gate = False
+        
+        find_end_time_stmt = select(func.max(EstimatedCarState.time)).where(
+            EstimatedCarState.run_id == ctx.run_id
+        )
+        # MAX gives one row: the run's last time, or NULL (NaT) for an empty run.
+        end_time = self.reader.read_frame(find_end_time_stmt).iloc[0, 0]
+        self._run_end_time = None if pd.isna(end_time) else cast(datetime, end_time)
 
     def extract(self, ctx: RunContext) -> Iterator[pd.DataFrame]:
         stmt = select(
@@ -89,135 +87,109 @@ class LapStep(PipelineStep):
         ).where(EstimatedCarState.run_id == ctx.run_id)
         return self.reader.iter_pages(stmt, self.pagination_key)
 
-    def run(self, ctx: RunContext) -> None:
-        """Pass 1 finds the gate, then Pass 2 reads the run again and writes its laps."""
-        self._reset_state()
-        self.prepare(ctx)
-        gate = self._find_gate(ctx)
-        if self._run_start is None or self._run_end is None:
-            return  # empty run: nothing to write
-        if gate is None:
-            # No revisit anywhere, so the whole run is one lap.
-            self.write(make_lap_row(ctx.run_id, 1, self._run_start, self._run_end), ctx)
-            return
-
-        self._gate = gate
-        self._lap_id = 1
-        self._lap_start = self._run_start
-        self._previous = None
-        self._last_counted = None
-        for page in self.extract(ctx):
-            if page.empty:
-                continue
-            rows = self.transform(page, ctx)
-            if not rows.empty:
-                self.write(rows, ctx)
-
-        # The lap still open when the run ends.
-        self.write(
-            make_lap_row(ctx.run_id, self._lap_id, self._lap_start, self._run_end), ctx
-        )
-
-    def _find_gate(self, ctx: RunContext) -> Gate | None:
-        """Pass 1: read pages until the car revisits a spot, and put the gate there.
-
-        Also records the origin and the run's start and end times, which
-        Pass 2 needs. If a gate is found, `_run_end` is only the end of the
-        pages read so far; Pass 2 moves it to the true end.
-
-        Args:
-            ctx: The job being run.
-
-        Returns:
-            The gate, or None if the car never revisits a spot.
-        """
-        visited = VisitedPoints()
-        global_index = 0
-        for page in self.extract(ctx):
-            if page.empty:
-                continue
-            if self._run_start is None:
-                first = page.iloc[0]
-                self._origin_lat = float(first["lattitude"])
-                self._origin_lon = float(first["longitude"])
-                self._run_start = first["time"]
-            self._run_end = page["time"].iloc[-1]
-
-            sampled = downsample(page, global_index, PASS1_SAMPLE_EVERY)
-            global_index += len(page)
-            origin_lat, origin_lon = self._origin()
-            x, y = to_local_xy(
-                sampled["lattitude"], sampled["longitude"], origin_lat, origin_lon
-            )
-            time_s = seconds_since(sampled["time"], self._run_start)
-
-            revisit = find_revisit(
-                x,
-                y,
-                time_s,
-                visited,
-                HITBOX_RADIUS_M,
-                MIN_REVISIT_TIME_S,
-                MIN_REVISIT_DISTANCE_M,
-                MIN_HEADING_SPAN_M,
-            )
-            if revisit is not None:
-                index, heading = revisit
-                return build_gate(
-                    float(visited.x[index]),
-                    float(visited.y[index]),
-                    heading,
-                    GATE_HALF_WIDTH_M,
-                )
-        return None
-
     def transform(self, df: pd.DataFrame, ctx: RunContext) -> pd.DataFrame:
-        """Pass 2, one page: find gate crossings and turn them into finished laps.
-
-        Unlike other steps, this reads and updates the carry-over state on
-        self (the open lap, the last counted crossing, the previous page's
-        last point). It still does no I/O.
+        """One page: search for the gate until it's found, then count laps.
 
         Args:
             df: One page of estimated_car_state, in time order.
             ctx: The job being run.
 
         Returns:
-            One row per lap finished in this page (possibly none).
-
-        Raises:
-            RuntimeError: If Pass 1 hasn't found a gate or `run` hasn't
-                opened the first lap.
+            One row per lap finished in this page (possibly none), including
+            the final lap on the run's last page.
         """
-        if self._gate is None or self._lap_start is None:
-            raise RuntimeError("transform needs a gate and an open lap; call run()")
+        #sets up origin point and start time
+        if not self._started:
+            self._setup_origin(df)
 
-        origin_lat, origin_lon = self._origin()
-        x, y = to_local_xy(df["lattitude"], df["longitude"], origin_lat, origin_lon)
-        crossings = find_crossings(x, y, df["time"], self._gate, self._previous)
-        crossings = apply_min_lap_time(crossings, self._last_counted, MIN_LAP_TIME_S)
-        rows, self._lap_id, self._lap_start = build_lap_rows(
-            ctx.run_id, self._lap_id, self._lap_start, crossings
+        #Add X,Y local coordinate columns to our DF
+        page = self._add_xy(df)
+
+        #Must find gate before finding crossings
+        if not ctx.found_gate:
+            self._gate = self._search_for_gate(page)
+            ctx.found_gate = self._gate is not None
+
+        #crossings for this page (Empty if no gate)
+        crossings = (
+            self._find_crossings(page, self._gate) if self._gate is not None else []
+        )
+
+        #If this is the last page, the end time is a "crossing" so it can be counted as a lap
+        if page["time"].iloc[-1] == self._run_end_time:
+            crossings.append(self._run_end_time)  # the run's end closes the final lap
+
+        #Reset the last point of page so it can be transfered to the next page
+        self._last_point = self._last_point_of(page)
+
+        #Return the rows to be written to the laps table
+        return self._close_laps(crossings, ctx.run_id)
+
+    def _setup_origin(self, df: pd.DataFrame) -> None:
+        """Record the origin and start time from the run's first row, and open lap 1."""
+        first = df.iloc[0]
+        self._origin_lat = float(first["lattitude"])
+        self._origin_lon = float(first["longitude"])
+        self._start_time = first["time"]
+        self._current_lap_id = 1
+        self._current_lap_start = self._start_time
+        self._started = True
+
+    def _add_xy(self, df: pd.DataFrame) -> pd.DataFrame:
+        """The page with local `x` and `y` columns added."""
+        x, y = to_local_xy(
+            df["lattitude"], df["longitude"], self._origin_lat, self._origin_lon
+        )
+        return df.assign(x=x, y=y)
+
+    def _search_for_gate(self, page: pd.DataFrame) -> Gate | None:
+        """Build the gate at this page's first revisit, or None if it has none."""
+        sampled = downsample(page, self._rows_seen, GATE_SEARCH_SAMPLE_EVERY)
+        self._rows_seen += len(page)
+        time_s = seconds_since(sampled["time"], self._start_time)
+
+        revisit = find_revisit(
+            sampled["x"],
+            sampled["y"],
+            time_s,
+            self._visited,
+            HITBOX_RADIUS_M,
+            MIN_REVISIT_TIME_S,
+            MIN_REVISIT_DISTANCE_M,
+            MIN_HEADING_SPAN_M,
+        )
+        if revisit is None:
+            return None
+        i, heading = revisit
+        gate = build_gate(
+            float(self._visited.x[i]),
+            float(self._visited.y[i]),
+            heading,
+            GATE_HALF_WIDTH_M,
+        )
+        self._visited = VisitedPoints()
+        return gate
+
+    def _find_crossings(self, page: pd.DataFrame, gate: Gate) -> list[datetime]:
+        """This page's gate crossings that pass the minimum lap time."""
+        crossings = find_crossings(
+            page["x"], page["y"], page["time"], gate, self._last_point
+        )
+        crossings = apply_min_lap_time(
+            crossings, self._last_crossing_time, MIN_LAP_TIME_S
         )
         if crossings:
-            self._last_counted = crossings[-1]
+            self._last_crossing_time = crossings[-1]
+        return crossings
 
-        last_time = df["time"].iloc[-1]
-        self._previous = TrackPoint(
-            x=float(x.iloc[-1]), y=float(y.iloc[-1]), time=last_time
+    def _last_point_of(self, page: pd.DataFrame) -> TrackPoint:
+        """The page's last row, as a TrackPoint."""
+        last = page.iloc[-1]
+        return TrackPoint(x=float(last["x"]), y=float(last["y"]), time=last["time"])
+
+    def _close_laps(self, crossings: list[datetime], run_id: str) -> pd.DataFrame:
+        """Close one lap per crossing, and open the next one."""
+        rows, self._current_lap_id, self._current_lap_start = build_lap_rows(
+            run_id, self._current_lap_id, self._current_lap_start, crossings
         )
-        self._run_end = last_time
         return rows
-
-    def _origin(self) -> tuple[float, float]:
-        """The run's first point (lat, lon), the origin for local x/y.
-
-        Returns:
-            (origin latitude, origin longitude), in degrees.
-
-        Raises:
-            RuntimeError: If Pass 1 hasn't read the first page yet.
-        """
-        if self._origin_lat is None or self._origin_lon is None:
-            raise RuntimeError("origin is not set; Pass 1 must read the first page")
-        return self._origin_lat, self._origin_lon
