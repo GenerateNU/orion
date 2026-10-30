@@ -115,9 +115,11 @@ class LapStep(PipelineStep):
             self._find_crossings(page, self._gate) if self._gate is not None else []
         )
 
-        # If this is the last page, the end time is a "crossing" so it can be counted as a lap
+        # If this is the last page, the run's end is a "crossing" that closes the final lap.
+        # Skip it if the run's last point already crossed the gate, or the final lap would be empty.
         if page["time"].iloc[-1] == self._run_end_time:
-            crossings.append(self._run_end_time)  # the run's end closes the final lap
+            if self._run_end_time not in crossings:
+                crossings.append(self._run_end_time)
 
         # Reset the last point of page so it can be transfered to the next page
         self._last_point = self._last_point_of(page)
