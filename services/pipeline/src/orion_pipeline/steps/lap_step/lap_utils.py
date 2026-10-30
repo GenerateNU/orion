@@ -420,9 +420,9 @@ def build_lap_rows(
     """Close one lap per crossing.
 
     For each crossing in order, emits the row (run_id, lap_id, lap_start,
-    crossing), then adds 1 to lap_id and sets lap_start to the crossing. The
-    lap that is still open after the last crossing isn't emitted; the step
-    writes it once the run ends.
+    crossing), then adds 1 to lap_id and sets lap_start to the crossing. To
+    close the final lap, the step passes the run's end time as the last
+    crossing.
 
     Args:
         run_id: The run's id.
@@ -433,26 +433,6 @@ def build_lap_rows(
     Returns:
         (rows with columns run_id, lap_id, start_time, end_time, which is
         empty if there are no crossings; the next lap_id; the new lap_start).
-
-    Raises:
-        NotImplementedError: Not implemented yet.
-    """
-    raise NotImplementedError
-
-
-def make_lap_row(
-    run_id: str, lap_id: int, start_time: datetime, end_time: datetime
-) -> pd.DataFrame:
-    """A one-row DataFrame for a single lap.
-
-    Args:
-        run_id: The run's id.
-        lap_id: The lap's number within the run.
-        start_time: When the lap started.
-        end_time: When the lap ended.
-
-    Returns:
-        One row with columns run_id, lap_id, start_time, end_time.
 
     Raises:
         NotImplementedError: Not implemented yet.
