@@ -32,12 +32,13 @@ class OrionDBClient(BaseClient):
             deleted = conn.execute(delete(target).where(target.c.run_id == run_id))
         logger.info("deleted %d rows in %s for run %s", deleted.rowcount, table, run_id)
 
-    def append(self, table: str, df: pd.DataFrame) -> None:
+    def append(self, table: str, df: pd.DataFrame, schema: str | None = None) -> None:
         """Append one page of rows to `table` with Postgres COPY, in its own transaction."""
         if df.empty:
             return
+        target = sql.Identifier(schema, table) if schema else sql.Identifier(table)
         copy_sql = sql.SQL("COPY {} ({}) FROM STDIN").format(
-            sql.Identifier(table),
+            target,
             sql.SQL(", ").join(map(sql.Identifier, df.columns)),
         )
         # astype(object) turns numpy scalars into Python ones psycopg can adapt.
