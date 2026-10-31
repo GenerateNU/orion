@@ -21,7 +21,7 @@ DATA_KEY = ("time", "dataTypeName")
 def _copy_whole_table(
     penelope: PenelopeClient, copy_engine: Engine, table: Table
 ) -> None:
-    """Copy every row of the small tables if there are changes. 
+    """Copy every row of the small tables if there are changes.
     Rows the copy already has are overwritten with Penelope's version.
 
     Only for small tables: reads the whole table in one query. `data` is copied
