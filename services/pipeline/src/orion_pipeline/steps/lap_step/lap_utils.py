@@ -150,9 +150,7 @@ def squared_distances(
     raise NotImplementedError
 
 
-def heading_at(
-    visited: VisitedPoints, index: int
-) -> tuple[float, float]:
+def heading_at(visited: VisitedPoints, index: int) -> tuple[float, float]:
     """The unit direction of travel at a visited point, from its neighbors.
 
     `before` is the visited point at `index - 1`, or the point itself if
