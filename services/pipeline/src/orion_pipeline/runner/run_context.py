@@ -13,3 +13,6 @@ class RunContext(BaseModel):
     run_id: str
     # Seconds added to gps_location timestamps in the clean step.
     gps_time_offset_s: float = get_settings().gps_time_offset_s
+    # Set by the lap step once it finds the start/finish gate. The gate itself
+    # is stored on the step (see docs/lap_detection.md).
+    found_gate: bool = False
