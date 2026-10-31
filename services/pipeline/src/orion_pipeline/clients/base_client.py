@@ -39,14 +39,12 @@ class BaseClient:
         )
 
     def iter_pages(
-        self, stmt: Select[*tuple[Any, ...]], key: tuple[str, ...]
+        self,
+        stmt: Select[*tuple[Any, ...]],
+        key: tuple[str, ...],
+        after: tuple[Any, ...] | None = None,
     ) -> Iterator[pd.DataFrame]:
-        """Yield `stmt`'s rows one page at a time, paged by `key`.
-
-        Each page is read on its own short connection, and the next one isn't
-        read until the caller is done with the current one.
-        """
-        after: tuple[Any, ...] | None = None
+        """Iterate over pages of `stmt` after the cursor `after`."""
         while True:
             page = self.read_page(stmt, key, after)
             if page.empty:
