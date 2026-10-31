@@ -9,31 +9,35 @@ import { useDashboardActions, useVisibleWindow } from "@features/dashboard/state
 import type { RunTime } from "@features/dashboard/utils/time";
 import styles from "./SensorChartPanel.module.css";
 import TimeSeriesChartFunctionality from "./TimeSeriesChartFunctionality";
- 
+
 type SensorChartsPanelProps = {
   defaultSensors?: readonly string[]; //raw sensor names, empty if no graphs
   height?: number;
 };
- 
+
 export default function SensorChartsPanel({
   defaultSensors = [],
   height = 240,
 }: SensorChartsPanelProps) {
   const [selected, setSelected] = useState<readonly string[]>(defaultSensors);
   const [adding, setAdding] = useState(false);
- 
+
   const { sensors } = useSensors();
-  const { trace, traceIsLoading, traceIsPlaceholderData, traceError } = useSensorTrace(selected, "overview",);
+  const { trace, traceIsLoading, traceIsPlaceholderData, traceError } = useSensorTrace(
+    selected,
+    "overview",
+  );
   const visibleWindow = useVisibleWindow();
   const { resetWindow } = useDashboardActions();
- 
+
   const units = useMemo(
     () => new Map(sensors?.map((sensor) => [sensor.name, sensor.unit ?? ""])),
     [sensors],
   );
-  const available = (sensors ?? []).map((sensor) => sensor.name)
+  const available = (sensors ?? [])
+    .map((sensor) => sensor.name)
     .filter((name) => name.trim() !== "" && !selected.includes(name));
- 
+
   const seriesByName = useMemo(() => {
     const result = new Map<string, ChartSeries[]>();
     if (!trace) return result;
@@ -51,9 +55,9 @@ export default function SensorChartsPanel({
     }
     return result;
   }, [trace, units]);
- 
+
   const waiting = traceIsLoading || traceIsPlaceholderData || !trace;
- 
+
   return (
     <section className={styles.panel}>
       <header className={styles.header}>
@@ -66,7 +70,7 @@ export default function SensorChartsPanel({
           Reset zoom
         </button>
       </header>
- 
+
       {traceError ? (
         <ErrorState error={traceError} />
       ) : (
@@ -80,7 +84,9 @@ export default function SensorChartsPanel({
                     value={name}
                     options={available}
                     label="Sensor"
-                    onPick={(next) => setSelected((prev) => prev.map((n, i) => (i === index ? next : n)))}
+                    onPick={(next) =>
+                      setSelected((prev) => prev.map((n, i) => (i === index ? next : n)))
+                    }
                   />
                   <button
                     type="button"
@@ -104,29 +110,29 @@ export default function SensorChartsPanel({
               </div>
             );
           })}
- 
+
           {selected.length < 6 && (
             <div className={styles.addSlot} style={{ minHeight: height }}>
               {adding ? (
-              <SensorPicker
-                options={available}
-                label="Select a sensor to view"
-                autoFocus
-                onPick={(name) => {
-                  setSelected((prev) => [...prev, name]);
-                  setAdding(false);
-                }}
-                onCancel={() => setAdding(false)}
-              />
-            ) : (
-              <button
-                type="button"
-                className={styles.add}
-                onClick={() => setAdding(true)}
-                disabled={!sensors}
-              >
-                +
-              </button>
+                <SensorPicker
+                  options={available}
+                  label="Select a sensor to view"
+                  autoFocus
+                  onPick={(name) => {
+                    setSelected((prev) => [...prev, name]);
+                    setAdding(false);
+                  }}
+                  onCancel={() => setAdding(false)}
+                />
+              ) : (
+                <button
+                  type="button"
+                  className={styles.add}
+                  onClick={() => setAdding(true)}
+                  disabled={!sensors}
+                >
+                  +
+                </button>
               )}
             </div>
           )}
@@ -135,7 +141,7 @@ export default function SensorChartsPanel({
     </section>
   );
 }
- 
+
 type SensorPickerProps = {
   value?: string;
   options: readonly string[];
@@ -145,10 +151,17 @@ type SensorPickerProps = {
   onCancel?: () => void;
 };
 
-function SensorPicker({ value = "", options, label, autoFocus, onPick, onCancel }: SensorPickerProps) {
+function SensorPicker({
+  value = "",
+  options,
+  label,
+  autoFocus,
+  onPick,
+  onCancel,
+}: SensorPickerProps) {
   const listId = useId();
   const [text, setText] = useState(value);
- 
+
   return (
     <>
       <input
