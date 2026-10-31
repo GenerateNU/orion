@@ -5,7 +5,7 @@ import type { RunTime, TimeWindow } from "@features/dashboard/utils/time";
 import { formatDuration } from "@utils/format";
 import styles from "./TimeSeriesChart.module.css";
 
-const MIN_DRAG_PX = 4;
+const MIN_DRAG_PX = 0;
 
 export type ChartSeries = {
   id: string;
@@ -40,6 +40,16 @@ const formatReading = (raw: number | null, unit: string) => {
 };
 
 const formatTime = (ms: number) => formatDuration(ms / 1000);
+
+const formatTicks = (ticks: number[], increment: number) => {
+  const largest = Math.max(...ticks.map(Math.abs));
+  const digits = largest > 0 && increment > 0 ? Math.ceil(Math.log10(largest / increment)) + 1 : 1;
+  const format = new Intl.NumberFormat(undefined, {
+    notation: "compact",
+    maximumSignificantDigits: Math.min(Math.max(digits, 1), 21),
+  });
+  return ticks.map((tick) => format.format(tick));
+};
 
 const selectionToWindow = (chart: uPlot): TimeWindow | null => {
   const { left, width } = chart.select;
@@ -111,6 +121,7 @@ export const TimeSeriesChart = ({
           label: yLabel,
           labelGap: 8,
           size: 60,
+          values: (_chart, ticks, _axisIdx, _space, increment) => formatTicks(ticks, increment),
           stroke: (chart) => cssStyle(chart, "--text-muted"),
           grid: { stroke: (chart) => cssStyle(chart, "--border-default") },
           ticks: { stroke: (chart) => cssStyle(chart, "--border-default") },
