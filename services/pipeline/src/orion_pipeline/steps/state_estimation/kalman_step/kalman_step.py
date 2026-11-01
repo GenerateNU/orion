@@ -14,37 +14,10 @@ from orion_pipeline.steps.state_estimation.kalman_step.kalman_filter import (
 from orion_pipeline.steps.state_estimation.phys_model_config import (
     METERS_PER_DEGREE_LAT,
     MPS_PER_MPH,
-    PhysicsModelConfig,
 )
 from orion_pipeline.steps.state_estimation.state import PX, PY, V
+from orion_pipeline.steps.state_estimation.state_config import StateConfig
 from orion_pipeline.steps.step_registry import register_step
-
-TICK = pd.Timedelta("10ms")
-# A gap longer than this restarts the filter instead of extrapolating through it
-MAX_GAP = pd.Timedelta("1s")
-# The first two GPS fixes must be this far apart to give a starting heading
-MIN_HEADING_DISTANCE_M = 2.0
-
-# TODO: Revise placeholder values
-GPS_STD_M = 1.5
-SPEED_STD_MPS = 0.5
-
-# sensor -> (h, R, NIS gate at 99%)
-SENSORS = {
-    "gps_location": (
-        lambda s: s[:, [PX, PY]],
-        np.diag([GPS_STD_M**2, GPS_STD_M**2]),
-        9.21,
-    ),
-    "vcu_speed": (
-        lambda s: s[:, [V]],
-        np.array([[SPEED_STD_MPS**2]]),
-        6.63,
-    ),
-}
-
-# Starting uncertainty for [px, py, v, theta, omega, a]
-P0 = np.diag([GPS_STD_M**2, GPS_STD_M**2, 1.0**2, 0.3**2, 0.5**2, 2.0**2])
 
 
 @register_step
@@ -65,7 +38,11 @@ class KalmanStep(PipelineStep):
 
     def __init__(self, reader: OrionDBClient, writer: OrionDBClient):
         super().__init__(reader, writer)
-        self.model = CTRAModel(PhysicsModelConfig("ctra", {}))
+        self.config = StateConfig.load("services/pipeline/config/state_config.toml")
+        self.model = CTRAModel(self.config)
+        self.tick = pd.Timedelta(milliseconds=self.config.tick_ms)
+        self.max_gap = pd.Timedelta(seconds=self.config.max_gap_s)
+        self.min_heading_distance = self.config.min_heading_distance_m
 
     def prepare(self, ctx: RunContext) -> None:
         super().prepare(ctx)
@@ -86,7 +63,8 @@ class KalmanStep(PipelineStep):
 
     def extract(self, ctx: RunContext) -> Iterator[pd.DataFrame]:
         return self.reader.iter_pages(
-            select_cleaned_readings(ctx.run_id, SENSORS.keys()), self.pagination_key
+            select_cleaned_readings(ctx.run_id, self.config.sensors.keys()),
+            self.pagination_key,
         )
 
     def transform(self, df: pd.DataFrame, ctx: RunContext) -> pd.DataFrame:
@@ -118,8 +96,8 @@ class KalmanStep(PipelineStep):
 
         leftover = None
         for page in self.extract(ctx):
-            readings = pd.concat([leftover, page])
-            tick_times = readings["time"].dt.floor(TICK)
+            readings = pd.concat([leftover, page]) if leftover is not None else page
+            tick_times = readings["time"].dt.floor(self.tick)
             last_tick = tick_times == tick_times.iloc[-1]
             self._filter(readings[~last_tick])
             self._write_ticks(ctx)
@@ -139,15 +117,15 @@ class KalmanStep(PipelineStep):
         self.ticks = []
 
     def _filter(self, readings: pd.DataFrame) -> None:
-        """Run the filter over readings, one 10ms tick at a time."""
+        """Run the filter over readings, one tick at a time."""
 
         for tick_time, tick_readings in readings.groupby(
-            readings["time"].dt.floor(TICK)
+            readings["time"].dt.floor(self.tick)
         ):
             if (
                 self.ukf is not None
                 and self.tick_time is not None
-                and tick_time - self.tick_time > MAX_GAP
+                and tick_time - self.tick_time > self.max_gap
             ):
                 self.ukf = None
 
@@ -156,8 +134,8 @@ class KalmanStep(PipelineStep):
                 continue
 
             # Ticks with no readings still predict, so the grid stays even
-            while self.tick_time + TICK < tick_time:
-                self._step(self.tick_time + TICK, [])
+            while self.tick_time + self.tick < tick_time:
+                self._step(self.tick_time + self.tick, [])
             self._step(
                 tick_time,
                 zip(tick_readings["sensor"], tick_readings["values"], strict=True),
@@ -176,8 +154,9 @@ class KalmanStep(PipelineStep):
         x_pred, P_pred, C = ukf.predict(dt)
 
         for sensor, values in readings:
-            h, R, gate = SENSORS[sensor]
-            ukf.update(self._measurement(sensor, values), h, R, gate)
+            sensor_cfg = self.config.sensors[sensor]
+            measurement_func = self._get_measurement_func(sensor)
+            ukf.update(self._measurement(sensor, values), measurement_func, sensor_cfg.R, sensor_cfg.gate)
 
         self.ticks.append((tick_time, ukf.x.copy(), ukf.P.copy(), x_pred, P_pred, C))
         self.tick_time = tick_time
@@ -200,16 +179,25 @@ class KalmanStep(PipelineStep):
         first_time, first_xy = self.first_fix
         dx, dy = xy - first_xy
         distance = np.hypot(dx, dy)
-        if distance < MIN_HEADING_DISTANCE_M:
+        if distance < self.min_heading_distance:
             return
 
         speed = distance / (tick_time - first_time).total_seconds()
         x0 = np.array([xy[0], xy[1], speed, np.arctan2(dy, dx), 0.0, 0.0])
 
-        self.ukf = UnscentedKalmanFilter(self.model, x0, P0)
+        self.ukf = UnscentedKalmanFilter(self.model, x0, self.config.P0)
         self.tick_time = tick_time
         self.first_fix = None
-        self.ticks.append((tick_time, x0, P0.copy(), None, None, None))
+        self.ticks.append((tick_time, x0, self.config.P0.copy(), None, None, None))
+
+    def _get_measurement_func(self, sensor: str):
+        """Get measurement function for sensor."""
+        if sensor == "gps_location":
+            return lambda s: s[:, [PX, PY]]
+        elif sensor == "vcu_speed":
+            return lambda s: s[:, [V]]
+        else:
+            raise ValueError(f"Unknown sensor: {sensor}")
 
     def _measurement(self, sensor: str, values: list[float]) -> np.ndarray:
         """A reading's values -> z in the filter's units."""
