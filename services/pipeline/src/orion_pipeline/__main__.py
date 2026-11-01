@@ -2,6 +2,7 @@
 
 import argparse
 import logging
+from datetime import UTC, datetime
 
 import uvicorn
 
@@ -25,8 +26,16 @@ def main() -> None:
     commands.add_parser("worker", help="Process queued jobs forever")
     run = commands.add_parser("run", help="Run the pipeline for one run_id, right now")
     run.add_argument("run_id")
-    commands.add_parser(
-        "sync", help="Copy new Penelope data into OrionDB's penelope schema"
+    sync_cmd = commands.add_parser(
+        "sync", help="Copy new Penelope data into the penelope_copy database"
+    )
+    sync_cmd.add_argument(
+        "--since",
+        type=lambda s: datetime.fromisoformat(s).replace(tzinfo=UTC),
+        help="Only copy runs that started on/after this UTC date, e.g. 2026-08-01",
+    )
+    sync_cmd.add_argument(
+        "--run", nargs="+", dest="run_ids", help="Only copy these run ids"
     )
     args = parser.parse_args()
 
@@ -45,15 +54,17 @@ def main() -> None:
     elif args.command == "sync":
         if not settings.penelope_database_url:
             raise SystemExit("PENELOPE_DATABASE_URL is not set")
+        if not settings.penelope_copy_database_url:
+            raise SystemExit("PENELOPE_COPY_DATABASE_URL is not set")
         penelope = PenelopeClient(
             make_sync_engine(settings.penelope_database_url, read_only=True),
             page_size=settings.pipeline_page_size,
         )
-        oriondb = OrionDBClient(
-            make_sync_engine(settings.orion_database_url),
+        copy = OrionDBClient(
+            make_sync_engine(settings.penelope_copy_database_url),
             page_size=settings.pipeline_page_size,
         )
-        sync(penelope, oriondb)
+        sync(penelope, copy, since=args.since, run_ids=args.run_ids)
     else:
         PipelineRunner(settings).run_all(args.run_id)
 
