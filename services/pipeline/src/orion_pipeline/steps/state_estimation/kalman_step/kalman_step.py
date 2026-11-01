@@ -12,9 +12,8 @@ from orion_pipeline.steps.state_estimation.kalman_step.kalman_filter import (
     UnscentedKalmanFilter,
 )
 from orion_pipeline.steps.state_estimation.phys_model_config import (
-    METERS_PER_DEGREE_LAT,
-    MPS_PER_MPH,
     PhysicsModelConfig,
+    UnitConversions,
 )
 from orion_pipeline.steps.state_estimation.state import PX, PY, V
 from orion_pipeline.steps.step_registry import register_step
@@ -216,13 +215,17 @@ class KalmanStep(PipelineStep):
         if sensor == "gps_location":
             lat, lon = values
             return self._to_xy(lat, lon)
-        return np.array([values[0] * MPS_PER_MPH])
+        return np.array([values[0] * UnitConversions.MPS_PER_MPH])
 
     def _to_xy(self, lat: float, lon: float) -> np.ndarray:
         """Latitude/longitude -> [x east, y north] meters from the origin. Fine at track scale."""
         if self.origin is None:
             raise RuntimeError("Origin not set.")
         origin_lat, origin_lon = self.origin
-        x = (lon - origin_lon) * METERS_PER_DEGREE_LAT * np.cos(np.radians(origin_lat))
-        y = (lat - origin_lat) * METERS_PER_DEGREE_LAT
+        x = (
+            (lon - origin_lon)
+            * UnitConversions.METERS_PER_DEGREE_LAT
+            * np.cos(np.radians(origin_lat))
+        )
+        y = (lat - origin_lat) * UnitConversions.METERS_PER_DEGREE_LAT
         return np.array([x, y])
