@@ -48,6 +48,11 @@ def test_state_config_missing_model_key():
 [initial_state]
 covariance_diag = [2.25, 2.25, 1.0, 0.09, 0.25, 4.0]
 
+[ukf]
+alpha = 0.5
+beta = 2.0
+kappa = 0.0
+
 [sensors.gps_location]
 std = [1.5, 1.5]
 gate = 9.21
@@ -79,9 +84,15 @@ sigma_alpha = 0.1
 [initial_state]
 covariance_diag = [2.25, 2.25, 1.0, 0.09, 0.25, 4.0]
 
+[ukf]
+alpha = 0.5
+beta = 2.0
+kappa = 0.0
+
 [sensors.gps_location]
 gate = 9.21
 """
+
     with tempfile.NamedTemporaryFile(mode="w", suffix=".toml", delete=False) as f:
         f.write(broken_toml)
         f.flush()

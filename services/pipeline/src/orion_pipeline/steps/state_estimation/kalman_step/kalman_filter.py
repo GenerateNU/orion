@@ -4,6 +4,7 @@ import numpy as np
 
 from orion_pipeline.steps.state_estimation.ctra_model import CTRAModel
 from orion_pipeline.steps.state_estimation.state import THETA, wrap_angle
+from orion_pipeline.steps.state_estimation.state_config import StateConfig
 
 
 class UnscentedKalmanFilter:
@@ -26,15 +27,17 @@ class UnscentedKalmanFilter:
         model: CTRAModel,
         x0: np.ndarray,
         P0: np.ndarray,
-        alpha: float = 0.5,
-        beta: float = 2.0,
-        kappa: float = 0.0,
+        config: StateConfig,
     ) -> None:
         self.model = model
         self.x = np.array(x0, dtype=np.float64)
         self.P = np.array(P0, dtype=np.float64)
 
+
         n = len(self.x)
+        alpha = config.ukf_alpha
+        beta = config.ukf_beta
+        kappa = config.ukf_kappa
         lam = alpha**2 * (n + kappa) - n
         self.c = n + lam
 

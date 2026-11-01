@@ -28,6 +28,9 @@ class StateConfig:
     sigma_alpha: float
     covariance_diag: list[float]
     sensors: dict[str, SensorConfig]
+    ukf_alpha: float
+    ukf_beta: float
+    ukf_kappa: float
 
     @property
     def P0(self) -> np.ndarray:
@@ -42,6 +45,7 @@ class StateConfig:
 
         model = data["model"]
         sensors_raw = data["sensors"]
+        ukf = data["ukf"]
         sensors = {
             name: SensorConfig(std=cfg["std"], gate=cfg["gate"])
             for name, cfg in sensors_raw.items()
@@ -53,4 +57,7 @@ class StateConfig:
             sigma_alpha=model["sigma_alpha"],
             covariance_diag=data["initial_state"]["covariance_diag"],
             sensors=sensors,
+            ukf_alpha=ukf["alpha"],
+            ukf_beta=ukf["beta"],
+            ukf_kappa=ukf["kappa"],
         )
