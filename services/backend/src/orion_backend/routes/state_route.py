@@ -36,8 +36,5 @@ async def get_state_data(
     The time bounds are required so a request can't pull a whole run. An unknown run
     or a range with no rows comes back with empty lists.
     """
-    # Strip timezone from query params (DB column is TIMESTAMP WITHOUT TIME ZONE)
-    start_naive = start.replace(tzinfo=None) if start.tzinfo else start
-    end_naive = end.replace(tzinfo=None) if end.tzinfo else end
-    
-    return await service.get_state_data(run_id, start_naive, end_naive)
+ 
+    return await service.get_state_data(run_id, start, end)

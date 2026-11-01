@@ -1,3 +1,4 @@
+// TrackVisualization.tsx
 import React from "react";
 import type { Segment } from "@features/dashboard/utils/trackmap";
 import styles from "@features/dashboard/TrackMap.module.css";
@@ -7,6 +8,7 @@ export interface TrackVisualizationProps {
   committedSegments: Segment[];
   previewSegments: Segment[];
   carPos: { x: number; y: number } | null;
+  aspectRatio: number;
   onMouseDown: (e: React.MouseEvent<SVGSVGElement>) => void;
   onMouseMove: (e: React.MouseEvent<SVGSVGElement>) => void;
   onMouseUp: (e: React.MouseEvent<SVGSVGElement>) => void;
@@ -19,6 +21,7 @@ export const TrackVisualization = React.memo(function TrackVisualization({
   committedSegments,
   previewSegments,
   carPos,
+  aspectRatio,
   onMouseDown,
   onMouseMove,
   onMouseUp,
@@ -29,8 +32,10 @@ export const TrackVisualization = React.memo(function TrackVisualization({
     <svg
       ref={stageRef}
       width="100%"
-      height="300"
-      viewBox="0 0 400 300"
+      height="auto"
+      viewBox="0 0 100 100"
+      preserveAspectRatio="xMidYMid meet"
+      style={{ aspectRatio }}
       className={styles.stage}
       onMouseDown={onMouseDown}
       onMouseMove={onMouseMove}
@@ -69,7 +74,7 @@ export const TrackVisualization = React.memo(function TrackVisualization({
         />
       ))}
 
-      {carPos && <circle cx={carPos.x} cy={carPos.y} r="6" fill="#ef4444" />}
+      {carPos && <circle cx={carPos.x} cy={carPos.y} r="2" fill="#ef4444" />}
     </svg>
   );
 });

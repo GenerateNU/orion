@@ -1,3 +1,4 @@
+// TrackMap.tsx
 import { useState, useMemo, useRef, useCallback } from "react";
 import {
   useCommittedWindow,
@@ -54,8 +55,9 @@ export function TrackMap() {
     svgPoints,
     positions: svgPositions,
     time,
+    aspectRatio,
   } = useMemo(() => {
-    if (states.length === 0) return { svgPoints: [], positions: [], time: [] };
+    if (states.length === 0) return { svgPoints: [], positions: [], time: [], aspectRatio: 1 };
 
     const lats = states.map((s: CarState) => s.lattitude);
     const lons = states.map((s: CarState) => s.longitude);
@@ -65,19 +67,19 @@ export function TrackMap() {
     const minLon = Math.min(...lons);
     const maxLon = Math.max(...lons);
 
-    const width = 400;
-    const height = 300;
-    const padding = 20;
+    const latRange = maxLat - minLat || 1;
+    const lonRange = maxLon - minLon || 1;
 
     const svgPts = states.map((s: CarState) => ({
-      x: padding + ((s.longitude - minLon) / (maxLon - minLon || 1)) * (width - 2 * padding),
-      y: padding + ((s.lattitude - minLat) / (maxLat - minLat || 1)) * (height - 2 * padding),
+      x: ((s.longitude - minLon) / lonRange) * 100,
+      y: ((s.lattitude - minLat) / latRange) * 100,
     })) as Array<{ x: number; y: number }>;
 
     const svgPositions: Position[] = svgPts.map((p) => [p.x, p.y]);
     const times = states.map((s: CarState) => s.time * 1000);
+    const aspectRatio = latRange / lonRange;
 
-    return { svgPoints: svgPts, positions: svgPositions, time: times };
+    return { svgPoints: svgPts, positions: svgPositions, time: times, aspectRatio };
   }, [states]);
 
   useHoverTimeSubscription((t) => {
@@ -153,6 +155,7 @@ export function TrackMap() {
         committedSegments={committedSegments}
         previewSegments={previewSegments}
         carPos={carPos}
+        aspectRatio={aspectRatio}
         onMouseDown={handleMouseDown}
         onMouseMove={handleMouseMove}
         onMouseUp={handleMouseUp}
