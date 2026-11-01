@@ -1,5 +1,6 @@
 """Pure geometry helpers for lap detection. See docs/lap_detection.md."""
 
+import math
 from dataclasses import dataclass, field
 from datetime import datetime
 
@@ -7,7 +8,7 @@ import numpy as np
 import pandas as pd
 from numpy.typing import NDArray
 
-from orion_pipeline.steps.lap_step.lap_constants import EARTH_RADIUS_M  # noqa: F401
+from orion_pipeline.steps.lap_step.lap_constants import EARTH_RADIUS_M
 
 
 @dataclass(frozen=True)
@@ -15,8 +16,8 @@ class Gate:
     """The start/finish line, as a segment from G1 to G2 in local x/y meters.
 
     G1 is the gate's left end and G2 its right end, when facing the driving
-    direction. This order is what makes the sign of `side_of_gate` mean
-    behind (negative) or past (zero or positive).
+    direction. This order is what makes `is_past_gate` mean ahead of the
+    gate rather than behind it.
     """
 
     g1_x: float
@@ -27,7 +28,7 @@ class Gate:
 
 @dataclass
 class VisitedPoints:
-    """Every sampled Pass 1 point so far, in time order.
+    """Every point sampled while searching for the gate, in time order.
 
     These are the candidates a later point can revisit, not revisits
     themselves. The arrays are parallel: index i of each array is the same
@@ -43,7 +44,7 @@ class VisitedPoints:
 
 @dataclass(frozen=True)
 class TrackPoint:
-    """One point in local x/y meters. Pass 2 carries the last point of each
+    """One point in local x/y meters. Counting laps carries the last point of each
     page over to the next page, so a crossing on a page boundary isn't missed."""
 
     x: float
@@ -63,7 +64,7 @@ def to_local_xy(
         y = EARTH_RADIUS_M * radians(lat - origin_lat)
 
     x points east and y points north. The origin is the run's first point, and
-    both passes must use the same origin.
+    both modes must use the same origin.
 
     Args:
         lat: Latitude of each point, in degrees.
@@ -73,11 +74,14 @@ def to_local_xy(
 
     Returns:
         (x, y) in meters, with the same index as `lat` and `lon`.
-
-    Raises:
-        NotImplementedError: Not implemented yet.
     """
-    raise NotImplementedError
+    x = (
+        EARTH_RADIUS_M
+        * np.radians(lon - origin_lon)
+        * math.cos(math.radians(origin_lat))
+    )
+    y = EARTH_RADIUS_M * np.radians(lat - origin_lat)
+    return x, y
 
 
 def seconds_since(times: pd.Series, start_time: datetime) -> pd.Series:
@@ -89,44 +93,38 @@ def seconds_since(times: pd.Series, start_time: datetime) -> pd.Series:
 
     Returns:
         `(times - start_time)` in seconds, with the same index as `times`.
-
-    Raises:
-        NotImplementedError: Not implemented yet.
     """
-    raise NotImplementedError
+    return (times - start_time).dt.total_seconds()
 
 
-def downsample(
-    page: pd.DataFrame, first_global_index: int, every_n: int
-) -> pd.DataFrame:
+def downsample(page: pd.DataFrame, rows_before_page: int, every_n: int) -> pd.DataFrame:
     """Keep every `every_n`-th row of the run, counted across all pages.
 
-    A row's global index is `first_global_index` plus its position in the page
+    A row's global index is `rows_before_page` plus its position in the page
     (0, 1, 2, ...). The row is kept when `global_index % every_n == 0`. Counting
     across the run rather than per page means the spacing stays even over page
     boundaries. With `every_n = 1` every row is kept.
 
     Args:
         page: One page of the run, in time order.
-        first_global_index: Global index of the page's first row (the number
+        rows_before_page: Global index of the page's first row (the number
             of rows in all earlier pages).
         every_n: Keep one row in every `every_n`.
 
     Returns:
         The kept rows, in their original order.
-
-    Raises:
-        NotImplementedError: Not implemented yet.
     """
-    raise NotImplementedError
+    # Position in the page of the first row whose global index is divisible by every_n.
+    start = -rows_before_page % every_n
+    return page.iloc[start::every_n]
 
 
 def squared_distances(
-    qx: float, qy: float, xs: NDArray[np.float64], ys: NDArray[np.float64]
+    qx: float, qy: float, xn: NDArray[np.float64], yn: NDArray[np.float64]
 ) -> NDArray[np.float64]:
-    """Squared distance from Q to every point P in `xs`/`ys`, all at once.
+    """Squared distance from Q to every point P in `xn`/`yn`, all at once.
 
-        (xs - qx)^2 + (ys - qy)^2
+        (xn - qx)^2 + (yn - qy)^2
 
     Q is inside P's hitbox when this is `<= HITBOX_RADIUS_M^2`. Comparing
     squared distances means no square root is needed.
@@ -137,20 +135,17 @@ def squared_distances(
     Args:
         qx: Q's x, in meters.
         qy: Q's y, in meters.
-        xs: x of each point P, in meters.
-        ys: y of each point P, in meters.
+        xn: x of each point P, in meters.
+        yn: y of each point P, in meters.
 
     Returns:
         The squared distance to each P, in square meters, in the same order
-        as `xs` and `ys`.
-
-    Raises:
-        NotImplementedError: Not implemented yet.
+        as `xn` and `yn`.
     """
-    raise NotImplementedError
+    return (xn - qx) ** 2 + (yn - qy) ** 2
 
 
-def heading_at(visited: VisitedPoints, index: int) -> tuple[float, float]:
+def heading_at(visited: VisitedPoints, index: int) -> tuple[float, float] | None:
     """The unit direction of travel at a visited point, from its neighbors.
 
     `before` is the visited point at `index - 1`, or the point itself if
@@ -160,17 +155,26 @@ def heading_at(visited: VisitedPoints, index: int) -> tuple[float, float]:
         h = after - before
         heading = h / |h|
 
+    If `|h|` is 0, `before` and `after` are at the same position (e.g.
+    repeated GPS fixes while parked), so there's no direction to divide out.
+    Example: before=(-1, 0), after=(1, 0) gives h=(2, 0), |h|=2, and
+    heading (1, 0).
+
     Args:
-        visited: The visited Pass 1 points.
+        visited: The visited points.
         index: Index of the point in `visited`.
 
     Returns:
-        The unit heading (hx, hy), or None if the span is too small.
-
-    Raises:
-        NotImplementedError: Not implemented yet.
+        The unit heading (hx, hy), or None if `|h|` is 0.
     """
-    raise NotImplementedError
+    before = max(index - 1, 0)
+    after = min(index + 1, len(visited.x) - 1)
+    hx = float(visited.x[after] - visited.x[before])
+    hy = float(visited.y[after] - visited.y[before])
+    span = math.hypot(hx, hy)
+    if span == 0:
+        return None
+    return hx / span, hy / span
 
 
 def find_revisit(
@@ -210,9 +214,10 @@ def find_revisit(
        2. Hitbox test. `d2 = squared_distances(Q, x[:cutoff], y[:cutoff])`.
           The candidates are the indices where `d2 <= hitbox_radius_m^2`.
        3. Closest first. Try the candidates sorted by `d2`, smallest first.
-          The first one where `heading_at(visited, index, min_heading_span_m)`
-          isn't None is the gate center: return `(index, heading)` right
-          away, without checking the rest of the page.
+          The first one where `heading_at(visited, index)` isn't None is the
+          gate center: return `(index, heading)` right away, without checking
+          the rest of the page. If every candidate's heading is None, move on
+          to the next Q.
     4. Return None if no point on this page found a revisit.
 
     `visited` keeps the whole page either way, so it carries over to the next
@@ -231,11 +236,53 @@ def find_revisit(
     Returns:
         (index in `visited` of the gate center, unit heading at it) for the
         first valid revisit, or None if this page has none.
-
-    Raises:
-        NotImplementedError: Not implemented yet.
     """
-    raise NotImplementedError
+    xn = x.to_numpy(dtype=np.float64)
+    yn = y.to_numpy(dtype=np.float64)
+    tn = time_s.to_numpy(dtype=np.float64)
+    if len(xn) == 0:
+        return None
+
+    # 1. Distance driven, continuing from the last visited point if there is one.
+    has_visited = len(visited.x) > 0
+    start_x = visited.x[-1] if has_visited else xn[0]
+    start_y = visited.y[-1] if has_visited else yn[0]
+    start_distance = visited.distance_m[-1] if has_visited else 0.0
+    steps = np.hypot(np.diff(xn, prepend=start_x), np.diff(yn, prepend=start_y))
+    distances_m = start_distance + np.cumsum(steps)
+
+    # 2. Extend visited first, so returned indices refer to visited itself.
+    first_q = len(visited.x)
+    visited.x = np.concatenate((visited.x, xn))
+    visited.y = np.concatenate((visited.y, yn))
+    visited.time_s = np.concatenate((visited.time_s, tn))
+    visited.distance_m = np.concatenate((visited.distance_m, distances_m))
+
+    # 3. Check each of this page's points against the points well before it.
+    for q in range(first_q, len(visited.x)):
+        time_cutoff_index = np.searchsorted(
+            visited.time_s[:q], visited.time_s[q] - min_revisit_time_s, side="right"
+        )
+        dist_cutoff_index = np.searchsorted(
+            visited.distance_m[:q],
+            visited.distance_m[q] - min_revisit_distance_m,
+            side="right",
+        )
+        cutoff_index = min(time_cutoff_index, dist_cutoff_index)
+
+        dists_squared = squared_distances(
+            visited.x[q],
+            visited.y[q],
+            visited.x[:cutoff_index],
+            visited.y[:cutoff_index],
+        )
+        candidates_indices = np.flatnonzero(dists_squared <= hitbox_radius_m**2)
+        for index in candidates_indices[np.argsort(dists_squared[candidates_indices])]:
+            heading = heading_at(visited, int(index))
+            if heading is not None:
+                return int(index), heading
+
+    return None
 
 
 def build_gate(
@@ -260,90 +307,124 @@ def build_gate(
 
     Returns:
         The gate.
-
-    Raises:
-        NotImplementedError: Not implemented yet.
     """
-    raise NotImplementedError
+    nx, ny = -heading[1], heading[0]
+    return Gate(
+        g1_x=center_x + half_width_m * nx,
+        g1_y=center_y + half_width_m * ny,
+        g2_x=center_x - half_width_m * nx,
+        g2_y=center_y - half_width_m * ny,
+    )
 
 
-def cross_2d(ux: float, uy: float, vx: float, vy: float) -> float:
-    """The 2D cross product of arrows u and v.
+def cross_2d(v1_x: float, v1_y: float, v2_x: float, v2_y: float) -> float:
+    """The 2D cross product of vectors v1 and v2.
 
-        cross(u, v) = ux*vy - uy*vx
+        v1_x * v2_y - v1_y * v2_x
 
-    Positive if v points to the left of u, negative if it points to the
-    right, and zero if they lie along the same line. Example: u=(1, 0),
-    v=(0, 1) gives 1 (v is to the left).
+    Positive if v2 points to the left of v1, negative if it points to the
+    right, and zero if they point along the same line. (Right-hand rule:
+    fingers along v1, curl toward v2; thumb up is positive.)
 
     Args:
-        ux: u's x.
-        uy: u's y.
-        vx: v's x.
-        vy: v's y.
+        v1_x: x of v1.
+        v1_y: y of v1.
+        v2_x: x of v2.
+        v2_y: y of v2.
 
     Returns:
-        cross(u, v).
-
-    Raises:
-        NotImplementedError: Not implemented yet.
+        The cross product.
     """
-    raise NotImplementedError
+    return v1_x * v2_y - v1_y * v2_x
 
 
-def side_of_gate(x: float, y: float, gate: Gate) -> float:
-    """Which side of the gate's line a point P is on.
+def is_past_line(
+    start_x: float, start_y: float, end_x: float, end_y: float, px: float, py: float
+) -> bool:
+    """Whether point p is past the line from start to end, or on it.
 
-        side(P) = cross(G2 - G1, P - G1)
-
-    Negative means P is behind the line (not reached yet). Zero or positive
-    means it's on or past the line.
+    "Past" means on the left side when facing from start toward end. Uses the
+    cross product of (end - start) and (p - start), which is positive on the
+    left, negative on the right, and zero on the line.
 
     Args:
-        x: P's x, in meters.
-        y: P's y, in meters.
+        start_x: x of the line's start, in meters.
+        start_y: y of the line's start, in meters.
+        end_x: x of the line's end, in meters.
+        end_y: y of the line's end, in meters.
+        px: x of the point, in meters.
+        py: y of the point, in meters.
+
+    Returns:
+        True if p is past the line or exactly on it.
+    """
+    return cross_2d(end_x - start_x, end_y - start_y, px - start_x, py - start_y) >= 0
+
+
+def is_past_gate(px: float, py: float, gate: Gate) -> bool:
+    """Whether a point is on or past the gate's line.
+
+    G1 is the gate's left end and G2 its right end, facing the driving
+    direction, so past the line G1 -> G2 is past the gate.
+
+    Args:
+        px: x of the point, in meters.
+        py: y of the point, in meters.
         gate: The gate.
 
     Returns:
-        side(P).
-
-    Raises:
-        NotImplementedError: Not implemented yet.
+        True if the point is on or past the gate's line.
     """
-    raise NotImplementedError
+    return is_past_line(gate.g1_x, gate.g1_y, gate.g2_x, gate.g2_y, px, py)
 
 
-def crosses_gate(ax: float, ay: float, bx: float, by: float, gate: Gate) -> bool:
-    """Whether driving from A to B is a forward pass through the gate.
+def is_between_gate(
+    p1_x: float, p1_y: float, p2_x: float, p2_y: float, gate: Gate
+) -> bool:
+    """Whether the path from p1 to p2 goes between the gate's two ends.
 
-    Both of these must hold:
-
-    1. Forward across the line: `side(A) < 0` and `side(B) >= 0`, using
-       `side_of_gate`. Driving backwards through it doesn't count, and a
-       point exactly on the line counts as past, so it's only counted once.
-    2. Inside the gate: G1 and G2 are on opposite sides of the line through
-       A and B. With
-
-           d1 = cross(B - A, G1 - A)
-           d2 = cross(B - A, G2 - A)
-
-       it counts if `d1 * d2 <= 0`. This rejects crossings of the gate line's
-       extension elsewhere on the track. Touching a gate end exactly counts.
+    True when exactly one of G1 and G2 is past the path's line, meaning the
+    ends are on different sides of the path. This rejects crossing the gate's
+    line extended, elsewhere on the track.
 
     Args:
-        ax: A's x, in meters.
-        ay: A's y, in meters.
-        bx: B's x, in meters.
-        by: B's y, in meters.
+        p1_x: x of the earlier point, in meters.
+        p1_y: y of the earlier point, in meters.
+        p2_x: x of the next point, in meters.
+        p2_y: y of the next point, in meters.
         gate: The gate.
 
     Returns:
-        True if A -> B counts as a crossing.
-
-    Raises:
-        NotImplementedError: Not implemented yet.
+        True if the path goes between G1 and G2.
     """
-    raise NotImplementedError
+    g1_side = is_past_line(p1_x, p1_y, p2_x, p2_y, gate.g1_x, gate.g1_y)
+    g2_side = is_past_line(p1_x, p1_y, p2_x, p2_y, gate.g2_x, gate.g2_y)
+    return g1_side != g2_side
+
+
+def crosses_gate(
+    p1_x: float, p1_y: float, p2_x: float, p2_y: float, gate: Gate
+) -> bool:
+    """Whether driving from p1 to the next point p2 is a forward pass through the gate.
+
+    p1 must be behind the gate, p2 on or past it, and the path between them
+    must go between the gate's two ends.
+
+    Args:
+        p1_x: x of the earlier point, in meters.
+        p1_y: y of the earlier point, in meters.
+        p2_x: x of the next point, in meters.
+        p2_y: y of the next point, in meters.
+        gate: The gate.
+
+    Returns:
+        True if p1 -> p2 counts as a crossing.
+    """
+    return (
+        not is_past_gate(p1_x, p1_y, gate)
+        and is_past_gate(p2_x, p2_y, gate)
+        and is_between_gate(p1_x, p1_y, p2_x, p2_y, gate)
+    )
 
 
 def find_crossings(
@@ -370,11 +451,18 @@ def find_crossings(
 
     Returns:
         t(B) for each crossing, in time order.
-
-    Raises:
-        NotImplementedError: Not implemented yet.
     """
-    raise NotImplementedError
+    xn, yn, tn = x.tolist(), y.tolist(), times.tolist()
+    if previous is not None:
+        xn.insert(0, previous.x)
+        yn.insert(0, previous.y)
+        tn.insert(0, previous.time)
+
+    crossing_times = []
+    for b in range(1, len(xn)):
+        if crosses_gate(xn[b - 1], yn[b - 1], xn[b], yn[b], gate):
+            crossing_times.append(tn[b])
+    return crossing_times
 
 
 def apply_min_lap_time(
@@ -397,11 +485,16 @@ def apply_min_lap_time(
 
     Returns:
         The crossings that count, in order.
-
-    Raises:
-        NotImplementedError: Not implemented yet.
     """
-    raise NotImplementedError
+    kept: list[datetime] = []
+    for crossing in crossing_times:
+        if (
+            last_counted_time is None
+            or (crossing - last_counted_time).total_seconds() >= min_lap_time_s
+        ):
+            kept.append(crossing)
+            last_counted_time = crossing
+    return kept
 
 
 def build_lap_rows(
@@ -423,8 +516,11 @@ def build_lap_rows(
     Returns:
         (rows with columns run_id, lap_id, start_time, end_time, which is
         empty if there are no crossings; the next lap_id; the new lap_start).
-
-    Raises:
-        NotImplementedError: Not implemented yet.
     """
-    raise NotImplementedError
+    rows = []
+    for crossing in crossing_times:
+        rows.append((run_id, lap_id, lap_start, crossing))
+        lap_id += 1
+        lap_start = crossing
+    columns = ["run_id", "lap_id", "start_time", "end_time"]
+    return pd.DataFrame(rows, columns=columns), lap_id, lap_start

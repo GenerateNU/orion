@@ -36,7 +36,7 @@ from orion_pipeline.steps.step_registry import register_step
 @register_step
 class LapStep(PipelineStep):
     name = "lap_step"
-    depends_on = ("state_step",)
+    depends_on = ("kalman_step",)
     reads_from = "oriondb"
     output_table = "laps"
     pagination_key = ("time",)
