@@ -97,6 +97,19 @@ export const useDashboardActions = () => {
       return lapsToWindow(lapsFromMetrics(metrics, runTimes), lapIds) ?? current;
     };
 
+    // The laps a window overlaps, even partly; undefined for the whole run or when
+    // lap times aren't loaded.
+    const lapsInWindow = (window: TimeWindow | null): number[] | undefined => {
+      const metrics = queryClient.getQueryData<MetricsResponse>(runDataKeys.metrics(runId));
+      const runTimes = timeline();
+      if (!window || !metrics || !runTimes) return undefined;
+      const ids = lapsFromMetrics(metrics, runTimes)
+        .filter((lap) => lap.window[0] < window[1] && lap.window[1] > window[0])
+        .map((lap) => lap.id)
+        .sort((a, b) => a - b);
+      return ids.length > 0 ? ids : undefined;
+    };
+
     // Lap changes add a history entry, so Back undoes them.
     const setLaps = (update: (laps: readonly number[]) => readonly number[]) => {
       store.getState().setDraftWindow(null);
@@ -113,12 +126,20 @@ export const useDashboardActions = () => {
     };
 
     // Window changes replace the history entry, so a drag doesn't fill history.
+    // The lap selection follows the window: the laps it overlaps, none for the whole
+    // run. Overlap is taken from the window as dragged, before snapping, so snapping
+    // can't tick a neighbouring lap.
     const setWindow = (window: TimeWindow | null) => {
       store.getState().setDraftWindow(null);
       const runTimes = timeline();
       const t = window && runTimes ? snapWindow(window, runTimes.durationMs) : window;
+      const laps = t ? lapsInWindow(window) : undefined;
       navigate({
-        search: (prev: DashboardSearch): DashboardSearch => ({ ...prev, t: t ?? undefined }),
+        search: (prev: DashboardSearch): DashboardSearch => ({
+          ...prev,
+          laps,
+          t: t ?? undefined,
+        }),
         replace: true,
       });
     };

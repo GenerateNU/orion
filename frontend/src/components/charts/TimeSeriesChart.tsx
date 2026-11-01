@@ -20,6 +20,8 @@ export type TimeSeriesChartProps = {
   height?: number;
   yLabel?: string;
   visibleWindow?: TimeWindow | null;
+  // Shaded behind the lines, e.g. the lap hovered in the lap list.
+  highlightWindow?: TimeWindow | null;
   onPreviewWindow?: (window: TimeWindow) => void;
   onCommitWindow?: (window: TimeWindow) => void;
   onResetWindow?: () => void;
@@ -53,6 +55,18 @@ const clearSelection = (chart: uPlot) => {
   chart.setSelect({ left: 0, top: 0, width: 0, height: 0 }, false);
 };
 
+const drawHighlight = (chart: uPlot, timeWindow: TimeWindow | null) => {
+  if (!timeWindow) return;
+  const { ctx, bbox } = chart;
+  const left = Math.max(bbox.left, chart.valToPos(timeWindow[0], "x", true));
+  const right = Math.min(bbox.left + bbox.width, chart.valToPos(timeWindow[1], "x", true));
+  if (right <= left) return;
+  ctx.save();
+  ctx.fillStyle = cssStyle(chart, "--chart-highlight");
+  ctx.fillRect(left, bbox.top, right - left, bbox.height);
+  ctx.restore();
+};
+
 const applyWindow = (chart: uPlot, timeWindow: TimeWindow | null) => {
   const times = chart.data[0];
   if (times.length === 0) return;
@@ -65,6 +79,7 @@ export const TimeSeriesChart = ({
   height = 600,
   yLabel = "",
   visibleWindow = null,
+  highlightWindow = null,
   onPreviewWindow,
   onCommitWindow,
   onResetWindow,
@@ -74,6 +89,7 @@ export const TimeSeriesChart = ({
   const chartRef = useRef<uPlot | null>(null);
   const draggingRef = useRef(false);
   const windowRef = useRef(visibleWindow);
+  const highlightRef = useRef(highlightWindow);
 
   const callbacksRef = useRef<ChartCallbacks>({});
   useEffect(() => {
@@ -132,6 +148,8 @@ export const TimeSeriesChart = ({
         })),
       ],
       hooks: {
+        // After the canvas is cleared, before axes and lines: the band sits behind them.
+        drawClear: [(chart) => drawHighlight(chart, highlightRef.current)],
         setSelect: [
           (chart) => {
             const selected = selectionToWindow(chart);
@@ -207,6 +225,12 @@ export const TimeSeriesChart = ({
     const chart = chartRef.current;
     if (chart) applyWindow(chart, visibleWindow);
   }, [visibleWindow]);
+
+  // Redraw without rebuilding the chart or recomputing scales.
+  useEffect(() => {
+    highlightRef.current = highlightWindow;
+    chartRef.current?.redraw(false);
+  }, [highlightWindow]);
 
   return <div ref={containerRef} className={styles.chart} />;
 };
