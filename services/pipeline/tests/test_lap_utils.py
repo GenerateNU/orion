@@ -24,7 +24,7 @@ from orion_pipeline.steps.lap_step.lap_utils import (
     crosses_gate,
     downsample,
     find_crossings,
-    find_revisit,
+    find_lap_start,
     heading_at,
     is_between_gate,
     is_past_gate,
@@ -193,8 +193,8 @@ def test_build_lap_rows_without_crossings():
 
 
 def search(visited, xn, yn, tn, radius, min_time, min_distance):
-    """find_revisit on plain lists, with the thresholds in a readable order."""
-    return find_revisit(
+    """find_lap_start on plain lists, with the thresholds in a readable order."""
+    return find_lap_start(
         pd.Series(xn, dtype=float),
         pd.Series(yn, dtype=float),
         pd.Series(tn, dtype=float),
@@ -205,7 +205,7 @@ def search(visited, xn, yn, tn, radius, min_time, min_distance):
     )
 
 
-def test_find_revisit_finds_return_to_start():
+def test_find_lap_start_finds_return_to_start():
     # A 10 m x 10 m square driven 1 m per second, ending back at the start.
     xn = [*range(10), *[10] * 10, *range(10, 0, -1), *[0] * 11]
     yn = [*[0] * 10, *range(10), *[10] * 10, *range(10, -1, -1)]
@@ -219,13 +219,13 @@ def test_find_revisit_finds_return_to_start():
     assert visited.distance_m[-1] == pytest.approx(40.0)
 
 
-def test_find_revisit_needs_enough_distance_driven():
+def test_find_lap_start_needs_enough_distance_driven():
     # Standing still: every point is inside every hitbox, but nothing is driven.
     visited = VisitedPoints()
     assert search(visited, [0] * 20, [0] * 20, range(20), 3, 5, 50) is None
 
 
-def test_find_revisit_carries_visited_across_pages():
+def test_find_lap_start_carries_visited_across_pages():
     visited = VisitedPoints()
     assert search(visited, [0, 10, 20], [0, 0, 0], [0, 1, 2], 3, 1, 20) is None
     assert visited.distance_m.tolist() == [0, 10, 20]
@@ -237,7 +237,7 @@ def test_find_revisit_carries_visited_across_pages():
     assert len(visited.x) == 5
 
 
-def test_find_revisit_picks_the_closest_candidate():
+def test_find_lap_start_picks_the_closest_candidate():
     # Two points 2 m apart, then a loop that comes back next to the second one.
     xn = [0, 2, 10, 20, 10, 2.5]
     yn = [0, 0, 0, 10, 20, 0]
@@ -249,7 +249,7 @@ def test_find_revisit_picks_the_closest_candidate():
     assert heading == pytest.approx((1.0, 0.0))
 
 
-def test_find_revisit_skips_candidates_without_heading():
+def test_find_lap_start_skips_candidates_without_heading():
     # Parked at the start (points 0-2), then a loop back to (0, 0).
     xn = [0, 0, 0, 10, 20, 10, 0]
     yn = [0, 0, 0, 0, 10, 20, 0.5]
@@ -261,14 +261,14 @@ def test_find_revisit_skips_candidates_without_heading():
     assert heading == pytest.approx((1.0, 0.0))
 
 
-def test_find_revisit_empty_page_leaves_visited_alone():
+def test_find_lap_start_empty_page_leaves_visited_alone():
     visited = VisitedPoints()
     assert search(visited, [], [], [], 3, 1, 20) is None
     assert len(visited.x) == 0
 
 
 # The tests below drive realistic tracks through the gate search the way LapStep
-# does (downsample, find_revisit with the real thresholds, build_gate), and check
+# does (downsample, find_lap_start with the real thresholds, build_gate), and check
 # where the gate ends up.
 
 STRAIGHT_M = 100.0
@@ -321,7 +321,7 @@ def gate_search(x: np.ndarray, y: np.ndarray):
     sampled = slice(None, None, GATE_SEARCH_SAMPLE_EVERY)
     time_s = np.arange(len(x)) / 10
     visited = VisitedPoints()
-    revisit = find_revisit(
+    revisit = find_lap_start(
         pd.Series(x[sampled]),
         pd.Series(y[sampled]),
         pd.Series(time_s[sampled]),

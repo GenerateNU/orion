@@ -26,7 +26,7 @@ from orion_pipeline.steps.lap_step.lap_utils import (
     build_lap_rows,
     downsample,
     find_crossings,
-    find_revisit,
+    find_lap_start,
     seconds_since,
     to_local_xy,
 )
@@ -149,7 +149,7 @@ class LapStep(PipelineStep):
         self._rows_seen += len(page)
         time_s = seconds_since(sampled["time"], self._start_time)
 
-        revisit = find_revisit(
+        revisit = find_lap_start(
             sampled["x"],
             sampled["y"],
             time_s,

@@ -280,7 +280,7 @@ three of these are true:
 3. **Enough distance was driven:** `distance_m[Q] - distance_m[P] >= MIN_REVISIT_DISTANCE_M`
    (50 m). This excludes a parked or crawling car.
 
-For each page, `find_revisit`:
+For each page, `find_lap_start`:
 
 1. Works out the page's `distance_m` (above) and extends `VisitedPoints` with
    the whole page. This happens first, so every index below refers to
@@ -662,7 +662,7 @@ These are deliberately not handled in this design.
 | `downsample` | Keep rows whose global index is divisible by `every_n`. |
 | `squared_distances` | Squared distance from one point to many points at once, for the hitbox test. |
 | `heading_at` | Unit heading at a visited point from its neighbors, or None if they're at the same position. |
-| `find_revisit` | Extend `VisitedPoints` with one page's sampled points, then search them in order and return the first revisit (closest candidate with a heading) and its heading. |
+| `find_lap_start` | Extend `VisitedPoints` with one page's sampled points, then search them in order and return the first revisit (closest candidate with a heading) and its heading. |
 | `build_gate` | Build a `Gate` (G1 left, G2 right) from a center, heading, and half width. |
 | `cross_2d` | The 2D cross product `ux·vy − uy·vx`. |
 | `is_past_line` | Whether a point is on or left of the arrow start → end (cross product ≥ 0). |
