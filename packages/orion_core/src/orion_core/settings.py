@@ -20,7 +20,8 @@ class Settings(BaseSettings):
     pipeline_api_url: str = "http://localhost:8200"
     # How many rows each extract section can pull at once.
     pipeline_page_size: int = 100_000
-    # Seconds added to gps_location timestamps in the clean step (GPS lags the other sensors).
+    # Fallback GPS lag (s) for the clean step. The lag is tracked per run; this is only
+    # used when nothing in the run can be measured (no VCU speed, parked the whole run).
     gps_time_offset_s: float = 3.0
 
 

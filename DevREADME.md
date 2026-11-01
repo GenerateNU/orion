@@ -176,7 +176,7 @@ step reads that table back, so any step can be re-run on its own.
 
 | Step         | Reads                  | Writes                | Status          |
 | ------------ | ---------------------- | --------------------- | --------------- |
-| `clean_step` | Penelope `data`        | `cleaned_data`        | Done: maps `raw_tag` → sensor via `sensor_sources`, applies GPS time offset |
+| `clean_step` | Penelope `data`        | `cleaned_data`        | Done: maps `raw_tag` → sensor via `sensor_sources`, corrects GPS timestamps by the run's tracked lag |
 | state        | `cleaned_data`         | `estimated_car_state` | Not started     |
 | laps         | `estimated_car_state`  | TBD                   | Not started     |
 
@@ -216,7 +216,7 @@ All variables go in the repo-root `.env`, which is shared by every service and t
 | `PENELOPE_DATABASE_URL`  | unset (Penelope features off)   | Real Penelope (VPN) or penelope2 (Neon)         |
 | `PIPELINE_API_URL`       | `http://localhost:8200`         | Where the backend reaches the pipeline API (compose sets it) |
 | `PIPELINE_PAGE_SIZE`     | `100000`                        | Max rows per page in each pipeline step         |
-| `GPS_TIME_OFFSET_S`      | `3`                             | Seconds added to `gps_location` timestamps      |
+| `GPS_TIME_OFFSET_S`      | `3`                             | Fallback GPS lag (s), subtracted from GPS timestamps only when a run's lag can't be measured |
 | `API_PROXY_TARGET`       | `http://localhost:8100`         | Where Vite forwards `/api` (compose sets it)    |
 
 ## Development without Docker

@@ -11,5 +11,5 @@ class RunContext(BaseModel):
     """
 
     run_id: str
-    # Seconds added to gps_location timestamps in the clean step.
+    # GPS lag (s) the clean step falls back to when nothing in the run can be measured.
     gps_time_offset_s: float = get_settings().gps_time_offset_s
