@@ -9,7 +9,7 @@ export type Lap = {
 
 export function lapsFromMetrics(metrics: MetricsResponse, timeline: RunTimeline): Lap[] {
   return metrics.laps.map((lap) => ({
-    id: lap.lap_id,
+    id: lap.lap_number,
     window: [toRunTime(timeline, lap.start_time), toRunTime(timeline, lap.end_time)],
   }));
 }
