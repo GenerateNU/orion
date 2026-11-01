@@ -1,22 +1,16 @@
-from collections.abc import Iterable, Iterator
+from collections.abc import Iterable
+from dataclasses import dataclass
 
 import numpy as np
 import pandas as pd
 
-from orion_core.queries.orion_queries import select_cleaned_readings
-from orion_pipeline.clients.oriondb_client import OrionDBClient
-from orion_pipeline.runner.run_context import RunContext
-from orion_pipeline.steps.base_step import PipelineStep
 from orion_pipeline.steps.state_estimation.ctra_model import CTRAModel
-from orion_pipeline.steps.state_estimation.kalman_step.kalman_filter import (
-    UnscentedKalmanFilter,
-)
+from orion_pipeline.steps.state_estimation.kalman_filter import UnscentedKalmanFilter
 from orion_pipeline.steps.state_estimation.phys_model_config import (
     PhysicsModelConfig,
     UnitConversions,
 )
 from orion_pipeline.steps.state_estimation.state import PX, PY, V
-from orion_pipeline.steps.step_registry import register_step
 
 TICK = pd.Timedelta("10ms")
 # A gap longer than this restarts the filter instead of extrapolating through it
@@ -46,96 +40,57 @@ SENSORS = {
 P0 = np.diag([GPS_STD_M**2, GPS_STD_M**2, 1.0**2, 0.3**2, 0.5**2, 2.0**2])
 
 
-@register_step
-class KalmanStep(PipelineStep):
-    """Forward pass: run a UKF over cleaned sensor data on a 10ms grid.
-    The RTS step smooths its output into estimated_car_state.
-    DB TABLES: FROM Orion[cleaned_data] -> TO Orion[ukf_states]
+@dataclass(frozen=True)
+class Tick:
+    """The filter's state at one tick. x_pred, P_pred and C are None on a startup tick."""
 
-    Schema: FROM [time, sensor, values]
-    -> TO [run_id, time, origin_lat, origin_lon, x, p, x_pred, p_pred, cross_cov]
+    time: pd.Timestamp
+    x: np.ndarray
+    P: np.ndarray
+    x_pred: np.ndarray | None
+    P_pred: np.ndarray | None
+    C: np.ndarray | None
+
+
+class UKFStep:
+    """Forward UKF pass over time-ordered [time, sensor, values] readings on a 10ms grid.
+
+    Not a pipeline step: no DB, runner or step base class, so it can be used and
+    tested on its own. Feed readings in any batch size with push(), then call
+    flush() once at the end.
     """
 
-    name = "kalman_step"
-    depends_on = ("clean_step",)
-    reads_from = "oriondb"
-    output_table = "ukf_states"
-    pagination_key = ("time", "sensor")
-
-    def __init__(self, reader: OrionDBClient, writer: OrionDBClient):
-        super().__init__(reader, writer)
+    def __init__(self) -> None:
         self.model = CTRAModel(PhysicsModelConfig("ctra", {}))
-
-    def prepare(self, ctx: RunContext) -> None:
-        super().prepare(ctx)
         self.ukf: UnscentedKalmanFilter | None = None
         self.tick_time: pd.Timestamp | None = None
         self.origin: tuple[float, float] | None = None
         self.first_fix: tuple[pd.Timestamp, np.ndarray] | None = None
-        self.ticks: list[
-            tuple[
-                pd.Timestamp,
-                np.ndarray,
-                np.ndarray,
-                np.ndarray | None,
-                np.ndarray | None,
-                np.ndarray | None,
-            ]
-        ] = []
+        self.held: pd.DataFrame | None = None
+        self.ticks: list[Tick] = []
 
-    def extract(self, ctx: RunContext) -> Iterator[pd.DataFrame]:
-        return self.reader.iter_pages(
-            select_cleaned_readings(ctx.run_id, SENSORS.keys()), self.pagination_key
-        )
+    def push(self, readings: pd.DataFrame) -> list[Tick]:
+        """Run the filter over readings and return the finished ticks. The last
+        tick's readings are held back, since the next batch may add to them."""
+        readings = pd.concat([self.held, readings])
+        if readings.empty:
+            return []
+        tick_times = readings["time"].dt.floor(TICK)
+        last_tick = tick_times == tick_times.iloc[-1]
+        self._filter(readings[~last_tick])
+        self.held = readings[last_tick]
+        return self._take_ticks()
 
-    def transform(self, df: pd.DataFrame, ctx: RunContext) -> pd.DataFrame:
-        """Ticks [time, x, P, x_pred, P_pred, C] -> ukf_states rows, arrays flattened."""
+    def flush(self) -> list[Tick]:
+        """Run the held-back readings and return the remaining ticks."""
+        if self.held is not None:
+            self._filter(self.held)
+            self.held = None
+        return self._take_ticks()
 
-        if self.origin is None:
-            raise RuntimeError("Origin not set: no GPS fix was seen.")
-
-        def flat(arrays: pd.Series) -> list[list[float] | None]:
-            return [None if a is None else a.ravel().tolist() for a in arrays]
-
-        return pd.DataFrame(
-            {
-                "run_id": ctx.run_id,
-                "time": df["time"],
-                "origin_lat": self.origin[0],
-                "origin_lon": self.origin[1],
-                "x": flat(df["x"]),
-                "p": flat(df["P"]),
-                "x_pred": flat(df["x_pred"]),
-                "p_pred": flat(df["P_pred"]),
-                "cross_cov": flat(df["C"]),
-            }
-        )
-
-    def run(self, ctx: RunContext) -> None:
-        """Run the filter over every page, writing each page's ticks as it goes."""
-        self.prepare(ctx)
-
-        leftover = None
-        for page in self.extract(ctx):
-            readings = pd.concat([leftover, page])
-            tick_times = readings["time"].dt.floor(TICK)
-            last_tick = tick_times == tick_times.iloc[-1]
-            self._filter(readings[~last_tick])
-            self._write_ticks(ctx)
-            leftover = readings[last_tick]
-        if leftover is not None:
-            self._filter(leftover)
-            self._write_ticks(ctx)
-
-    def _write_ticks(self, ctx: RunContext) -> None:
-        """Write the ticks recorded so far and clear them."""
-        if not self.ticks:
-            return
-        ticks = pd.DataFrame(
-            self.ticks, columns=["time", "x", "P", "x_pred", "P_pred", "C"]
-        )
-        self.write(self.transform(ticks, ctx), ctx)
-        self.ticks = []
+    def _take_ticks(self) -> list[Tick]:
+        ticks, self.ticks = self.ticks, []
+        return ticks
 
     def _filter(self, readings: pd.DataFrame) -> None:
         """Run the filter over readings, one 10ms tick at a time."""
@@ -178,7 +133,9 @@ class KalmanStep(PipelineStep):
             h, R, gate = SENSORS[sensor]
             ukf.update(self._measurement(sensor, values), h, R, gate)
 
-        self.ticks.append((tick_time, ukf.x.copy(), ukf.P.copy(), x_pred, P_pred, C))
+        self.ticks.append(
+            Tick(tick_time, ukf.x.copy(), ukf.P.copy(), x_pred, P_pred, C)
+        )
         self.tick_time = tick_time
 
     def _try_start(self, tick_time: pd.Timestamp, readings: pd.DataFrame) -> None:
@@ -208,7 +165,7 @@ class KalmanStep(PipelineStep):
         self.ukf = UnscentedKalmanFilter(self.model, x0, P0)
         self.tick_time = tick_time
         self.first_fix = None
-        self.ticks.append((tick_time, x0, P0.copy(), None, None, None))
+        self.ticks.append(Tick(tick_time, x0, P0.copy(), None, None, None))
 
     def _measurement(self, sensor: str, values: list[float]) -> np.ndarray:
         """A reading's values -> z in the filter's units."""

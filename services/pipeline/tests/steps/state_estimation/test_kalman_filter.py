@@ -2,7 +2,7 @@ import numpy as np
 import pytest
 
 from orion_pipeline.steps.state_estimation.ctra_model import CTRAModel
-from orion_pipeline.steps.state_estimation.kalman_step.kalman_filter import (
+from orion_pipeline.steps.state_estimation.kalman_filter import (
     UnscentedKalmanFilter,
 )
 from orion_pipeline.steps.state_estimation.phys_model_config import PhysicsModelConfig

@@ -6,6 +6,7 @@ class UnitConversions:
     METERS_PER_DEGREE_LAT = 111_320.0
     MPS_PER_MPH = 0.44704
 
+
 class PhysicsModelConfig:
     def __init__(
         self,
