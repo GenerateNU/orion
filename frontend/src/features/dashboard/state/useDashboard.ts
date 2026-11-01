@@ -147,10 +147,6 @@ export const useDashboardActions = () => {
     return {
       // Selecting laps also zooms to their span; an empty list shows the whole run.
       selectLaps: (lapIds: readonly number[]) => setLaps(() => lapIds),
-      toggleLap: (lapId: number) =>
-        setLaps((laps) =>
-          laps.includes(lapId) ? laps.filter((id) => id !== lapId) : [...laps, lapId],
-        ),
       // While a brush is dragged: panels redraw from loaded data, nothing is fetched.
       previewWindow: (window: TimeWindow) => store.getState().setDraftWindow(window),
       // On release: snapped, written to the URL, and the detail data fetched.
