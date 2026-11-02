@@ -4,14 +4,16 @@ from typing import Any
 
 import pandas as pd
 
+
 # Unit conversions
 class UnitConversions:
     METERS_PER_DEGREE_LAT = 111_320.0
     MPS_PER_MPH = 0.44704
 
-    #lag that we need to edit
-    GPS_STD_M = 1.5
-    SPEED_STD_MPS = 0.5 
+
+# Hardcoded that we have to figure out based on the lags on gps and speed
+GPS_STD_M = 1.5
+SPEED_STD_MPS = 0.5
 
 
 class PhysicsModelConfig:
@@ -32,6 +34,8 @@ class PhysicsModelConfig:
             f"model_params={self.model_params})"
         )
 
+
+@dataclass(frozen=True)
 class SensorConfig:
     """noise_std in the filter's units (m, m/s). Readings whose NIS exceeds the
     gate_confidence chi-square quantile are skipped; None turns gating off."""
@@ -40,6 +44,7 @@ class SensorConfig:
     gate_confidence: float | None = 0.99
 
 
+@dataclass(frozen=True)
 class UKFConfig:
     """Settings for the UKF. The defaults are the values it used to hardcode.
 

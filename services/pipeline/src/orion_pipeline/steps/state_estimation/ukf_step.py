@@ -1,43 +1,53 @@
-from collections.abc import Iterable
+import math
+from collections.abc import Callable, Iterable, Sequence
 from dataclasses import dataclass
+from statistics import NormalDist
+from typing import NamedTuple
 
 import numpy as np
 import pandas as pd
 
 from orion_pipeline.steps.state_estimation.ctra_model import CTRAModel
 from orion_pipeline.steps.state_estimation.kalman_filter import UnscentedKalmanFilter
-from orion_pipeline.steps.state_estimation.phys_model_config import (
+from orion_pipeline.steps.state_estimation.physics_model import PhysicsModel
+from orion_pipeline.steps.state_estimation.state import PX, PY, V
+from orion_pipeline.steps.state_estimation.state_model_config import (
     PhysicsModelConfig,
+    UKFConfig,
     UnitConversions,
 )
-from orion_pipeline.steps.state_estimation.state import PX, PY, V
 
-TICK = pd.Timedelta("10ms")
-# A gap longer than this restarts the filter instead of extrapolating through it
-MAX_GAP = pd.Timedelta("1s")
-# The first two GPS fixes must be this far apart to give a starting heading
-MIN_HEADING_DISTANCE_M = 2.0
+PHYSICS_MODELS: dict[str, Callable[[PhysicsModelConfig], PhysicsModel]] = {
+    "ctra": CTRAModel,
+}
 
-# TODO: Revise placeholder values
-GPS_STD_M = 1.5
-SPEED_STD_MPS = 0.5
 
-# sensor -> (h, R, NIS gate at 99%)
-SENSORS = {
-    "gps_location": (
-        lambda s: s[:, [PX, PY]],
-        np.diag([GPS_STD_M**2, GPS_STD_M**2]),
-        9.21,
+class SensorKind(NamedTuple):
+    dim: int
+    h: Callable[[np.ndarray], np.ndarray]
+    to_z: Callable[[Sequence[float], Callable[[float, float], np.ndarray]], np.ndarray]
+
+
+SENSOR_KINDS: dict[str, SensorKind] = {
+    "gps_location": SensorKind(
+        2, lambda s: s[:, [PX, PY]], lambda values, to_xy: to_xy(values[0], values[1])
     ),
-    "vcu_speed": (
+    "vcu_speed": SensorKind(
+        1,
         lambda s: s[:, [V]],
-        np.array([[SPEED_STD_MPS**2]]),
-        6.63,
+        lambda values, to_xy: np.array([values[0] * UnitConversions.MPS_PER_MPH]),
     ),
 }
 
-# Starting uncertainty for [px, py, v, theta, omega, a]
-P0 = np.diag([GPS_STD_M**2, GPS_STD_M**2, 1.0**2, 0.3**2, 0.5**2, 2.0**2])
+
+def gate_threshold(confidence: float, dof: int) -> float:
+    if dof == 1:
+        return NormalDist().inv_cdf((1 + confidence) / 2) ** 2
+    if dof == 2:
+        return -2.0 * math.log1p(-confidence)
+    from scipy.stats import chi2
+
+    return float(chi2.ppf(confidence, dof))
 
 
 @dataclass(frozen=True)
@@ -60,8 +70,23 @@ class UKFStep:
     flush() once at the end.
     """
 
-    def __init__(self) -> None:
-        self.model = CTRAModel(PhysicsModelConfig("ctra", {}))
+    def __init__(self, config: UKFConfig | None = None) -> None:
+        self.config = config or UKFConfig()
+        cfg = self.config
+        self.model = PHYSICS_MODELS[cfg.physics.model_name](cfg.physics)
+        self.p0 = np.diag(cfg.p0)
+        # sensor -> (kind, R, NIS gate)
+        self.sensors: dict[str, tuple[SensorKind, np.ndarray, float | None]] = {}
+        for name, s in cfg.sensors.items():
+            kind = SENSOR_KINDS[name]
+            gate = (
+                None
+                if s.gate_confidence is None
+                else gate_threshold(s.gate_confidence, kind.dim)
+            )
+            R = np.diag(np.full(kind.dim, s.noise_std**2))
+            self.sensors[name] = (kind, R, gate)
+
         self.ukf: UnscentedKalmanFilter | None = None
         self.tick_time: pd.Timestamp | None = None
         self.origin: tuple[float, float] | None = None
@@ -75,7 +100,7 @@ class UKFStep:
         readings = pd.concat([self.held, readings])
         if readings.empty:
             return []
-        tick_times = readings["time"].dt.floor(TICK)
+        tick_times = readings["time"].dt.floor(self.config.tick)
         last_tick = tick_times == tick_times.iloc[-1]
         self._filter(readings[~last_tick])
         self.held = readings[last_tick]
@@ -96,12 +121,12 @@ class UKFStep:
         """Run the filter over readings, one 10ms tick at a time."""
 
         for tick_time, tick_readings in readings.groupby(
-            readings["time"].dt.floor(TICK)
+            readings["time"].dt.floor(self.config.tick)
         ):
             if (
                 self.ukf is not None
                 and self.tick_time is not None
-                and tick_time - self.tick_time > MAX_GAP
+                and tick_time - self.tick_time > self.config.max_gap
             ):
                 self.ukf = None
 
@@ -110,8 +135,8 @@ class UKFStep:
                 continue
 
             # Ticks with no readings still predict, so the grid stays even
-            while self.tick_time + TICK < tick_time:
-                self._step(self.tick_time + TICK, [])
+            while self.tick_time + self.config.tick < tick_time:
+                self._step(self.tick_time + self.config.tick, [])
             self._step(
                 tick_time,
                 zip(tick_readings["sensor"], tick_readings["values"], strict=True),
@@ -130,8 +155,8 @@ class UKFStep:
         x_pred, P_pred, C = ukf.predict(dt)
 
         for sensor, values in readings:
-            h, R, gate = SENSORS[sensor]
-            ukf.update(self._measurement(sensor, values), h, R, gate)
+            kind, R, gate = self.sensors[sensor]
+            ukf.update(kind.to_z(values, self._to_xy), kind.h, R, gate)
 
         self.ticks.append(
             Tick(tick_time, ukf.x.copy(), ukf.P.copy(), x_pred, P_pred, C)
@@ -156,16 +181,16 @@ class UKFStep:
         first_time, first_xy = self.first_fix
         dx, dy = xy - first_xy
         distance = np.hypot(dx, dy)
-        if distance < MIN_HEADING_DISTANCE_M:
+        if distance < self.config.min_heading_distance_m:
             return
 
         speed = distance / (tick_time - first_time).total_seconds()
         x0 = np.array([xy[0], xy[1], speed, np.arctan2(dy, dx), 0.0, 0.0])
 
-        self.ukf = UnscentedKalmanFilter(self.model, x0, P0)
+        self.ukf = UnscentedKalmanFilter(self.model, x0, self.p0)
         self.tick_time = tick_time
         self.first_fix = None
-        self.ticks.append(Tick(tick_time, x0, P0.copy(), None, None, None))
+        self.ticks.append(Tick(tick_time, x0, self.p0.copy(), None, None, None))
 
     def _measurement(self, sensor: str, values: list[float]) -> np.ndarray:
         """A reading's values -> z in the filter's units."""

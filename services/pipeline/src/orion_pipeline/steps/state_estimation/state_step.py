@@ -31,8 +31,8 @@ class StateStep(PipelineStep):
 
     def extract(self, ctx: RunContext) -> Iterator[pd.DataFrame]:
         return self.reader.iter_pages(
-            select_cleaned_readings(ctx.run_id, self.ukf.sensors.keys()), 
-            self.pagination_key
+            select_cleaned_readings(ctx.run_id, self.ukf.sensors.keys()),
+            self.pagination_key,
         )
 
     def transform(self, df: pd.DataFrame, ctx: RunContext) -> pd.DataFrame:
