@@ -2,7 +2,7 @@ from collections.abc import Callable
 
 import numpy as np
 
-from orion_pipeline.steps.state_estimation.ctra_model import CTRAModel
+from orion_pipeline.steps.state_estimation.physics_model import PhysicsModel
 from orion_pipeline.steps.state_estimation.state import THETA, wrap_angle
 
 
@@ -23,7 +23,7 @@ class UnscentedKalmanFilter:
 
     def __init__(
         self,
-        model: CTRAModel,
+        model: PhysicsModel,
         x0: np.ndarray,
         P0: np.ndarray,
         alpha: float = 0.5,

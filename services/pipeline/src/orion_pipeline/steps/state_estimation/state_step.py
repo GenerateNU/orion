@@ -5,7 +5,7 @@ import pandas as pd
 from orion_core.queries.orion_queries import select_cleaned_readings
 from orion_pipeline.runner.run_context import RunContext
 from orion_pipeline.steps.base_step import PipelineStep
-from orion_pipeline.steps.state_estimation.ukf_step import SENSORS, Tick, UKFStep
+from orion_pipeline.steps.state_estimation.ukf_step import Tick, UKFStep
 from orion_pipeline.steps.step_registry import register_step
 
 
@@ -31,7 +31,8 @@ class StateStep(PipelineStep):
 
     def extract(self, ctx: RunContext) -> Iterator[pd.DataFrame]:
         return self.reader.iter_pages(
-            select_cleaned_readings(ctx.run_id, SENSORS.keys()), self.pagination_key
+            select_cleaned_readings(ctx.run_id, self.ukf.sensors.keys()), 
+            self.pagination_key
         )
 
     def transform(self, df: pd.DataFrame, ctx: RunContext) -> pd.DataFrame:
