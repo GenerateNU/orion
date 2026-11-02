@@ -9,9 +9,15 @@ import pytest
 from orion_pipeline.clients.oriondb_client import OrionDBClient
 from orion_pipeline.clients.penelope_client import PenelopeClient
 from orion_pipeline.runner.run_context import RunContext
-from orion_pipeline.steps.clean_step.clean_step import CleanStep
+from orion_pipeline.steps.clean_step.clean_step import CleanStep, log_gps_lag
 from orion_pipeline.steps.clean_step.clean_utils import to_epoch_s
-from orion_pipeline.steps.clean_step.gps_lag import MS_TO_MPH, Segment
+from orion_pipeline.steps.clean_step.gps_lag import (
+    MS_TO_MPH,
+    LagResult,
+    LagTrackerConfig,
+    Segment,
+    SelfCheck,
+)
 
 RUN_ID = "synthetic-run"
 T0 = 1.75e9  # epoch seconds of the run's start
@@ -273,3 +279,26 @@ def test_overlapping_segments_drop_duplicate_rows(caplog):
     # 15 - 1 == 20 - 6: the first row at that corrected time is kept
     assert [v[0] for v in out["values"]] == [1.0, 2.0]
     assert "duplicate (time, sensor)" in caplog.text
+
+
+def test_duplicate_gps_packets_keep_every_row(make_run):
+    """Repeated GroundSpeed packets are ignored for the estimate, never dropped."""
+    run = make_run(35, [(0, 2.0)], duration=600)
+    df = penelope_frame(run)
+    gs = df[df["raw_tag"] == "TPU/GPS/GroundSpeed"].iloc[::4]
+    dups = gs.assign(time=gs["time"] + pd.Timedelta(milliseconds=10))
+    with_dups = pd.concat([df, dups], ignore_index=True).drop_duplicates(
+        ["time", "raw_tag"], ignore_index=True
+    )
+    _, out = run_clean_step(with_dups)
+    assert len(out) == len(with_dups)
+
+
+def test_suspicious_self_check_is_logged(caplog):
+    caplog.set_level("INFO")
+    seg = Segment(T0, T0 + 600, 1.0, 0.9, 1.1, 2400, 900, "ok")
+    check = SelfCheck(n_windows=8, agree_frac=0.5, worst_s=5.0, suspicious=True)
+    df = rows("TPU/GPS/GroundSpeed", [0.0, 1.0], [10.0, 11.0])
+    log_gps_lag(RUN_ID, df, LagResult([seg], 0.94, 1.0), check, LagTrackerConfig())
+    assert "GPS delay estimate suspicious" in caplog.text
+    assert "back_to_back_fraction" in caplog.text

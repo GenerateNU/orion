@@ -1,6 +1,7 @@
 import logging
 from collections.abc import Iterator
 
+import numpy as np
 import pandas as pd
 
 from orion_pipeline.clients.oriondb_client import OrionDBClient
@@ -15,8 +16,11 @@ from orion_pipeline.steps.clean_step.clean_utils import (
 )
 from orion_pipeline.steps.clean_step.gps_lag import (
     MS_TO_MPH,
+    LagResult,
     LagTrackerConfig,
     Segment,
+    SelfCheck,
+    self_check,
     track_gps_lag,
 )
 from orion_pipeline.steps.step_registry import register_step
@@ -32,6 +36,79 @@ GPS_SPEED_TAG = "TPU/GPS/GroundSpeed"
 GPS_SHIFTED_TAGS = frozenset(
     {GPS_SPEED_TAG, "TPU/GPS/Location", "TPU/GPS/Altitude", "TPU/GPS/Mode"}
 )
+
+
+def estimate_run_gps_lag(
+    readings: pd.DataFrame, cfg: LagTrackerConfig
+) -> tuple[LagResult, SelfCheck]:
+    """Track the GPS delay over a whole run's VCU speed and GroundSpeed readings,
+    and self-check the result. No I/O, so tests and scripts run exactly this."""
+    vcu = readings[readings["raw_tag"] == VCU_SPEED_TAG]
+    gps = readings[readings["raw_tag"] == GPS_SPEED_TAG]
+    speeds = (
+        to_epoch_s(vcu["time"]),
+        first_values(vcu["values"]),
+        to_epoch_s(gps["time"]),
+        first_values(gps["values"]) * MS_TO_MPH,
+    )
+    result = track_gps_lag(*speeds, cfg)
+    return result, self_check(*speeds, result, cfg)
+
+
+def log_gps_lag(
+    run_id: str,
+    readings: pd.DataFrame,
+    result: LagResult,
+    check: SelfCheck,
+    cfg: LagTrackerConfig,
+) -> None:
+    """Log the segment table and the self-check. Diagnostics only."""
+    summary = (
+        f"{check.n_windows} usable window(s), {check.agree_frac:.0%} within "
+        f"{cfg.check_tolerance_s:.1f} s, worst {check.worst_s:.1f} s"
+        if check.n_windows
+        else "no usable windows"
+    )
+    logger.info(
+        "run %s: GPS lag over %d segment(s), scale %.3f; self-check: %s",
+        run_id,
+        len(result.segments),
+        result.scale,
+        summary,
+    )
+    if check.suspicious:
+        logger.warning(
+            "run %s: GPS delay estimate suspicious: %d window(s), %.0f%% within %.1f s, "
+            "worst disagreement %.1f s",
+            run_id,
+            check.n_windows,
+            100 * check.agree_frac,
+            cfg.check_tolerance_s,
+            check.worst_s,
+        )
+    # Share of GPS gaps that are back-to-back: ~0 when the logger keeps up (1 Hz),
+    # ~1 when it is saturated (and the delay is high and wandering).
+    gps_t = np.sort(
+        to_epoch_s(readings.loc[readings["raw_tag"] == GPS_SPEED_TAG, "time"])
+    )
+    for i, seg in enumerate(result.segments):
+        gaps = np.diff(gps_t[(gps_t >= seg.start_t) & (gps_t <= seg.end_t)])
+        back_to_back = (
+            float(np.mean(gaps < cfg.back_to_back_s)) if len(gaps) else np.nan
+        )
+        logger.info(
+            "  segment %d: %.1f s long, lag %.2f s [%.2f, %.2f], %s, %d/%d informative, "
+            "back_to_back_fraction %.2f",
+            i,
+            seg.end_t - seg.start_t,
+            seg.lag_s,
+            seg.ci_lo,
+            seg.ci_hi,
+            seg.quality,
+            seg.n_informative,
+            seg.n_samples,
+            back_to_back,
+        )
 
 
 @register_step
@@ -73,34 +150,12 @@ class CleanStep(PipelineStep):
         the delay would change with the page size. `transform` only looks up the
         result.
         """
-        df = self.reader.read_run_readings(ctx.run_id, [VCU_SPEED_TAG, GPS_SPEED_TAG])
-        vcu = df[df["raw_tag"] == VCU_SPEED_TAG]
-        gps = df[df["raw_tag"] == GPS_SPEED_TAG]
-        result = track_gps_lag(
-            to_epoch_s(vcu["time"]),
-            first_values(vcu["values"]),
-            to_epoch_s(gps["time"]),
-            first_values(gps["values"]) * MS_TO_MPH,
-            LagTrackerConfig(default_lag_s=ctx.gps_time_offset_s),
+        readings = self.reader.read_run_readings(
+            ctx.run_id, [VCU_SPEED_TAG, GPS_SPEED_TAG]
         )
-        logger.info(
-            "run %s: GPS lag over %d segment(s), scale %.3f",
-            ctx.run_id,
-            len(result.segments),
-            result.scale,
-        )
-        for i, seg in enumerate(result.segments):
-            logger.info(
-                "  segment %d: %.1f s long, lag %.2f s [%.2f, %.2f], %s, %d/%d informative",
-                i,
-                seg.end_t - seg.start_t,
-                seg.lag_s,
-                seg.ci_lo,
-                seg.ci_hi,
-                seg.quality,
-                seg.n_informative,
-                seg.n_samples,
-            )
+        cfg = LagTrackerConfig(default_lag_s=ctx.gps_time_offset_s)
+        result, check = estimate_run_gps_lag(readings, cfg)
+        log_gps_lag(ctx.run_id, readings, result, check, cfg)
         return result.segments
 
     def extract(self, ctx: RunContext) -> Iterator[pd.DataFrame]:

@@ -45,8 +45,6 @@ Times are float seconds (epoch seconds are fine). Speeds are mph: convert GPS m/
 MS_TO_MPH before calling.
 """
 
-from __future__ import annotations
-
 from collections.abc import Sequence
 from dataclasses import dataclass, replace
 
@@ -71,9 +69,8 @@ class LagTrackerConfig:
     # matching
     noise_mph: float = 1.5  # typical GPS vs VCU mismatch once aligned
     truncate_sigma: float = 3.0  # residuals beyond this many noise units are capped
-    interp_accel_mph_s: float = (
-        4.0  # how fast speed can change: sets how unsure VCU interpolation is
-    )
+    # how fast speed can change: sets how unsure VCU interpolation is
+    interp_accel_mph_s: float = 4.0
     max_ref_gap_s: float = 10.0  # beyond this VCU gap there is no reference at all
     fit_ref_gap_s: float = 1.5  # stricter gap limit for fitting scale and noise
     # path rules
@@ -89,21 +86,45 @@ class LagTrackerConfig:
     scale_iterations: int = 2  # scale refinements between tracking passes
     min_moving_mph: float = 2.0
     # segment quality
-    informative_contrast: float = (
-        1.0  # sample is informative if its mismatch varies this much across lags
-    )
+    # a sample is informative if its mismatch varies this much across lags
+    informative_contrast: float = 1.0
     min_informative: int = 50
     max_ci_width_s: float = 2.0
     ci_delta: float = 4.0  # profile-cost rise that defines the ~95% interval
     # fallback when nothing in the run can be measured (the old GPS_TIME_OFFSET_S)
     default_lag_s: float = 3.0
+    # GPS samples closer together than this are back-to-back. A back-to-back sample
+    # with exactly the previous value is a duplicate packet, ignored for the estimate.
+    back_to_back_s: float = 0.2
+    # run sanity: a fitted scale outside this range, or too few informative samples
+    # in the whole run, means nothing trustworthy was measured -> all default
+    min_scale: float = 0.6
+    max_scale: float = 1.1
+    min_run_informative: int = 50
+    # self-check (logging only, never changes the correction): best lag per window
+    # of real driving, found without tracking or penalties, vs the tracker's lag
+    check_window_s: float = 60.0
+    check_min_samples: int = 30  # GPS samples per window
+    check_moving_mph: float = 5.0
+    check_min_moving_frac: float = 0.3  # of VCU samples in the window
+    check_min_speed_range_mph: float = 6.0
+    check_max_gap_s: float = 5.0  # longest VCU or GPS silence allowed in a window
+    # the best lag must beat every lag check_rival_min_s..check_rival_max_s away
+    # from it by check_margin_mph, or the window can't tell them apart
+    check_rival_min_s: float = 1.0
+    check_rival_max_s: float = 3.0
+    check_margin_mph: float = 0.7
+    check_tolerance_s: float = 0.5
+    check_min_agree: float = 0.8
+    check_max_disagree_s: float = 2.0
+    check_min_windows: int = 3
 
 
 @dataclass
 class Segment:
     start_t: float  # stamped time of first GPS sample in the segment
     end_t: float  # stamped time of last GPS sample in the segment
-    lag_s: float  # typical (median) lag in the segment
+    lag_s: float  # the constant lag that fits the segment best
     ci_lo: float  # ~95% interval (nan if not measurable)
     ci_hi: float
     n_samples: int
@@ -116,6 +137,14 @@ class LagResult:
     segments: list[Segment]  # sorted by start_t, never empty
     scale: float  # fitted GPS/VCU scale
     noise_mph: float  # estimated residual noise after alignment
+
+
+@dataclass
+class SelfCheck:
+    n_windows: int  # usable windows of real driving
+    agree_frac: float  # share within check_tolerance_s of the tracker (nan if none)
+    worst_s: float  # largest disagreement (nan if none)
+    suspicious: bool
 
 
 # --------------------------------------------------------------------------- main entry
@@ -134,12 +163,12 @@ def track_gps_lag(
     """
     cfg = cfg or LagTrackerConfig()
     vcu_t, vcu_mph = _clean_reference(vcu_t, vcu_mph)
-    gps_t, gps_mph = _sorted(gps_t, gps_mph)
+    gps_t, gps_mph = _drop_repeats(*_sorted(gps_t, gps_mph), cfg)
 
     if len(gps_t) == 0 or len(vcu_t) < 2:
         return _default_result(gps_t, cfg)
 
-    lags = np.arange(cfg.lag_min, cfg.lag_max + cfg.lag_step / 2, cfg.lag_step)
+    lags = _lag_grid(cfg)
     dead = _dead_mask(vcu_t, vcu_mph, gps_t, gps_mph, cfg)
     scale = _initial_scale(vcu_mph, gps_mph[~dead], cfg)
 
@@ -156,8 +185,97 @@ def track_gps_lag(
             scale = float(np.dot(gps_mph[use], ref[use]) / np.dot(ref[use], ref[use]))
 
     noise = _robust_noise(gps_mph[use] - scale * ref[use], cfg)
+    n_informative = int(informative.sum())
+    if (
+        not cfg.min_scale <= scale <= cfg.max_scale
+        or n_informative < cfg.min_run_informative
+    ):
+        # Parked or barely moving, or GPS and VCU don't really match: report the
+        # fitted scale, but don't trust any delay from this run.
+        seg = replace(
+            _default_result(gps_t, cfg).segments[0], n_informative=n_informative
+        )
+        return LagResult([seg], scale, noise)
     segments = _segments(path, gps_t, E, contrast, lags, noise, cfg)
     return LagResult(apply_fallbacks(segments, cfg.default_lag_s), scale, noise)
+
+
+def self_check(
+    vcu_t: ArrayLike,
+    vcu_mph: ArrayLike,
+    gps_t: ArrayLike,
+    gps_mph: ArrayLike,
+    result: LagResult,
+    cfg: LagTrackerConfig | None = None,
+) -> SelfCheck:
+    """Compare the tracker with an independent, simpler estimate. Logging only.
+
+    The run is split into check_window_s windows. A window of real driving with no
+    long data gap gets its own best lag (no tracking, no penalties); that is
+    compared with the tracker's lag at the window centre. Same inputs as
+    `track_gps_lag`. A run whose scale was rejected has nothing to check.
+    """
+    cfg = cfg or LagTrackerConfig()
+    vcu_t, vcu_mph = _clean_reference(vcu_t, vcu_mph)
+    gps_t, gps_mph = _drop_repeats(*_sorted(gps_t, gps_mph), cfg)
+    diffs = []
+    plausible = cfg.min_scale <= result.scale <= cfg.max_scale
+    if len(gps_t) and len(vcu_t) >= 2 and plausible:
+        lags = _lag_grid(cfg)
+        w = cfg.check_window_s
+        for a in np.arange(gps_t[0], gps_t[-1] - w, w):
+            g = (gps_t >= a) & (gps_t < a + w)
+            in_v = (vcu_t >= a) & (vcu_t < a + w)
+            v = vcu_mph[in_v]
+            driving = (
+                g.sum() >= cfg.check_min_samples
+                and len(v) > 0
+                and (v > cfg.check_moving_mph).mean() >= cfg.check_min_moving_frac
+                and np.ptp(v) >= cfg.check_min_speed_range_mph
+                and _max_gap(vcu_t[in_v], a, a + w) <= cfg.check_max_gap_s
+                and _max_gap(gps_t[g], a, a + w) <= cfg.check_max_gap_s
+            )
+            if not driving:
+                continue
+            best = _window_lag(
+                vcu_t, vcu_mph, gps_t[g], gps_mph[g], result.scale, lags, cfg
+            )
+            if best is not None:
+                diffs.append(abs(best - float(lag_at([a + w / 2], result.segments)[0])))
+    d = np.array(diffs)
+    if len(d) == 0:
+        return SelfCheck(0, np.nan, np.nan, False)
+    agree, worst = float(np.mean(d <= cfg.check_tolerance_s)), float(d.max())
+    suspicious = len(d) >= cfg.check_min_windows and (
+        agree < cfg.check_min_agree or worst > cfg.check_max_disagree_s
+    )
+    return SelfCheck(len(d), agree, worst, suspicious)
+
+
+def _max_gap(t: FloatArray, start: float, end: float) -> float:
+    """Longest stretch of [start, end) with no sample in `t`."""
+    return float(np.diff(np.concatenate([[start], t, [end]])).max())
+
+
+def _window_lag(
+    vcu_t: FloatArray,
+    vcu_mph: FloatArray,
+    gps_t: FloatArray,
+    gps_mph: FloatArray,
+    scale: float,
+    lags: FloatArray,
+    cfg: LagTrackerConfig,
+) -> float | None:
+    """The lag minimising median |GPS - scale * VCU| over one window, or None if it
+    doesn't clearly beat its rivals (see check_rival_min_s)."""
+    ref = np.interp(gps_t[None, :] - lags[:, None], vcu_t, vcu_mph)
+    cost = np.median(np.abs(gps_mph[None, :] - scale * ref), axis=1)
+    j = int(np.argmin(cost))
+    away = np.abs(lags - lags[j])
+    rivals = (away >= cfg.check_rival_min_s) & (away <= cfg.check_rival_max_s)
+    if cost[rivals].min() < cost[j] + cfg.check_margin_mph:
+        return None
+    return float(lags[j])
 
 
 def lag_at(stamped_t: ArrayLike, segments: Sequence[Segment]) -> FloatArray:
@@ -175,6 +293,21 @@ def lag_at(stamped_t: ArrayLike, segments: Sequence[Segment]) -> FloatArray:
 
 
 # --------------------------------------------------------------------------- pieces
+def _lag_grid(cfg: LagTrackerConfig) -> FloatArray:
+    return np.arange(cfg.lag_min, cfg.lag_max + cfg.lag_step / 2, cfg.lag_step)
+
+
+def _drop_repeats(
+    t: FloatArray, v: FloatArray, cfg: LagTrackerConfig
+) -> tuple[FloatArray, FloatArray]:
+    """Drop duplicate packets: a sample with exactly the previous sample's value,
+    less than back_to_back_s after it. Only for the estimate; no rows are removed
+    from the data."""
+    repeat = np.zeros(len(t), dtype=bool)
+    repeat[1:] = (np.diff(v) == 0) & (np.diff(t) < cfg.back_to_back_s)
+    return t[~repeat], v[~repeat]
+
+
 def _sorted(t: ArrayLike, v: ArrayLike) -> tuple[FloatArray, FloatArray]:
     t = np.asarray(t, dtype=float)
     v = np.asarray(v, dtype=float)
@@ -271,9 +404,8 @@ def _emissions(
     n, m = len(gps_t), len(lags)
     E = np.zeros((n, m), dtype=np.float32)
     valid = np.zeros((n, m), dtype=bool)
-    r_lo = np.full(
-        n, np.inf
-    )  # range of the mismatch part only, to judge informativeness
+    # range of the mismatch part only, to judge informativeness
+    r_lo = np.full(n, np.inf)
     r_hi = np.full(n, -np.inf)
     cap = cfg.truncate_sigma**2
     for j, lag in enumerate(lags):
@@ -392,7 +524,8 @@ def _segments(
     cfg: LagTrackerConfig,
 ) -> list[Segment]:
     """Split the path at jumps (> 1 grid step) and score each piece. Each segment
-    gets one constant lag, the median of the path inside it."""
+    gets one constant lag: the one that fits its samples best (lowest summed cost).
+    The path's median is only used to check the path agrees with that fit."""
     n = len(path)
     cuts = np.flatnonzero(np.abs(np.diff(path)) > 1) + 1
     bounds = np.concatenate([[0], cuts, [n]])
@@ -409,6 +542,7 @@ def _segments(
         while hi < len(lags) - 1 and profile[hi + 1] <= limit:
             hi += 1
         ci_lo, ci_hi = float(lags[lo]), float(lags[hi])
+        best_lag = float(lags[jmin])
         median_lag = float(np.median(lags[path[a:b]]))
         good = (
             n_inf >= cfg.min_informative
@@ -419,7 +553,7 @@ def _segments(
             Segment(
                 start_t=float(gps_t[a]),
                 end_t=float(gps_t[b - 1]),
-                lag_s=median_lag,
+                lag_s=best_lag,
                 ci_lo=ci_lo if good else np.nan,
                 ci_hi=ci_hi if good else np.nan,
                 n_samples=int(b - a),
