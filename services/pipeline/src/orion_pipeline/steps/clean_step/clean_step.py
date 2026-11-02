@@ -4,6 +4,7 @@ from collections.abc import Iterator
 import numpy as np
 import pandas as pd
 
+from orion_core.db.sensor_catalog import lagged_sensors
 from orion_pipeline.clients.oriondb_client import OrionDBClient
 from orion_pipeline.clients.penelope_client import PenelopeClient
 from orion_pipeline.runner.run_context import RunContext

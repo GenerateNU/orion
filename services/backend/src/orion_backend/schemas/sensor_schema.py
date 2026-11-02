@@ -27,7 +27,10 @@ class SensorSeries(BaseModel):
     """One sensor's readings in columnar form: `values[i]` was recorded at `time[i]`."""
 
     time: list[datetime] = Field(
-        description="Reading timestamps (UTC), ascending, as stored in Penelope with no lag correction.",
+        description=(
+            "Reading timestamps (UTC), ascending. Lagged sensors (e.g. `TPU/GPS/*`) "
+            "are shifted by `GPS_TIME_OFFSET_S`; all others are as stored in Penelope."
+        ),
         examples=[["2026-10-01T14:02:11.000Z", "2026-10-01T14:02:12.000Z"]],
     )
     values: list[list[float | None]] = Field(
