@@ -1,14 +1,14 @@
 import numpy as np
 from numpy.typing import NDArray
 
-from .phys_model_config import PhysicsModelConfig
 from .state import OMEGA, PX, PY, STATE_SIZE, THETA, A, V, wrap_angle
+from .state_config import StateConfig
 
 FloatArray = NDArray[np.float64]
 
 
 class CTRAModel:
-    def __init__(self, config: PhysicsModelConfig) -> None:
+    def __init__(self, config: StateConfig) -> None:
         self.config = config
 
     def predict_forward(self, state: FloatArray, dt: float) -> FloatArray:
@@ -85,8 +85,9 @@ class CTRAModel:
         Returns:
             Array of shape (STATE_SIZE, STATE_SIZE).
         """
-        accel_jerk = self.config.model_params.get("sigma_jerk", 1.0)
-        heading_jerk = self.config.model_params.get("sigma_alpha", 0.1)
+
+        accel_jerk = self.config.sigma_jerk
+        heading_jerk = self.config.sigma_alpha
 
         q = np.zeros((STATE_SIZE, STATE_SIZE))
         for rate, integrated, sigma in (

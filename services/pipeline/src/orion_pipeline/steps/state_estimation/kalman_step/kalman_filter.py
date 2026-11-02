@@ -4,21 +4,20 @@ import numpy as np
 
 from orion_pipeline.steps.state_estimation.ctra_model import CTRAModel
 from orion_pipeline.steps.state_estimation.state import THETA, wrap_angle
+from orion_pipeline.steps.state_estimation.state_config import StateConfig
 
 
 class UnscentedKalmanFilter:
-    """Unscented Kalman filter over the car's state (layout in state.py).
+    """Unscented Kalman Filter for state estimation.
 
     Pushes 2n + 1 sigma points through the physics model instead of
     linearizing it. Each sensor is applied as its own update.
 
-    Args:
-        model: The physics model
-        x0: starting state
-        P0: Starting uncertainty
-        alpha: spread around current state
-        beta: shape of error based on prior distribution
-        kappa: spread
+     Args:
+        model: CTRA physics model
+        x0: Initial state vector
+        P0: Initial covariance matrix
+        config: State config with UKF parameters (alpha, beta, kappa)
     """
 
     def __init__(
@@ -26,15 +25,17 @@ class UnscentedKalmanFilter:
         model: CTRAModel,
         x0: np.ndarray,
         P0: np.ndarray,
-        alpha: float = 0.5,
-        beta: float = 2.0,
-        kappa: float = 0.0,
+        config: StateConfig,
     ) -> None:
+
         self.model = model
         self.x = np.array(x0, dtype=np.float64)
         self.P = np.array(P0, dtype=np.float64)
 
         n = len(self.x)
+        alpha = config.ukf_alpha
+        beta = config.ukf_beta
+        kappa = config.ukf_kappa
         lam = alpha**2 * (n + kappa) - n
         self.c = n + lam
 

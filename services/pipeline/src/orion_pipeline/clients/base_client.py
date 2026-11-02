@@ -58,3 +58,15 @@ class BaseClient:
             if next_after == after:
                 raise RuntimeError(f"cursor did not advance past {after}")
             after = next_after
+
+    def read_all(
+        self, stmt: Select[*tuple[Any, ...]], key: tuple[str, ...]
+    ) -> pd.DataFrame:
+        """Read all rows of `stmt` ordered by `key`, no pagination.
+        Each page is read on its own short connection, and the next one isn't
+        read until the caller is done with the current one.
+        """
+
+        cols = [stmt.selected_columns[name] for name in key]
+        ordered_stmt = stmt.order_by(None).order_by(*cols)
+        return self.read_frame(ordered_stmt)
