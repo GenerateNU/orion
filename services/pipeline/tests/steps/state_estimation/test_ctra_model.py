@@ -2,7 +2,6 @@ import numpy as np
 import pytest
 
 from orion_pipeline.steps.state_estimation.ctra_model import CTRAModel
-from orion_pipeline.steps.state_estimation.phys_model_config import PhysicsModelConfig
 from orion_pipeline.steps.state_estimation.state import (
     OMEGA,
     PX,
@@ -12,6 +11,7 @@ from orion_pipeline.steps.state_estimation.state import (
     A,
     V,
 )
+from orion_pipeline.steps.state_estimation.state_model_config import PhysicsModelConfig
 
 
 @pytest.fixture

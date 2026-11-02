@@ -2,7 +2,7 @@ from abc import ABC, abstractmethod
 
 import numpy as np
 
-from .phys_model_config import PhysicsModelConfig
+from .state_model_config import PhysicsModelConfig
 
 
 class PhysicsModel(ABC):

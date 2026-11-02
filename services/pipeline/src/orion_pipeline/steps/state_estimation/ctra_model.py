@@ -1,13 +1,14 @@
 import numpy as np
 from numpy.typing import NDArray
 
-from .phys_model_config import PhysicsModelConfig
+from .physics_model import PhysicsModel
 from .state import OMEGA, PX, PY, STATE_SIZE, THETA, A, V, wrap_angle
+from .state_model_config import PhysicsModelConfig
 
 FloatArray = NDArray[np.float64]
 
 
-class CTRAModel:
+class CTRAModel(PhysicsModel):
     def __init__(self, config: PhysicsModelConfig) -> None:
         self.config = config
 
