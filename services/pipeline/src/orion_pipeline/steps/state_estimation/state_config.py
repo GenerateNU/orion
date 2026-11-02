@@ -26,6 +26,9 @@ class StateConfig:
     straight_threshold: float
     sigma_jerk: float
     sigma_alpha: float
+    tick_ms: int
+    max_gap_s: float
+    min_heading_distance_m: float
     covariance_diag: list[float]
     sensors: dict[str, SensorConfig]
     ukf_alpha: float
@@ -55,6 +58,9 @@ class StateConfig:
             straight_threshold=model["straight_threshold"],
             sigma_jerk=model["sigma_jerk"],
             sigma_alpha=model["sigma_alpha"],
+            tick_ms=model["tick_ms"],
+            max_gap_s=model["max_gap_s"],
+            min_heading_distance_m=model["min_heading_distance_m"],
             covariance_diag=data["initial_state"]["covariance_diag"],
             sensors=sensors,
             ukf_alpha=ukf["alpha"],
