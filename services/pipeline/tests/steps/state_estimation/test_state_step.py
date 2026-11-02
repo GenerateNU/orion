@@ -22,7 +22,7 @@ def synthetic_readings(origin_lat=42.3, origin_lon=-71.1, seconds=10, hz=10):
 
     Returns DataFrame with columns: time, sensor, values
     """
-    times = [datetime.now() + timedelta(seconds=i/hz) for i in range(seconds * hz)]
+    times = [datetime.now() + timedelta(seconds=i / hz) for i in range(seconds * hz)]
     rows = []
 
     # GPS: straight line north at origin
@@ -45,7 +45,7 @@ def test_transform_straight_line(state_step):
     """Transform synthetic straight-line data to lat/lon output."""
     df = synthetic_readings(seconds=5)
 
-    ctx = RunContext(run_id="test-run", penelope_reader=None)
+    ctx = RunContext(run_id="test-run")
     state_step.prepare(ctx)
 
     # transform() now handles _filter() internally

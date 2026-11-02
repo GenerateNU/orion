@@ -1,4 +1,4 @@
-from collections.abc import Iterable, Iterator
+from collections.abc import Callable, Iterable, Iterator
 
 import numpy as np
 import pandas as pd
@@ -190,12 +190,12 @@ class KalmanStep(PipelineStep):
         speed = distance / (tick_time - first_time).total_seconds()
         x0 = np.array([xy[0], xy[1], speed, np.arctan2(dy, dx), 0.0, 0.0])
 
-        self.ukf = UnscentedKalmanFilter(self.model, x0, self.config.P0)
+        self.ukf = UnscentedKalmanFilter(self.model, x0, self.config.P0, self.config)
         self.tick_time = tick_time
         self.first_fix = None
         self.ticks.append((tick_time, x0, self.config.P0.copy(), None, None, None))
 
-    def _get_measurement_func(self, sensor: str) -> callable:
+    def _get_measurement_func(self, sensor: str) -> Callable[[np.ndarray], np.ndarray]:
         """Get measurement function for sensor."""
         if sensor == "gps_location":
             return lambda s: s[:, [PX, PY]]

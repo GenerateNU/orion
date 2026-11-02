@@ -5,7 +5,6 @@ from orion_pipeline.steps.state_estimation.ctra_model import CTRAModel
 from orion_pipeline.steps.state_estimation.kalman_step.kalman_filter import (
     UnscentedKalmanFilter,
 )
-from orion_pipeline.steps.state_estimation.phys_model_config import PhysicsModelConfig
 from orion_pipeline.steps.state_estimation.state import (
     OMEGA,
     PX,
@@ -15,6 +14,7 @@ from orion_pipeline.steps.state_estimation.state import (
     A,
     V,
 )
+from orion_pipeline.steps.state_estimation.state_config import StateConfig
 
 DT = 0.01
 GPS_STD_M = 1.5
@@ -31,10 +31,13 @@ def speed(states):
 
 
 @pytest.fixture
-def model() -> CTRAModel:
-    return CTRAModel(
-        PhysicsModelConfig("ctra", {"sigma_jerk": 1.0, "sigma_alpha": 0.1})
-    )
+def config():
+    return StateConfig.load("services/pipeline/config/state_config.toml")
+
+
+@pytest.fixture
+def model(config) -> CTRAModel:
+    return CTRAModel(config)
 
 
 def make_state(px=0.0, py=0.0, v=0.0, theta=0.0, omega=0.0, a=0.0) -> np.ndarray:
@@ -43,14 +46,14 @@ def make_state(px=0.0, py=0.0, v=0.0, theta=0.0, omega=0.0, a=0.0) -> np.ndarray
     return state
 
 
-def drive(model, truth, steps, seed=0, turn_at=None, turn_rate=0.0):
+def drive(model, truth, steps, config, seed=0, turn_at=None, turn_rate=0.0):
     """Move a true car with CTRA and run the filter on noisy GPS (10 Hz) and speed (100 Hz).
 
     The filter starts at the true state. Returns the true and estimated states per tick.
     """
     rng = np.random.default_rng(seed)
     truth = truth.copy()
-    ukf = UnscentedKalmanFilter(model, truth.copy(), P0)
+    ukf = UnscentedKalmanFilter(model, truth.copy(), P0, config)
 
     true_states, estimates = [], []
     for k in range(steps):
@@ -85,9 +88,9 @@ def position_errors(true_states, estimates):
 # Straight line
 
 
-def test_straight_line(model):
+def test_straight_line(model, config):
     """tracks position and speed"""
-    truth, est = drive(model, make_state(v=15.0, theta=0.7), steps=3000)
+    truth, est = drive(model, make_state(v=15.0, theta=0.7), steps=3000, config=config)
     second_half = slice(1500, None)
 
     assert np.median(position_errors(truth, est)[second_half]) < 1.0
@@ -95,10 +98,12 @@ def test_straight_line(model):
     assert np.median(np.abs(est[second_half, OMEGA])) < 0.05
 
 
-def test_braking_in_a_straight_line(model):
+def test_braking_in_a_straight_line(model, config):
     """Should show deceleration"""
     # 25 m/s braking at 3 m/s^2 for 5 s
-    truth, est = drive(model, make_state(v=25.0, theta=-1.2, a=-3.0), steps=500)
+    truth, est = drive(
+        model, make_state(v=25.0, theta=-1.2, a=-3.0), steps=500, config=config
+    )
     last_second = slice(400, None)
 
     assert np.median(position_errors(truth, est)[last_second]) < 2.0
@@ -110,10 +115,12 @@ def test_braking_in_a_straight_line(model):
 
 
 @pytest.mark.parametrize("turn_rate", [0.3, -0.3, 1.0])
-def test_steady_turn(model, turn_rate):
+def test_steady_turn(model, config, turn_rate):
     """Tracks position and turn rate"""
     # turn_rate 1.0 goes around ~5 times, so heading crosses +/-pi along the way
-    truth, est = drive(model, make_state(v=15.0, omega=turn_rate), steps=3000)
+    truth, est = drive(
+        model, make_state(v=15.0, omega=turn_rate), steps=3000, config=config
+    )
     second_half = slice(1500, None)
 
     assert np.median(position_errors(truth, est)[second_half]) < 2.0
@@ -121,11 +128,16 @@ def test_steady_turn(model, turn_rate):
     assert np.all(np.abs(est[:, THETA]) <= np.pi)
 
 
-def test_turn_after_driving_straight(model):
+def test_turn_after_driving_straight(model, config):
     """The filter should notice the turn and not get lost."""
     # 10 s straight, then a 0.5 rad/s turn the filter wasn't expecting
     truth, est = drive(
-        model, make_state(v=15.0), steps=2000, turn_at=1000, turn_rate=0.5
+        model,
+        make_state(v=15.0),
+        steps=2000,
+        config=config,
+        turn_at=1000,
+        turn_rate=0.5,
     )
     errors = position_errors(truth, est)
 

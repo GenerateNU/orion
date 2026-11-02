@@ -1,4 +1,5 @@
-from collections.abc import Callable
+from collections.abc import Callable, Iterator
+from typing import Any
 
 import numpy as np
 import pandas as pd
@@ -38,24 +39,22 @@ class StateStep(PipelineStep):
         self.tick_time: pd.Timestamp | None = None
         self.origin: tuple[float, float] | None = None
         self.first_fix: tuple[pd.Timestamp, np.ndarray] | None = None
-        self.ticks: list = []
+        self.ticks: list[tuple[Any, ...]] = []
 
-    def extract(self, ctx: RunContext) -> pd.DataFrame:
+    def extract(self, ctx: RunContext) -> Iterator[pd.DataFrame]:
         """Pull all cleaned readings for this run, ordered by time and sensor."""
-        return self.reader.read_all(
+        yield self.reader.read_all(
             select_cleaned_readings(ctx.run_id, self.config.sensors.keys()),
             ("time", "sensor"),
         )
 
     def transform(self, readings: pd.DataFrame, ctx: RunContext) -> pd.DataFrame:
         """UKF forward + URTS backward -> estimated_car_state rows."""
-        # Run UKF forward pass
         self._filter(readings)
 
         if self.origin is None:
             raise RuntimeError("Origin not set: no GPS fix was seen.")
 
-        # Build ticks DataFrame from forward pass results
         ticks_df = pd.DataFrame(
             self.ticks, columns=["time", "x", "P", "x_pred", "P_pred", "C"]
         )
@@ -63,12 +62,10 @@ class StateStep(PipelineStep):
         # TODO: Run URTS backward pass here
         # x_smooth, P_smooth = self.urts.smooth(...)
 
-        # For now, use UKF forward estimates (x column)
         x_estimates = ticks_df["x"]
 
-        # Convert states to lat/lon
-        lats = []
-        lons = []
+        lats: list[float | None] = []
+        lons: list[float | None] = []
         for x in x_estimates:
             if x is None:
                 lats.append(None)
@@ -78,19 +75,21 @@ class StateStep(PipelineStep):
                 lats.append(lat)
                 lons.append(lon)
 
-        return pd.DataFrame({
-            "run_id": ctx.run_id,
-            "time": ticks_df["time"],
-            "latitude": lats,
-            "longitude": lons,
-        })
+        return pd.DataFrame(
+            {
+                "run_id": ctx.run_id,
+                "time": ticks_df["time"],
+                "latitude": lats,
+                "longitude": lons,
+            }
+        )
 
     def run(self, ctx: RunContext) -> None:
         """Extract, filter, transform, write."""
         self.prepare(ctx)
-        readings = self.extract(ctx)
-        result = self.transform(readings, ctx)
-        self.write(result, ctx)
+        for readings in self.extract(ctx):
+            result = self.transform(readings, ctx)
+            self.write(result, ctx)
 
     def _to_xy(self, lat: float, lon: float) -> np.ndarray:
         """Latitude/longitude -> [x east, y north] meters from origin."""
@@ -110,9 +109,10 @@ class StateStep(PipelineStep):
         lon = origin_lon + x / (METERS_PER_DEGREE_LAT * np.cos(np.radians(origin_lat)))
         return lat, lon
 
-    def _get_measurement_func(self, sensor: str) -> Callable:
+    def _get_measurement_func(self, sensor: str) -> Callable[[np.ndarray], np.ndarray]:
         """Get measurement function for sensor."""
         from orion_pipeline.steps.state_estimation.state import PX, PY, V
+
         if sensor == "gps_location":
             return lambda s: s[:, [PX, PY]]
         elif sensor == "vcu_speed":
@@ -123,6 +123,7 @@ class StateStep(PipelineStep):
     def _measurement(self, sensor: str, values: list[float]) -> np.ndarray:
         """A reading's values -> z in the filter's units."""
         from orion_pipeline.steps.state_estimation.phys_model_config import MPS_PER_MPH
+
         if sensor == "gps_location":
             lat, lon = values
             return self._to_xy(lat, lon)
@@ -157,7 +158,9 @@ class StateStep(PipelineStep):
         self.first_fix = None
         self.ticks.append((tick_time, x0, self.config.P0.copy(), None, None, None))
 
-    def _step(self, tick_time: pd.Timestamp, readings: list[tuple[str, list[float]]]) -> None:
+    def _step(
+        self, tick_time: pd.Timestamp, readings: list[tuple[str, list[float]]]
+    ) -> None:
         """Predict to tick_time, apply each reading, and record the tick."""
         ukf = self.ukf
         prev = self.tick_time
@@ -170,7 +173,12 @@ class StateStep(PipelineStep):
         for sensor, values in readings:
             sensor_cfg = self.config.sensors[sensor]
             measurement_func = self._get_measurement_func(sensor)
-            ukf.update(self._measurement(sensor, values), measurement_func, sensor_cfg.R, sensor_cfg.gate)
+            ukf.update(
+                self._measurement(sensor, values),
+                measurement_func,
+                sensor_cfg.R,
+                sensor_cfg.gate,
+            )
 
         self.ticks.append((tick_time, ukf.x.copy(), ukf.P.copy(), x_pred, P_pred, C))
         self.tick_time = tick_time
@@ -183,7 +191,8 @@ class StateStep(PipelineStep):
             if (
                 self.ukf is not None
                 and self.tick_time is not None
-                and tick_time - self.tick_time > pd.Timedelta(seconds=self.config.max_gap_s)
+                and tick_time - self.tick_time
+                > pd.Timedelta(seconds=self.config.max_gap_s)
             ):
                 self.ukf = None
 
@@ -196,5 +205,11 @@ class StateStep(PipelineStep):
                 self._step(self.tick_time + tick_delta, [])
             self._step(
                 tick_time,
-                zip(tick_readings["sensor"], tick_readings["values"], strict=True),
+                list(
+                    zip(
+                        tick_readings["sensor"],
+                        tick_readings["values"],
+                        strict=True,
+                    )
+                ),
             )

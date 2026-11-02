@@ -1,12 +1,14 @@
 """Tests for BaseClient.read_all() method."""
 
 import pytest
-from sqlalchemy import Column, Float, String, create_engine, select
-from sqlalchemy.orm import declarative_base
+from sqlalchemy import Column, Float, String, create_engine, insert, select
+from sqlalchemy.orm import DeclarativeBase
 
 from orion_pipeline.clients.base_client import BaseClient
 
-Base = declarative_base()
+
+class Base(DeclarativeBase):
+    pass
 
 
 class SensorReading(Base):
@@ -16,7 +18,7 @@ class SensorReading(Base):
     value = Column(Float)
 
 
-@pytest.fixture
+@pytest.fixture(scope="function")
 def engine():
     """Create in-memory SQLite database."""
     engine = create_engine("sqlite:///:memory:")
@@ -25,16 +27,17 @@ def engine():
     # Insert test data
     with engine.begin() as conn:
         conn.execute(
-            SensorReading.__table__.insert(),
-            [
-                {"time": "2026-11-01T00:00:00", "sensor": "gps", "value": 1.5},
-                {"time": "2026-11-01T00:00:10", "sensor": "speed", "value": 25.0},
-                {"time": "2026-11-01T00:00:20", "sensor": "gps", "value": 2.5},
-                {"time": "2026-11-01T00:00:30", "sensor": "speed", "value": 26.0},
-            ],
+            insert(SensorReading).values(
+                [
+                    {"time": "2026-11-01T00:00:00", "sensor": "gps", "value": 1.5},
+                    {"time": "2026-11-01T00:00:10", "sensor": "speed", "value": 25.0},
+                    {"time": "2026-11-01T00:00:20", "sensor": "gps", "value": 2.5},
+                    {"time": "2026-11-01T00:00:30", "sensor": "speed", "value": 26.0},
+                ]
+            )
         )
 
-    return engine
+    yield engine
 
 
 def test_read_all_returns_all_rows(engine):
