@@ -70,27 +70,28 @@ class ForwardPass:
         if not ticks:
             raise ValueError("A forward pass needs at least one tick.")
 
-        later_ticks = ticks[1:]
-        for index, tick in enumerate(later_ticks, start=1):
-            if _is_startup(tick):
+        predicted_states: list[np.ndarray] = []
+        predicted_covariances: list[np.ndarray] = []
+        cross_covariances: list[np.ndarray] = []
+        for index, tick in enumerate(ticks[1:], start=1):
+            if tick.x_pred is None or tick.P_pred is None or tick.C is None:
                 raise ValueError(
                     f"Tick {index} has no prediction; "
                     "a segment cannot contain a restart."
                 )
+            predicted_states.append(tick.x_pred)
+            predicted_covariances.append(tick.P_pred)
+            cross_covariances.append(tick.C)
 
         size = STATE_SIZE
         return cls(
             states=_stack_or_empty([t.x for t in ticks], (0, size)),
             covariances=_stack_or_empty([t.P for t in ticks], (0, size, size)),
-            predicted_states=_stack_or_empty(
-                [t.x_pred for t in later_ticks], (0, size)
-            ),
+            predicted_states=_stack_or_empty(predicted_states, (0, size)),
             predicted_covariances=_stack_or_empty(
-                [t.P_pred for t in later_ticks], (0, size, size)
+                predicted_covariances, (0, size, size)
             ),
-            cross_covariances=_stack_or_empty(
-                [t.C for t in later_ticks], (0, size, size)
-            ),
+            cross_covariances=_stack_or_empty(cross_covariances, (0, size, size)),
         )
 
 
