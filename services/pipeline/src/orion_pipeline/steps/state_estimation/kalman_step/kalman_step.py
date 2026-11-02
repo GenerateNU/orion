@@ -156,7 +156,12 @@ class KalmanStep(PipelineStep):
         for sensor, values in readings:
             sensor_cfg = self.config.sensors[sensor]
             measurement_func = self._get_measurement_func(sensor)
-            ukf.update(self._measurement(sensor, values), measurement_func, sensor_cfg.R, sensor_cfg.gate)
+            ukf.update(
+                self._measurement(sensor, values),
+                measurement_func,
+                sensor_cfg.R,
+                sensor_cfg.gate,
+            )
 
         self.ticks.append((tick_time, ukf.x.copy(), ukf.P.copy(), x_pred, P_pred, C))
         self.tick_time = tick_time
@@ -190,7 +195,7 @@ class KalmanStep(PipelineStep):
         self.first_fix = None
         self.ticks.append((tick_time, x0, self.config.P0.copy(), None, None, None))
 
-    def _get_measurement_func(self, sensor: str):
+    def _get_measurement_func(self, sensor: str) -> callable:
         """Get measurement function for sensor."""
         if sensor == "gps_location":
             return lambda s: s[:, [PX, PY]]
