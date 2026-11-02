@@ -33,8 +33,9 @@ class SensorService:
     ) -> SensorDataResponse:
         """Every reading of `sensors` in `[start, end]`, one series per sensor.
 
-        With `gps_offset_on`, `gps_time_offset_s` is added to the times of lagged
-        sensors (see `sensor_catalog`), and the window applies to the shifted times.
+        With `gps_offset_on`, `gps_time_offset_s` is subtracted from the times of
+        lagged sensors (see `sensor_catalog`; GPS is stamped late), and the window
+        applies to the corrected times.
         A sensor with no rows in the range (or an unknown run) comes back empty.
         """
         sensors = list(dict.fromkeys(sensors))
@@ -53,7 +54,7 @@ class SensorService:
             reading = row._mapping
             time = reading["time"]
             if reading["raw_tag"] in lagged:
-                time += self.offset
+                time -= self.offset
             series[reading["raw_tag"]].time.append(time)
             series[reading["raw_tag"]].values.append(reading["values"])
 

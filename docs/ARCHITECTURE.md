@@ -252,8 +252,9 @@ Reads Penelope `data` for one run and writes `cleaned_data`.
    pulling **only tags in the map**. Unmapped tags never leave Penelope.
 3. `transform` renames each `raw_tag` to its `sensor` (an unmapped tag at this
    point is treated as a bug and raises), and subtracts the run's GPS lag from
-   the timestamps of `TPU/GPS/GroundSpeed`, `Location`, `Altitude` and `Mode`.
-   `TPU/GPS/PPS` is left alone.
+   the timestamps of the tags flagged `gps_lagged` in `sensor_catalog.py`
+   (`TPU/GPS/GroundSpeed`, `Location`, `Altitude` and `Mode`). `TPU/GPS/PPS`
+   is left alone.
 
 **GPS lag.** GPS rows are stamped when saved, not when measured, and the delay
 jumps between levels during a run. `prepare` tracks it over the whole run by
@@ -261,6 +262,9 @@ matching GPS ground speed to VCU speed (`steps/clean_step/gps_lag.py`), giving a
 few constant-lag segments; `GPS_TIME_OFFSET_S` is only the fallback when nothing
 is measurable. `transform` just looks up each row's segment, so paging can't
 change the result.
+
+The backend sensors API reads raw Penelope data, so it can't use the tracked
+lag: it subtracts the fixed `GPS_TIME_OFFSET_S` from the same flagged tags.
 
 Unit conversion, deduplication and outlier rejection are not done yet. Values
 are stored in the units listed in the catalog.

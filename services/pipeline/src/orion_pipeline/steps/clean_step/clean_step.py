@@ -4,7 +4,7 @@ from collections.abc import Iterator
 import numpy as np
 import pandas as pd
 
-from orion_core.db.sensor_catalog import lagged_sensors
+from orion_core.db.sensor_catalog import lagged_raw_tags
 from orion_pipeline.clients.oriondb_client import OrionDBClient
 from orion_pipeline.clients.penelope_client import PenelopeClient
 from orion_pipeline.runner.run_context import RunContext
@@ -32,11 +32,6 @@ logger = logging.getLogger(__name__)
 VCU_SPEED_TAG = "VCU/CarState/speed"  # mph
 # Logged in m/s, whatever the sensor catalog says.
 GPS_SPEED_TAG = "TPU/GPS/GroundSpeed"
-# Written in the same receiver packets, so they share GroundSpeed's lag.
-# TPU/GPS/PPS is stamped separately and carries no usable timing, so it's left alone.
-GPS_SHIFTED_TAGS = frozenset(
-    {GPS_SPEED_TAG, "TPU/GPS/Location", "TPU/GPS/Altitude", "TPU/GPS/Mode"}
-)
 
 
 def estimate_run_gps_lag(
@@ -170,7 +165,7 @@ class CleanStep(PipelineStep):
         # GPS rows are stamped late: move them back by the run's tracked lag.
         corrected = correct_gps_time(
             cleaned,
-            df["raw_tag"].isin(GPS_SHIFTED_TAGS),
+            df["raw_tag"].isin(lagged_raw_tags()),
             self.gps_segments,
         )
         # Each segment gets one constant lag, so where a later segment's lag is bigger

@@ -216,7 +216,7 @@ All variables go in the repo-root `.env`, which is shared by every service and t
 | `PENELOPE_DATABASE_URL`  | unset (Penelope features off)   | Real Penelope (VPN) or penelope2 (Neon)         |
 | `PIPELINE_API_URL`       | `http://localhost:8200`         | Where the backend reaches the pipeline API (compose sets it) |
 | `PIPELINE_PAGE_SIZE`     | `100000`                        | Max rows per page in each pipeline step         |
-| `GPS_TIME_OFFSET_S`      | `3`                             | Fallback GPS lag (s), subtracted from GPS timestamps only when a run's lag can't be measured |
+| `GPS_TIME_OFFSET_S`      | `3`                             | GPS lag (s), subtracted from GPS timestamps: always by the backend API, by the clean step only when a run's lag can't be measured |
 | `API_PROXY_TARGET`       | `http://localhost:8100`         | Where Vite forwards `/api` (compose sets it)    |
 
 ## Development without Docker
