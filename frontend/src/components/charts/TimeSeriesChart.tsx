@@ -5,7 +5,7 @@ import type { RunTime, TimeWindow } from "@features/dashboard/utils/time";
 import { formatDuration } from "@utils/format";
 import styles from "./TimeSeriesChart.module.css";
 
-const MIN_DRAG_PX = 0;
+const MIN_DRAG_PX = 4;
 
 export type ChartSeries = {
   id: string;
@@ -20,7 +20,6 @@ export type TimeSeriesChartProps = {
   height?: number;
   yLabel?: string;
   visibleWindow?: TimeWindow | null;
-  onPreviewWindow?: (window: TimeWindow) => void;
   onCommitWindow?: (window: TimeWindow) => void;
   onResetWindow?: () => void;
   onHoverTime?: (time: RunTime | null) => void;
@@ -28,16 +27,11 @@ export type TimeSeriesChartProps = {
 
 type ChartCallbacks = Pick<
   TimeSeriesChartProps,
-  "onPreviewWindow" | "onCommitWindow" | "onResetWindow" | "onHoverTime"
+  "onCommitWindow" | "onResetWindow" | "onHoverTime"
 >;
 
 const cssStyle = (chart: uPlot, name: string) =>
   getComputedStyle(chart.root).getPropertyValue(name).trim();
-
-const formatReading = (raw: number | null, unit: string) => {
-  if (raw == null) return "";
-  return `${raw.toFixed(1)} ${unit}`;
-};
 
 const formatTime = (ms: number) => formatDuration(ms / 1000);
 
@@ -75,7 +69,6 @@ export const TimeSeriesChart = ({
   height = 600,
   yLabel = "",
   visibleWindow = null,
-  onPreviewWindow,
   onCommitWindow,
   onResetWindow,
   onHoverTime,
@@ -87,7 +80,7 @@ export const TimeSeriesChart = ({
 
   const callbacksRef = useRef<ChartCallbacks>({});
   useEffect(() => {
-    callbacksRef.current = { onPreviewWindow, onCommitWindow, onResetWindow, onHoverTime };
+    callbacksRef.current = { onCommitWindow, onResetWindow, onHoverTime };
   });
 
   const data = useMemo(
@@ -100,6 +93,7 @@ export const TimeSeriesChart = ({
     (): uPlot.Options => ({
       width: 0,
       height,
+      legend: { show: false },
       scales: {
         x: { time: false },
         y: {
@@ -134,19 +128,21 @@ export const TimeSeriesChart = ({
         bind: { dblclick: () => null },
       },
       series: [
-        { label: "Time", value: (_chart, raw) => (raw == null ? "--" : formatTime(raw)) },
-        ...series.map(({ label, unit }) => ({
+        {},
+        ...series.map(({ label }) => ({
           label,
           stroke: "#d4b06a",
           width: 1.5,
-          value: (_chart: uPlot, raw: number | null) => formatReading(raw, unit),
         })),
       ],
       hooks: {
         setSelect: [
           (chart) => {
-            const selected = selectionToWindow(chart);
-            if (selected) callbacksRef.current.onCommitWindow?.(selected);
+            if (draggingRef.current) {
+              draggingRef.current = false;
+              const selected = selectionToWindow(chart);
+              if (selected) callbacksRef.current.onCommitWindow?.(selected);
+            }
             clearSelection(chart);
           },
         ],
@@ -164,6 +160,14 @@ export const TimeSeriesChart = ({
   );
 
   useEffect(() => {
+    dataRef.current = data;
+    const chart = chartRef.current;
+    if (!chart || chart.data === data) return;
+    chart.setData(data);
+    applyWindow(chart, windowRef.current);
+  }, [data]);
+
+  useEffect(() => {
     const el = containerRef.current;
     if (!el) return;
 
@@ -174,20 +178,12 @@ export const TimeSeriesChart = ({
     const onDown = () => {
       draggingRef.current = true;
     };
-    const onMove = () => {
-      if (!draggingRef.current) return;
-      const selected = selectionToWindow(chart);
-      if (selected) callbacksRef.current.onPreviewWindow?.(selected);
-    };
     const onUp = () => {
-      if (!draggingRef.current) return;
       draggingRef.current = false;
-      applyWindow(chart, windowRef.current);
     };
     const onDoubleClick = () => callbacksRef.current.onResetWindow?.();
 
     chart.over.addEventListener("mousedown", onDown);
-    chart.over.addEventListener("mousemove", onMove);
     chart.over.addEventListener("dblclick", onDoubleClick);
     window.addEventListener("mouseup", onUp);
 
@@ -203,14 +199,6 @@ export const TimeSeriesChart = ({
       chartRef.current = null;
     };
   }, [opts, height]);
-
-  useEffect(() => {
-    dataRef.current = data;
-    const chart = chartRef.current;
-    if (!chart || chart.data === data) return;
-    chart.setData(data);
-    applyWindow(chart, windowRef.current);
-  }, [data]);
 
   useEffect(() => {
     windowRef.current = visibleWindow;
