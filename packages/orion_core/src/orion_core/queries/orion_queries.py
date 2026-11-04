@@ -37,6 +37,19 @@ def select_cleaned_readings(
     )
 
 
+def select_estimated_positions(run_id: str) -> Select[datetime, float, float]:
+    """Estimated (lat, lon) for one whole run, ordered by time."""
+    return (
+        select(
+            EstimatedCarState.time,
+            EstimatedCarState.lattitude,
+            EstimatedCarState.longitude,
+        )
+        .where(EstimatedCarState.run_id == run_id)
+        .order_by(EstimatedCarState.time)
+    )
+
+
 def select_estimated_positions_between(
     run_id: str, start: datetime, end: datetime
 ) -> Select[datetime, float, float]:

@@ -29,17 +29,27 @@ def circle(loops: float, radius_m: float = 50.0, points_per_loop: int = 300):
     return track_frame(radius_m * np.sin(theta), radius_m * (1 - np.cos(theta)))
 
 
-def run_lap_step(track: pd.DataFrame, page_size: int) -> pd.DataFrame:
-    """Drive LapStep like the base class's `run`, without a database."""
-    reader = MagicMock()
-    reader.read_frame.return_value = pd.DataFrame([[track["time"].max()]])
-    step = LapStep(reader=reader, writer=MagicMock())
-    ctx = RunContext(run_id="run-1")
+def run_lap_step(track: pd.DataFrame, **ctx_overrides) -> MagicMock:
+    """Run LapStep on `track` without a database, and return its mock writer.
 
-    step.prepare(ctx)
-    pages = [track.iloc[i : i + page_size] for i in range(0, len(track), page_size)]
-    laps = [step.transform(page.reset_index(drop=True), ctx) for page in pages]
-    return pd.concat([lap for lap in laps if not lap.empty], ignore_index=True)
+    `ctx_overrides` replace RunContext fields, e.g. the `lap_*` tunables.
+    """
+    reader = MagicMock()
+    reader.read_frame.return_value = track
+    writer = MagicMock()
+    ctx = RunContext(run_id="run-1", **ctx_overrides)
+    LapStep(reader=reader, writer=writer).run(ctx)
+    return writer
+
+
+def lap_rows(track: pd.DataFrame, **ctx_overrides) -> pd.DataFrame:
+    """The laps LapStep writes for `track`, which it writes in one append."""
+    writer = run_lap_step(track, **ctx_overrides)
+    writer.append.assert_called_once()
+    table, laps = writer.append.call_args.args
+    assert table == "laps"
+    assert isinstance(laps, pd.DataFrame)
+    return laps
 
 
 def assert_laps_cover_run(laps: pd.DataFrame, track: pd.DataFrame) -> None:
@@ -50,11 +60,10 @@ def assert_laps_cover_run(laps: pd.DataFrame, track: pd.DataFrame) -> None:
     assert laps["start_time"].iloc[1:].tolist() == laps["end_time"].iloc[:-1].tolist()
 
 
-@pytest.mark.parametrize("page_size", [10_000, 300, 301, 7])
-def test_circle_driven_three_times_gives_three_laps(page_size):
+def test_circle_driven_three_times_gives_three_laps():
     # Stop just short of the line, so the run's end isn't also a crossing.
     track = circle(loops=2.95)
-    laps = run_lap_step(track, page_size)
+    laps = lap_rows(track)
 
     assert len(laps) == 3
     assert_laps_cover_run(laps, track)
@@ -62,42 +71,48 @@ def test_circle_driven_three_times_gives_three_laps(page_size):
     assert lap_times.iloc[:2].tolist() == pytest.approx([30.0, 30.0], abs=0.2)
 
 
-def test_page_size_does_not_change_laps():
-    track = circle(loops=2.95)
-    expected = run_lap_step(track, 10_000)
-    for page_size in (300, 301, 299, 7):
-        pd.testing.assert_frame_equal(run_lap_step(track, page_size), expected)
-
-
 def test_run_ending_on_a_crossing_has_no_empty_lap():
     # Three loops plus one point, with the point on the line removed, so the
     # run's last point is the first point past the gate.
     track = circle(loops=3 + 1 / 300).drop(index=900).reset_index(drop=True)
-    laps = run_lap_step(track, 300)
+    laps = lap_rows(track)
 
     assert len(laps) == 3
     assert_laps_cover_run(laps, track)
     assert (laps["end_time"] > laps["start_time"]).all()
 
 
+def test_tunables_come_from_the_run_context():
+    # Each loop takes 30 s, so a 40 s minimum lap time drops every other crossing.
+    track = circle(loops=4.95)
+    laps = lap_rows(track, lap_min_lap_time_s=40.0)
+
+    assert len(laps) == 3
+    assert_laps_cover_run(laps, track)
+    lap_times = (laps["end_time"] - laps["start_time"]).dt.total_seconds()
+    assert lap_times.iloc[:2].tolist() == pytest.approx([60.0, 60.0], abs=0.2)
+
+
+def test_reads_the_run_in_one_query():
+    track = circle(loops=1.5)
+    reader = MagicMock()
+    reader.read_frame.return_value = track
+    LapStep(reader=reader, writer=MagicMock()).run(RunContext(run_id="run-1"))
+
+    reader.read_frame.assert_called_once()
+
+
 def test_straight_line_gives_one_lap():
     x = np.linspace(0, 500, 600)
     track = track_frame(x, np.zeros_like(x))
-    laps = run_lap_step(track, 100)
+    laps = lap_rows(track)
 
     assert len(laps) == 1
     assert_laps_cover_run(laps, track)
 
 
-def test_ctx_records_gate_once_found():
-    track = circle(loops=1.5)
-    reader = MagicMock()
-    reader.read_frame.return_value = pd.DataFrame([[track["time"].max()]])
-    step = LapStep(reader=reader, writer=MagicMock())
-    ctx = RunContext(run_id="run-1")
-    step.prepare(ctx)
+def test_empty_run_writes_nothing():
+    writer = run_lap_step(track_frame(np.empty(0), np.empty(0)))
 
-    step.transform(track.iloc[:200], ctx)
-    assert ctx.found_gate is False
-    step.transform(track.iloc[200:].reset_index(drop=True), ctx)
-    assert ctx.found_gate is True
+    writer.delete_for_run.assert_called_once_with("laps", "run-1")
+    writer.append.assert_not_called()

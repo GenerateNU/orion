@@ -32,7 +32,14 @@ class PipelineRunner:
     # Runs each step in order
     def run_all(self, run_id: str) -> None:
         ctx = RunContext(
-            run_id=run_id, gps_time_offset_s=self.settings.gps_time_offset_s
+            run_id=run_id,
+            gps_time_offset_s=self.settings.gps_time_offset_s,
+            lap_hitbox_radius_m=self.settings.lap_hitbox_radius_m,
+            lap_min_revisit_time_s=self.settings.lap_min_revisit_time_s,
+            lap_min_revisit_distance_m=self.settings.lap_min_revisit_distance_m,
+            lap_gate_search_sample_every=self.settings.lap_gate_search_sample_every,
+            lap_gate_half_width_m=self.settings.lap_gate_half_width_m,
+            lap_min_lap_time_s=self.settings.lap_min_lap_time_s,
         )
         for step_cls in ordered_steps():
             # TODO: Switch ownership of DB to be in the step implementation directly.

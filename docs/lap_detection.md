@@ -1,18 +1,19 @@
 # Lap detection
 
-**Status: issue #55.** The logic is implemented and unit tested, but the
-pipeline doesn't run it yet.
+**Status: issue #55.** The logic is implemented and unit tested. `LapStep` is
+imported in `steps/__init__.py`, so it's registered, but its dependency
+`state_step` doesn't exist yet (see section 12).
 
 | Exists | Doesn't exist yet |
 | --- | --- |
-| This design doc | Registering `LapStep` in the pipeline |
-| `LapStep`, with its single-pass plumbing | `state_step`, which `LapStep` depends on |
-| `lap_utils.py`: dataclasses and every helper, implemented | A pytest job in CI |
-| `lap_constants.py`: the tunable constants | Tuning the constants against real runs |
+| This design doc | `state_step`, which `LapStep` depends on |
+| `LapStep` (`lap_step.py`) | A pytest job in CI |
+| `lap_utils.py`: the `Gate` dataclass and every helper | Tuning the tunables against real runs |
+| The `lap_*` tunables on `Settings` and `RunContext` | |
 | The `laps` table model and its Alembic migration | |
 | Unit tests: `tests/test_lap_utils.py` and `tests/test_lap_step.py` | |
 
-Section 15 lists what's left, in order.
+Section 13 lists what's left, in order.
 
 ---
 
@@ -44,14 +45,12 @@ without anyone having to configure anything for the track.
 | Term | Meaning |
 | --- | --- |
 | **Run** | One Penelope recording session, identified by `run_id`. |
-| **Point** | One row of `estimated_car_state`: a time and a position. There are about 100 per second (100 Hz). |
-| **Page** | The pipeline never loads a whole run at once. It reads it in pages of up to `PIPELINE_PAGE_SIZE` rows (100,000 by default), in time order. |
-| **Mode** | What the step does with a page. It's **searching for the gate** until the gate is found, then **counting laps** for the rest of the run. The run is read only once. |
+| **Point** | One row of `estimated_car_state`: a time and a position. |
 | **Local x/y** | A position in meters east (x) and north (y) of the run's first point. |
-| **Hitbox** | A small circle (3 m radius) around a visited point. If the car later comes back inside it, it has revisited that spot. |
+| **Heading** | The direction the car is driving at a point, as a unit vector (length 1). (0, 0) when the car isn't moving. |
+| **Hitbox** | A small circle (3 m radius by default) around a point. If the car later comes back inside it, it has revisited that spot. |
 | **Revisit** | The car coming back to a spot it already drove over. |
-| **Gate** | The start/finish line: a 10 m line segment across the track, perpendicular to the car's direction of travel, placed at the first revisit. |
-| **Heading** | The direction the car is driving, as a unit vector (length 1). |
+| **Gate** | The start/finish line: a 10 m segment across the track, perpendicular to the car's heading, centered on the first revisited point. |
 | **Crossing** | The car driving forward through the gate. Each counted crossing ends one lap and starts the next. |
 
 ## 3. Input and output
@@ -69,7 +68,9 @@ The primary key is (`run_id`, `time`). Note the spelling: the column really
 is called **`lattitude`** (two t's). The code uses it as spelled and doesn't
 rename it.
 
-The table has no `lap_id` column, and lap detection doesn't add one.
+The step reads it with `select_estimated_positions(run_id)` in
+`orion_core/queries/orion_queries.py`: just `time`, `lattitude`, and
+`longitude` for the whole run, ordered by time.
 
 ### Output: `laps`
 
@@ -90,39 +91,47 @@ The table has no `lap_id` column, and lap detection doesn't add one.
   end time is not. So a point at exactly a lap boundary belongs to the lap
   that starts there.
 - Lap membership comes **only** from these windows. Nothing is written back
-  to `estimated_car_state`, and there's no "valid lap" column.
+  to `estimated_car_state`.
 
 ## 4. Approach
 
-### Overview: one pass, two modes
+### Overview
 
-The step reads the run once, page by page, through the base class's `run`.
-Each page is handled in one of two modes:
+Unlike the other steps, `LapStep` reads the **whole run at once** instead of
+paging it. Then `transform` does four things, in order:
 
-1. **Searching for the gate.** Find the first place the car drives over
-   twice. That spot must be on the track's loop. Put a short start/finish
-   line there, called the **gate**, perpendicular to the car's direction of
-   travel. The gate is worked out from the data. Nothing is configured per
-   track.
-2. **Counting laps.** Once the gate exists, record every time the car drives
-   **forward** through it. Each counted crossing ends one lap and starts the
-   next.
-
-On the page where the gate is found, both happen: the search finds the gate,
-and then the same page is scanned for crossings from its first row.
+1. **Convert to meters.** Turn every latitude/longitude into local x/y
+   (section 5).
+2. **Find the gate.** Find the first place the car drives back over a spot
+   it already drove over. That spot must be on the track's loop. Put a short
+   start/finish line there, perpendicular to the car's heading (section 6).
+3. **Find crossings.** Record every time the car drives **forward** through
+   the gate, and drop crossings that come too soon after the previous one
+   (section 7).
+4. **Build laps.** Each counted crossing ends one lap and starts the next.
+   The last lap ends at the run's last point (section 8).
 
 ```
- searching for the gate                   counting laps
- ┌───────────────────────────────┐        ┌───────────────────────────────┐
- │ search each page until the     │  gate  │ scan that same page from its   │
- │ car revisits a spot; build the │ ─────► │ first row, then every later    │
- │ gate there                     │        │ page, cutting a lap at every   │
- │                                │        │ forward crossing of the gate   │
- └───────────────────────────────┘        └───────────────────────────────┘
+ lat/lon ──► local x/y ──► find_gate ──► find_crossings ──► apply_min_lap_time ──► build_lap_rows
+                            (sampled)      (every point)                              ──► laps
 ```
 
-The search usually ends after about one lap of data. On the run's last page,
-the run's end time is added as one last crossing, which closes the final lap.
+If there's no gate, step 3 is skipped and the whole run is one lap.
+
+### Why one read instead of pages
+
+The base class's pages exist because runs are too big to hold in memory. But
+this step only needs three columns. A 30-minute run at 100 Hz is about
+180,000 rows, which is a few MB as three numpy arrays.
+
+Reading it in one go keeps the code simple. With pages, the step had to carry
+state between them (the points searched so far, the previous page's last
+point, the open lap, the last crossing time) and still missed some crossings
+at page boundaries. With the whole run in one frame, every helper is a pure
+function of arrays, and there are no page-boundary cases at all.
+
+`pagination_key` is still set, because `PipelineStep` requires it, but
+`extract` doesn't use it.
 
 ### Why this method
 
@@ -131,7 +140,8 @@ Alternatives considered:
 1. **Configured start/finish coordinates per track.** Someone would have to
    record and maintain coordinates for every track and every cone layout,
    and every run would have to be matched to its track.
-2. **Placing it at the first datapoint** We may never revisit this point becuase it may lie off the repeated track.
+2. **Placing the gate at the first point.** The car may never come back to
+   it, because it may lie off the repeated loop (for example in the pits).
 3. **Analyzing the shape of the whole path** (for example, looking for
    repetition). More complex, and harder to explain and test.
 
@@ -139,6 +149,8 @@ The revisit-and-gate method needs no configuration, works on any closed
 loop, and every piece is simple geometry that can be unit tested on its own.
 
 ## 5. Converting to meters
+
+`to_local_xy(lat, lon)`.
 
 Latitude and longitude are **angles**, not distances, so a "3 m" hitbox can't
 be measured in degrees:
@@ -150,10 +162,7 @@ be measured in degrees:
   **82,630 m**.
 
 So every point is converted to flat x/y meters relative to an **origin**: the
-run's first point, (`lat0`, `lon0`). Both modes use the same origin, so the
-gate found while searching is in the same coordinates as the points used
-when counting laps. Each page is converted once, and the same x/y is used by
-both modes.
+run's first point, (`lat0`, `lon0`).
 
 ```
 x = EARTH_RADIUS_M * radians(lon - lon0) * cos(radians(lat0))
@@ -167,316 +176,225 @@ x points east and y points north, both in meters. This is an
 and uses the origin's latitude to scale longitude. Over an area the size of a
 track (a few hundred meters), the error is negligible.
 
-## 6. Searching for the gate
+`EARTH_RADIUS_M` lives in `lap_constants.py`. It's a physical constant, not
+a tunable.
+
+## 6. Finding the gate
+
+`find_gate` downsamples the run, finds the first revisit with
+`find_first_revisit`, and builds a `Gate` there.
 
 ### Downsampling
 
-Searching for the gate only looks at **every 5th point**
-(`GATE_SEARCH_SAMPLE_EVERY = 5`). This is a deliberate speed decision.
+The search only looks at **every 5th point**
+(`lap_gate_search_sample_every = 5`). This is a deliberate speed decision.
 
-- The count runs across the whole run, not per page. The step keeps a running
-  **global row index**, and a row is sampled when
-  `global_index % GATE_SEARCH_SAMPLE_EVERY == 0`. This keeps the spacing even across
-  page boundaries.
-- **To undo it**, set `GATE_SEARCH_SAMPLE_EVERY = 1`. The search then uses every
-  point, and nothing else has to change.
-- Counting laps always uses every point.
+- Set it to 1 to search every point. Nothing else has to change.
+- Finding crossings always uses every point.
 
-Why: a 30-minute run at 100 Hz has about **180,000 points**. In the worst case
-(no revisit is ever found), every point is compared with every earlier point.
-That comparison is vectorized (see "Why vectorized" below), so even the worst
-case takes a second or two rather than minutes.
-
-Usually the search ends after the first lap, so in practice it's much cheaper.
 At 100 Hz and 10 m/s, every 5th point is still a point every 50 cm, much
-finer than the 3 m hitbox. The visited points take only a few MB.
+finer than the 3 m hitbox.
 
-### Visited points
+### Headings
 
-Every sampled point is stored in a `VisitedPoints`: four parallel numpy
-arrays, where index i of each array is the same point.
+`headings(x, y)` gives the unit heading at every point, from its neighbors
+(`np.gradient`):
 
-| Field | Meaning |
-| --- | --- |
-| `x`, `y` | Position in local meters |
-| `time_s` | Seconds since the run's first point |
-| `distance_m` | Total distance driven up to this point |
+- At an interior point, the heading points from the point before it to the
+  point after it.
+- At the first and last points, it uses the point itself and its one
+  neighbor.
+- It's divided by its own length, so even a crawling car gets a unit
+  heading.
+- Where the neighbors are at exactly the same position (for example repeated
+  GPS fixes while parked), the heading is **(0, 0)**. That point counts as
+  **not moving**.
 
-These are the candidates a later point can revisit, not revisits themselves.
-`VisitedPoints` persists across pages, and is extended **once per page** (by
-concatenating the whole page onto each array), not once per point.
+**Example:** neighbors (−1, 0) and (1, 0) give (2, 0) / 2 = (1, 0): driving
+in +x (east).
 
-### Why vectorized
-
-The search previously compared each new point against every remembered point in a
-Python loop. That's about 650 million iterations in the worst case (a long run
-with no revisit), which takes minutes. Storing points in a growing DataFrame
-would be worse, because adding a row copies the whole frame.
-
-Instead, the search does this:
-
-- store points as numpy arrays,
-- extend them once per page instead of once per point,
-- compare each point against all earlier points in a single vectorized step.
-
-Same result, but the worst case drops to a second or two. The math uses numpy
-arrays rather than pandas Series because the loop runs tens of thousands of
-times, and pandas adds a fixed overhead to every operation.
-
-The outer loop over points stays a loop. Each point may only be compared with
-earlier points, the search needs the earliest revisit, and comparing all
-points with all points at once would need gigabytes of memory.
+The heading at the gate center comes from the **sampled** points, so its
+neighbors are 5 points away.
 
 ### Distance driven
 
-Distance driven is worked out for a whole page at once. The step length
-between consecutive sampled points is the straight-line distance:
+`distance_driven(x, y)` is the running total (cumsum) of the straight-line
+step between consecutive points, starting at 0.
 
-```
-step = sqrt(dx^2 + dy^2)
-```
-
-The page's first step is measured from the last point already in
-`VisitedPoints`, if there is one. `distance_m` is then the running total
-(cumsum) of the steps, starting from the last `distance_m` in
-`VisitedPoints`, or 0 for the run's first point. The distance driven between
-two visited points P and Q is simply `distance_m[Q] - distance_m[P]`, which
-costs only one extra number per point.
-
-**Example:** sampled points (0, 0), (3, 4), (6, 8) have `distance_m` 0, 5, 10.
-(Each step is a 3-4-5 triangle.)
+**Example:** points (0, 0), (3, 4), (6, 8) give 0, 5, 10. (Each step is a
+3-4-5 triangle.)
 
 Why it matters: a parked car can sit still for minutes, so the time check
 alone would let it "revisit" itself. Its distance driven doesn't grow, so the
 distance check stops that.
 
-### The hitbox test
-
-Q is inside P's hitbox when the distance between them is at most
-`HITBOX_RADIUS_M`. By Pythagoras:
-
-```
-(xQ - xP)^2 + (yQ - yP)^2 <= HITBOX_RADIUS_M^2
-```
-
-Comparing squared distances avoids a square root. `squared_distances`
-computes the left-hand side from Q to many points P at once, as one numpy
-operation.
-
-**Example** (radius 3, so radius² = 9), with P = (10, 10):
-
-- Q = (12, 11): `2² + 1² = 4 + 1 = 5 <= 9`, so Q is **inside**.
-- Q = (13, 13): `3² + 3² = 9 + 9 = 18 > 9`, so Q is **outside**.
-
 ### The revisit rule
 
-An earlier visited point P is a **candidate** for a later point Q when all
-three of these are true:
+An earlier point P is a **candidate** for a later point Q when all four of
+these are true:
 
-1. **Q is inside P's hitbox:** `(xQ - xP)^2 + (yQ - yP)^2 <= HITBOX_RADIUS_M^2`.
-2. **Enough time has passed:** `time_s[Q] - time_s[P] >= MIN_REVISIT_TIME_S`
-   (5 s). Consecutive points are always inside each other's hitboxes, and this
-   excludes them.
-3. **Enough distance was driven:** `distance_m[Q] - distance_m[P] >= MIN_REVISIT_DISTANCE_M`
+1. **Q is inside P's hitbox:** `(xQ - xP)^2 + (yQ - yP)^2 <= lap_hitbox_radius_m^2`.
+   Comparing squared distances avoids a square root.
+2. **Enough time has passed:** `time_s[Q] - time_s[P] >= lap_min_revisit_time_s`
+   (5 s). Consecutive points are always inside each other's hitboxes, and
+   this excludes them.
+3. **Enough distance was driven:** `distance_m[Q] - distance_m[P] >= lap_min_revisit_distance_m`
    (50 m). This excludes a parked or crawling car.
+4. **P is moving:** its heading isn't (0, 0), so the gate has a direction.
 
-For each page, `find_lap_start`:
+**Hitbox example** (radius 3, so radius² = 9), with P = (10, 10):
 
-1. Works out the page's `distance_m` (above) and extends `VisitedPoints` with
-   the whole page. This happens first, so every index below refers to
-   `VisitedPoints` itself.
-2. For each of the page's points Q, at position q, in time order:
-   1. **Cutoff.** `time_s` and `distance_m` only ever increase. So every point
-      before some position is at least 5 s and 50 m of driving earlier than
-      Q, and every point after that position isn't. Binary search finds it:
+- Q = (12, 11): `2² + 1² = 5 <= 9`, so Q is **inside**.
+- Q = (13, 13): `3² + 3² = 18 > 9`, so Q is **outside**.
 
-      ```
-      time_cut = searchsorted(time_s[:q], time_s[q] - MIN_REVISIT_TIME_S, side="right")
-      dist_cut = searchsorted(distance_m[:q], distance_m[q] - MIN_REVISIT_DISTANCE_M, side="right")
-      cutoff   = min(time_cut, dist_cut)
-      ```
+### `find_first_revisit`
 
-      Only points before `cutoff` can be candidates, so this replaces checking
-      rules 2 and 3 point by point.
-   2. **Hitbox test.** `d2 = squared_distances(Q, x[:cutoff], y[:cutoff])`.
-      The candidates are the indices where `d2 <= HITBOX_RADIUS_M^2`.
-   3. **Closest first.** Q may be inside several visited points' hitboxes.
-      The candidates are tried in order of smallest `d2`. The first candidate
-      with a heading (below) becomes the gate center, and the search ends.
-      If there are no candidates, or none has a heading, the search moves on
-      to the next Q.
-3. Returns None if none of the page's points found a revisit.
+1. **Cutoffs, all at once.** `time_s` and `distance_m` only ever increase.
+   So for each Q, every point before some index is far enough back in both
+   time and distance, and every point after it isn't. Binary search
+   (`np.searchsorted`) finds that index for every Q in one call:
 
-`VisitedPoints` keeps the whole page either way. Once the gate is built, the
-step replaces `VisitedPoints` with an empty one to free its memory, since
-it's never searched again.
+   ```
+   time_cut     = searchsorted(time_s, time_s - lap_min_revisit_time_s, side="right")
+   distance_cut = searchsorted(distance_m, distance_m - lap_min_revisit_distance_m, side="right")
+   cutoff       = min(time_cut, distance_cut, index of Q)
+   ```
 
-### Heading at P
+   This replaces checking rules 2 and 3 point by point. Capping at Q's own
+   index means Q is only ever compared with earlier points.
+2. **Hitbox test.** For each Q in time order (skipping those with
+   `cutoff == 0`), compute the squared distance from Q to every point
+   before its cutoff, in one numpy operation. The candidates are the ones
+   inside the hitbox that are moving.
+3. **Closest wins.** The first Q with any candidates ends the search, and the
+   candidate closest to Q is returned. That candidate is the gate center.
+4. Returns None if no Q has a candidate.
 
-The car's direction at P comes from P's neighbors in `VisitedPoints`:
+The outer loop over Q stays a Python loop. The search needs the *earliest*
+revisit, so it can stop as soon as it finds one, and comparing all points
+with all points at once would need gigabytes of memory. Each iteration is a
+single vectorized comparison, so even the worst case (no revisit on a long
+run) takes about a second or two.
 
-- `before` is the visited point at P's index − 1, or P itself if P is
-  index 0.
-- `after` is the visited point at P's index + 1, or P itself if there
-  isn't one.
-- `h = after − before`.
-- If `|h|` is 0, `before` and `after` are at exactly the same position (for
-  example repeated GPS fixes while parked), so P has **no heading**:
-  `heading_at` returns None and the next candidate is tried.
-- Otherwise the unit heading is `ĥ = h / |h|`.
+### Building the gate
 
-Only `|h| = 0` is rejected. There's no minimum span, so even a crawling car
-gets a heading (section 13).
+The `Gate` dataclass stores:
 
-**Example:** before = (−1, 0), after = (1, 0) gives h = (2, 0), |h| = 2, and
-ĥ = (1, 0): driving in +x (east).
+| Field | Meaning |
+| --- | --- |
+| `x`, `y` | The gate center: the revisited point P |
+| `heading_x`, `heading_y` | The unit heading at P: the direction the car drives through the gate |
+| `half_width_m` | How far the gate reaches on each side of its center (`lap_gate_half_width_m`, 5 m) |
 
-### No gate
-
-If no gate is found after all pages, the car never came back to a spot it
-had already driven over. **The whole run is one lap.** This needs no special
-code: no page counts laps, so every page returns no rows, and the last page
-adds lap 1 from the run's start to its end.
-
-## 7. Building the gate
-
-Given the gate center P and the heading ĥ at P:
-
-- **Center:** `C = (xP, yP)`.
-- **Normal:** `n̂ = (−ĥy, ĥx)`. This is the heading rotated 90° to the left,
-  and it points along the gate line.
-- **Endpoints:** `G1 = C + w·n̂` is the gate's **left** end and
-  `G2 = C − w·n̂` its **right** end, when facing the driving direction.
-  `w = GATE_HALF_WIDTH_M` (5 m), so the gate is 10 m long in total.
-
-The `Gate` dataclass stores just G1 and G2.
-
-**Why the order matters.** The side test in section 8 (`is_past_gate`) measures which side of
-the arrow G1 → G2 a point is on. Because G1 is on the left and G2 on the
-right, that arrow points to the car's right, so "ahead of the line" always
-comes out positive and "behind" negative. Swap them and every sign flips,
-which would count laps driven backwards instead.
-
-**Example:** C = (0, 0), ĥ = (1, 0) (driving +x) gives n̂ = (0, 1),
-G1 = (0, 5), and G2 = (0, −5).
+The gate line goes through the center, perpendicular to the heading, and is
+`2 × half_width_m` (10 m) long.
 
 ```
-                        G1 = C + w·n̂   (0, 5)    left end
-                         │
+                         ▲ left = +5
  ════════════════════════╪════════════════════  track edge
                          │
-                         │
-     car ───►            C ──────► ĥ            (heading, +x)
-                         │
+     car ───►         center ──────► heading      (heading, +x)
                          │
  ════════════════════════╪════════════════════  track edge
-                         │
-                        G2 = C − w·n̂   (0, −5)   right end
+                         ▼ left = −5
 
-   behind the line: side < 0  │  past the line: side >= 0
+        behind the line: ahead < 0  │  past the line: ahead >= 0
 ```
 
 **Why the gate is wider than the hitbox.** The revisit point was within 3 m
-(the hitbox radius) of C, so the car's path on later laps goes through within
-about 3 m of C too. The gate reaches 5 m on each side, so those passes cross
-the line comfortably inside it, with room for the driver taking a slightly
-different line.
+(the hitbox radius) of the center, so the car's path on later laps goes
+within about 3 m of it too. The gate reaches 5 m on each side, so those
+passes cross the line comfortably inside it, with room for the driver taking
+a slightly different line.
 
-## 8. Counting laps: detecting crossings
+### No gate
 
-Counting laps looks at every pair of consecutive points, **A then B**.
+If `find_gate` returns None, the car never came back to a spot it had
+already driven over. **The whole run is one lap.** No crossings are looked
+for, and `build_lap_rows` makes lap 1 from the run's start to its end.
 
-### The cross product
+## 7. Finding crossings
 
-For two arrows u and v:
+`find_crossings(x, y, gate)` looks at every pair of consecutive points,
+**A then B**, over the whole run (not downsampled).
 
-```
-cross(u, v) = ux·vy − uy·vx
-```
+### Two coordinates relative to the gate
 
-It's a single number, and only its sign matters here. Stand at the tail of u
-and look along it: if v points to your **left**, the result is positive; to
-your **right**, negative; along the same line, zero.
-
-### The side test
+Every point is measured relative to the gate center, along two directions:
 
 ```
-side(P) = cross(G2 − G1, P − G1)
+ahead = (x - gate.x) * heading_x + (y - gate.y) * heading_y
+left  = (y - gate.y) * heading_x - (x - gate.x) * heading_y
 ```
 
-This asks which side of the arrow G1 → G2 the point P lies on. Since that
-arrow points to the driver's right (section 7), points ahead of the line come
-out positive.
-
-- `side(P) < 0`: P is **behind** the line (the car hasn't reached it yet).
-- `side(P) >= 0`: P is **on or past** the line.
-
-In code, `is_past_line(start, end, P)` is `cross(end − start, P − start) >= 0`
-(P is on or left of the arrow start → end), and `is_past_gate(P)` is
-`is_past_line(G1, G2, P)`, i.e. `side(P) >= 0`.
+- `ahead` is how far the point is past the gate line, along the heading.
+  Negative means behind the line.
+- `left` is how far the point is to the left of the gate center, along the
+  line, when facing the heading.
 
 ### The two conditions
 
 A move from A to B is counted only if **both** hold.
 
-**1. Forward across the line:** `side(A) < 0` and `side(B) >= 0`.
+**1. Forward across the line:** `ahead(A) < 0` and `ahead(B) >= 0`.
 
-A was behind the line and B is on or past it. Driving through backwards fails,
-because then A is the point that's past the line. The heading doesn't need to
-match exactly: any move from behind to past counts. A point exactly on the line
-counts as "past", so the car is counted once, not twice.
+A was behind the line and B is on or past it. Driving through backwards
+fails, because then A is the point that's past the line. The heading doesn't
+need to match exactly: any move from behind to past counts. A point exactly
+on the line counts as "past", so the car is counted once, not twice.
 
-**2. Inside the gate:** G1 and G2 are on opposite sides of the line through A
-and B (`is_between_gate`).
+**2. Inside the gate:** where the step A → B reaches the line,
+`|left| <= half_width_m`.
 
-```
-d1 = cross(B − A, G1 − A)
-d2 = cross(B − A, G2 − A)
-```
+The step reaches the line a fraction `t = ahead(A) / (ahead(A) − ahead(B))`
+of the way from A to B, so `left` there is
+`left(A) + t × (left(B) − left(A))`. Condition 1 alone only checks the
+gate's line, which is infinitely long in the math. This stops a crossing of
+that line elsewhere on the track (for example a parallel straight 40 m
+away) from counting.
 
-d1 and d2 say which side of the car's path each gate end is on. The code
-checks `(d1 >= 0) != (d2 >= 0)`, i.e. `is_past_line(A, B, G1) !=
-is_past_line(A, B, G2)`: exactly one end is on or left of the path, so the
-path went between the ends. (Because 0 counts as "left", a path exactly
-through G1 counts but one exactly through G2 doesn't. With real GPS
-coordinates that never matters.) Condition 1 alone only checks the gate's line,
-which is infinitely long in the math; this stops a crossing of that line
-elsewhere on the track (for example a parallel straight 40 m away) from
-counting.
+`find_crossings` returns the index of **B** (the first point past the line)
+for every counted step.
 
 ### Worked examples
 
-All use C = (0, 0), ĥ = (1, 0), n̂ = (0, 1), and w = 5, so G1 = (0, 5),
-G2 = (0, −5), and G2 − G1 = (0, −10).
+All use center (0, 0), heading (1, 0), and half width 5. Then `ahead = x`
+and `left = y`.
 
-**Counts.** A = (−2, 2), B = (1.5, 2).
+**Counts.** A = (−1, −4), B = (1, −6).
 
-- side(A) = cross((0, −10), (−2, −3)) = −20: behind.
-- side(B) = cross((0, −10), (1.5, −3)) = 15: past. Condition 1 holds.
-- B − A = (3.5, 0). d1 = cross((3.5, 0), (2, 3)) = 10.5 and
-  d2 = cross((3.5, 0), (2, −7)) = −24.5. One is ≥ 0 and the other isn't, so
-  it's **counted**.
+- ahead(A) = −1 < 0 and ahead(B) = 1 ≥ 0. Condition 1 holds.
+- t = −1 / (−1 − 1) = 0.5, so left at the line = −4 + 0.5 × (−6 − (−4)) = −5.
+  |−5| ≤ 5, so it's **counted**.
 
-**Outside the gate.** A = (−1, 40), B = (1, 40).
+**Outside the gate.** A = (−1, 20), B = (1, 20).
 
-- Condition 1 holds (A is behind, B is past).
-- B − A = (2, 0). d1 = cross((2, 0), (1, −35)) = −70 and
-  d2 = cross((2, 0), (1, −45)) = −90. Same sign, so it's **not counted**.
+- Condition 1 holds, but left at the line = 20 > 5, so it's **not counted**.
 
-**Wrong way.** A = (1.5, −3), B = (−1.5, −3).
+**Wrong way.** A = (1, 0), B = (−1, 0).
 
-- side(A) = cross((0, −10), (1.5, −8)) = 15, which is ≥ 0. Condition 1 fails,
-  so it's **not counted**.
+- ahead(A) = 1 ≥ 0, so condition 1 fails and it's **not counted**.
 
 ### Minimum lap time
 
-Crossings are processed in order. A crossing is **kept** only if there's no
-counted crossing yet, or `t − last_counted >= MIN_LAP_TIME_S` (10 s). Each
-kept crossing becomes the new `last_counted`; rejected ones don't. The last
-counted crossing is carried across pages (`_last_crossing_time`). This is
-`apply_min_lap_time`, applied after `find_crossings`.
+`apply_min_lap_time(start_time, crossing_times, lap_min_lap_time_s)`.
 
-## 9. Laps
+Crossings are processed in order, starting from the run's start time as the
+first lap boundary. A crossing is **kept** only if it's at least
+`lap_min_lap_time_s` (10 s) after the last boundary. Each kept crossing
+becomes the new boundary; dropped ones don't.
+
+This drops:
+
+- **GPS jitter at the line** (forward, back, forward): the second forward
+  step is within 10 s of the first.
+- **A crossing right after the run starts**, for example when the car starts
+  just behind the line. Without the start as the first boundary, that would
+  make a lap 1 a few seconds long.
+
+## 8. Laps
+
+`build_lap_rows(run_id, start_time, end_time, crossing_times)`.
 
 ### Boundaries
 
@@ -488,13 +406,9 @@ counted crossing is carried across pages (`_last_crossing_time`). This is
 - There's no time interpolation. At 100 Hz, points are 10 ms apart, which is
   precise enough.
 - **Lap 1** starts at the run's first point.
-- **Each counted crossing** closes the current lap and opens the next.
-  `lap_id` starts at 1 and increases by 1.
-- **The final lap** ends at the time of the run's last point. On the page
-  whose last time equals the run's end time (which `prepare` reads up front),
-  that time is added as one last crossing, so it closes the final lap. If the
-  run's last point was itself a counted crossing, the end time is already in
-  the list and isn't added again, so there's never an empty final lap.
+- **The final lap** ends at the run's last point. If the run's last point was
+  itself a counted crossing, it isn't added again, so there's never an empty
+  final lap.
 
 ### Timing example
 
@@ -516,14 +430,6 @@ A run from 12:00:00 to 12:02:40, with counted crossings at 12:01:05 and
 - **Bad laps are kept unchanged.** A 15-minute lap 7 (a spin, a red flag) is
   just lap 7. Filtering laps is a decision for whatever uses them later.
 - **There's no "time between laps."** Every point belongs to exactly one lap.
-- **No gate** gives one lap: (1, first time, last time).
-- **An empty run** (no rows) writes nothing.
-
-### Gate at the first point
-
-If the gate center is the run's first point, there's no point before it on
-the car's first pass, so that pass isn't a crossing. That's fine: lap 1
-starts at the run's first point, which is the gate anyway.
 
 ### The final point
 
@@ -532,80 +438,43 @@ A known edge: under `[start, end)`, the run's very last point has
 **Whoever later assigns points to laps should treat the final lap's end as
 inclusive.** This isn't handled in code now.
 
-## 10. Pagination
-
-The step never holds the whole run in memory. The base class reads the run
-once, in pages in time order, and the step keeps a small amount of state
-between pages. Apart from `found_gate`, it's all plain attributes on the
-step. The origin, start time, and open lap are set by `_setup_origin` on the
-first page, and everything else is reset in `prepare`. The client never
-yields an empty page.
-
-| Carried across pages | Where | Used by | Why |
-| --- | --- | --- | --- |
-| `found_gate` | `ctx` (RunContext) | both | Which mode the page is in: searching until it's True, counting laps once it is. |
-| The `Gate` | step (`_gate`) | counting laps | Set in the same place as `found_gate`, and reset with it in `prepare`. |
-| The origin (`_origin_lat`, `_origin_lon`) and `_start_time` | step | both | Recorded from the first row of the first page. Every later x/y and `time_s` is relative to them. |
-| The run end time | step (`_run_end_time`) | both | Read once in `prepare` (`MAX(time)` for the run). On the page whose last time equals it, it's added as the last crossing, which closes the final lap. |
-| The `VisitedPoints` | step (`_visited`) | searching | A revisit is usually of a point on an earlier page. The running distance driven continues from the last `distance_m` in `VisitedPoints`. Cleared once the gate is found. |
-| The rows seen so far | step (`_rows_seen`) | searching | So downsampling keeps every 5th row of the *run*, not of each page. |
-| The last point (x, y, time) of the previous page | step (`_last_point`) | counting laps | Paired with the new page's first point, so a crossing between two pages isn't missed. Updated on every page, in both modes. |
-| The current lap id | step (`_current_lap_id`) | counting laps | Lap numbers continue across pages. |
-| The current lap's start | step (`_current_lap_start`) | counting laps | A lap usually spans several pages. Lap 1 starts at the run start. |
-| The last counted crossing time | step (`_last_crossing_time`) | counting laps | The minimum lap time check needs it, even across pages. |
-
-**Why the gate isn't on RunContext.** RunContext is a Pydantic model, so its
-field types must be importable at runtime. Importing `Gate` from the steps
-package would create a circular import, because the steps package imports
-RunContext. So RunContext holds only the boolean, and the gate stays on the
-step.
-
-**Why the carried point matters.** If the car crosses the gate between the
-last point of page 4 and the first point of page 5, neither page contains
-both A and B. Without carrying the last point over, that lap would silently
-merge with the next one.
-
-```
- page 4                        │  page 5
- ... ●     ●     ●     A ──────┼──► B     ●     ●  ...
-                    side < 0   │ gate     side >= 0
-           previous = A ───────┘ checked against B
-```
-
-## 11. Edge cases
+## 9. Edge cases
 
 | Case | What happens |
 | --- | --- |
-| Empty run (no rows) | There are no pages, so nothing is written. The end time from `prepare` is None. |
-| No revisit (e.g. a straight acceleration run) | No gate. Every page returns no rows, and the last page adds one lap: (1, first time, last time). |
-| Gate found partway through a page | That same page is scanned for crossings from its first row, plus the previous page's last point. |
-| Car's first drive through the gate center is on an earlier page than the revisit | That crossing isn't counted, so lap 1 also covers the first real lap (section 13). |
-| Gate at the run's first point | The first pass isn't a crossing (there's no point before it). Lap 1 still starts at the gate. |
-| Car parked on the line at the start | Its sampled points are 0 m driven apart, so they can't revisit each other. A parked point whose two neighbors are at exactly the same position has no heading, so it can't be the gate center; the next-closest candidate is tried. |
-| Car standing still mid-run | Its distance driven doesn't grow, so it fails the `MIN_REVISIT_DISTANCE_M` check and can't revisit itself. |
-| GPS jitter at the line (forward, back, forward) | The backward step isn't counted, and the second forward step is within `MIN_LAP_TIME_S` of the first, so only one crossing counts. |
-| Crossing the gate's extended line elsewhere | G1 and G2 are on the same side of the path (`is_between_gate` is False), so it isn't counted. |
-| The run's last point is a crossing | The end time is already a crossing, so it isn't added again. No empty final lap. |
-| Driving through the gate backwards | `side(A) >= 0`, so condition 1 fails and it isn't counted. |
-| A crossing on a page boundary | The previous page's last point is paired with this page's first point, so it's found. |
-| The run's final point | Excluded from the final lap by the half-open rule. Consumers should treat the final lap's end as inclusive (section 9). |
+| Empty run (no rows) | `extract` yields nothing, so `transform` never runs and nothing is written. The run's old laps are still deleted by `prepare`. |
+| No revisit (e.g. a straight acceleration run) | No gate. One lap: (1, first time, last time). |
+| Gate at the run's first point | The first point is on the line, not behind it, so it's not a crossing. Lap 1 starts there anyway. |
+| Starting just behind the line | The first crossing is within `lap_min_lap_time_s` of the start, so it's dropped. |
+| Out-lap from the pits | If the pit lane passes through the gate more than `lap_min_lap_time_s` after the start, that pass ends lap 1 (the out-lap). If sooner, the out-lap joins lap 1. |
+| Car parked at the start | Its points are 0 m driven apart, so they can't revisit each other. A parked point with no heading can't be the gate center. |
+| Car standing still mid-run | Its distance driven doesn't grow, so it fails the distance check and can't revisit itself. |
+| GPS jitter at the line (forward, back, forward) | The backward step isn't counted, and the second forward step is within `lap_min_lap_time_s` of the first, so only one crossing counts. |
+| Crossing the gate's extended line elsewhere | `|left|` at the line is more than `half_width_m`, so it isn't counted. |
+| Driving through the gate backwards | `ahead(A) >= 0`, so condition 1 fails and it isn't counted. |
+| The run's last point is a crossing | It isn't added again as the end time. No empty final lap. |
+| The run's final point | Excluded from the final lap by the half-open rule. Consumers should treat the final lap's end as inclusive (section 8). |
 
-## 12. Tunable constants
+## 10. Tunables
 
-These live in `lap_constants.py` and are passed into the `lap_utils`
-functions as arguments so `lap_utils` stays pure. They are
-**untuned starting guesses** and should potentially move to `Settings` later.
+The tunables are `lap_*` fields on `Settings` (`orion_core/settings.py`), so
+they can be set per environment with `LAP_*` variables (see `.env.example`).
+`PipelineRunner` copies them onto `RunContext`, and `LapStep` passes them
+into the `lap_utils` functions as arguments, so `lap_utils` stays pure.
+Tests can override them per run with `RunContext(run_id=..., lap_...=...)`.
 
-| Name | Value | Meaning | Tradeoff |
+They are **untuned starting guesses**.
+
+| Setting (env var) | Default | Meaning | Tradeoff |
 | --- | --- | --- | --- |
-| `HITBOX_RADIUS_M` | 3.0 | Radius of each visited point's hitbox | Bigger finds a revisit more easily (the driver's line varies lap to lap), but risks false revisits where two parts of the track come close. Smaller is stricter but may miss the revisit if the line changes. |
-| `MIN_REVISIT_TIME_S` | 5.0 | Minimum time between two points for a hit to count | Too small lets slow driving match itself. Too large could skip a very short loop. |
-| `MIN_REVISIT_DISTANCE_M` | 50.0 | Minimum distance driven between two points for a hit to count | Too small lets a slowly creeping car match itself. Too large misses tracks shorter than it (not realistic for FSAE). |
-| `GATE_SEARCH_SAMPLE_EVERY` | 5 | Searching for the gate only looks at every Nth point | Bigger is faster but spaces sampled points further apart. Set to 1 to use every point. |
-| `GATE_HALF_WIDTH_M` | 5.0 | The gate reaches this far on each side of its center (10 m total) | Wider tolerates different racing lines, but risks catching a nearby, parallel part of the track. Should stay larger than `HITBOX_RADIUS_M`. |
-| `MIN_LAP_TIME_S` | 10.0 | Minimum time between two counted crossings | Bigger suppresses more jitter, but must stay below the fastest real lap. |
+| `lap_hitbox_radius_m` (`LAP_HITBOX_RADIUS_M`) | 3.0 | Radius of each point's hitbox, in meters | Bigger finds a revisit more easily (the driver's line varies lap to lap), but risks false revisits where two parts of the track come close. Smaller is stricter but may miss the revisit if the line changes. |
+| `lap_min_revisit_time_s` (`LAP_MIN_REVISIT_TIME_S`) | 5.0 | Minimum time between two points for a revisit to count | Too small lets slow driving match itself. Too large could skip a very short loop. |
+| `lap_min_revisit_distance_m` (`LAP_MIN_REVISIT_DISTANCE_M`) | 50.0 | Minimum distance driven between two points for a revisit to count | Too small lets a slowly creeping car match itself. Too large misses tracks shorter than it (not realistic for FSAE). |
+| `lap_gate_search_sample_every` (`LAP_GATE_SEARCH_SAMPLE_EVERY`) | 5 | The gate search only looks at every Nth point | Bigger is faster but spaces sampled points further apart. Set to 1 to use every point. |
+| `lap_gate_half_width_m` (`LAP_GATE_HALF_WIDTH_M`) | 5.0 | The gate reaches this far on each side of its center (10 m total) | Wider tolerates different racing lines, but risks catching a nearby, parallel part of the track. Should stay larger than the hitbox radius. |
+| `lap_min_lap_time_s` (`LAP_MIN_LAP_TIME_S`) | 10.0 | Minimum time between two lap boundaries | Bigger suppresses more jitter, but must stay below the fastest real lap. |
 
-## 13. Known limitations
+## 11. Known limitations
 
 These are deliberately not handled in this design.
 
@@ -614,113 +483,69 @@ These are deliberately not handled in this design.
   straight) can create a revisit partway round the lap. Out-and-back roads do
   the same. The gate would then be in the wrong place.
 - **Noisy heading.** The heading comes from the nearest *sampled* neighbors
-  only, and only a span of exactly 0 is rejected, so a nearly stopped car at
-  the gate center can give a noisy heading.
+  only, so a nearly stopped car at the gate center can give a noisy heading.
 - **Parked jitter adds distance.** If the position jitters while the car is
   parked, each jitter step adds to the distance driven, so a long enough stop
   could pass the distance check.
 - **Figure-eights.** A layout like skidpad, where the car loops in both
   directions through the same center, gives odd laps.
-- **Worst-case search time.** The search's worst case (no revisit on a very long
-  run) compares every point with every earlier point. The comparisons are
-  vectorized (section 6), so this takes about a second or two. If that's ever
-  too slow, a spatial grid (only comparing against points in nearby cells) is
-  still an option.
-- **The first lap can merge with the pre-lap.** If the car's first drive
-  through the gate center P is on an earlier page than the one where the
-  revisit is found, that crossing isn't counted, so lap 1 covers the pre-lap
-  and the first real lap. This is rare, since it needs the first lap to span
-  a page boundary. Usually P is on the same page, and the scan from the
-  page's first row counts it.
-- **A crossing just before a page boundary can be missed.** When the gate is
-  found near the start of a page, a crossing a few points before the end of
-  the previous page (other than the final pair) is missed, because only the
-  previous page's last point is carried. The two laps on either side merge.
-  This is rare.
-- **Untuned constants.** None of the constants have been checked against real
+- **Worst-case search time.** With no revisit on a very long run, every
+  sampled point is compared with every earlier one. That's vectorized, so it
+  takes about a second or two. If that's ever too slow, a spatial grid (only
+  comparing against points in nearby cells) is an option.
+- **The whole run is in memory.** Fine for three columns of a normal run
+  (a few MB). A very long run would need paging again.
+- **Untuned defaults.** None of the tunables have been checked against real
   runs.
 
-## 14. Code layout
+## 12. Code layout
 
 | File | What it is |
 | --- | --- |
-| `services/pipeline/src/orion_pipeline/steps/lap_step/lap_step.py` | `LapStep`: attributes, `prepare`, `extract`, `transform`, and its one-job helpers. Real code. |
-| `services/pipeline/src/orion_pipeline/runner/run_context.py` | `RunContext`, which carries `found_gate` between pages. |
-| `services/pipeline/src/orion_pipeline/steps/lap_step/lap_constants.py` | `EARTH_RADIUS_M` and the tunable constants from section 12. |
-| `services/pipeline/src/orion_pipeline/steps/lap_step/lap_utils.py` | Pure geometry helpers and the dataclasses. |
-| `services/pipeline/tests/test_lap_utils.py` | Unit tests for each `lap_utils` helper. |
-| `services/pipeline/tests/test_lap_step.py` | End-to-end tests that drive `LapStep` page by page on synthetic tracks, with mocked clients. |
-| `packages/orion_core/src/orion_core/models/orion/laps_model.py` | The `Lap` model (`laps` table). It replaced the unused `Metrics` draft that was in this file. |
+| `services/pipeline/src/orion_pipeline/steps/lap_step/lap_step.py` | `LapStep`: `extract` (one query for the whole run) and `transform` (the four stages in section 4). |
+| `services/pipeline/src/orion_pipeline/steps/lap_step/lap_utils.py` | The `Gate` dataclass and the pure geometry helpers. |
+| `services/pipeline/src/orion_pipeline/steps/lap_step/lap_constants.py` | `EARTH_RADIUS_M`. |
+| `packages/orion_core/src/orion_core/settings.py` | The `lap_*` tunables (section 10). |
+| `services/pipeline/src/orion_pipeline/runner/run_context.py` | `RunContext`, which carries the `lap_*` tunables to the step. |
+| `packages/orion_core/src/orion_core/queries/orion_queries.py` | `select_estimated_positions`, the step's query. |
+| `packages/orion_core/src/orion_core/models/orion/laps_model.py` | The `Lap` model (`laps` table). |
 | `packages/orion_core/alembic/versions/20261026_466a05a95692_add_laps_table.py` | Migration that creates (and on downgrade drops) `laps`. |
+| `services/pipeline/tests/test_lap_utils.py` | Unit tests for each `lap_utils` helper, plus `find_gate` on synthetic ovals (clean, started mid-turn, noisy, with a pit lane). |
+| `services/pipeline/tests/test_lap_step.py` | End-to-end tests that run `LapStep` on synthetic circles, with mocked clients. |
 
 ### `lap_utils` functions
 
 | Function | Purpose |
 | --- | --- |
-| `to_local_xy` | Latitude/longitude → local x/y meters (equirectangular, section 5). |
-| `seconds_since` | Seconds from the run's start to each time. |
-| `downsample` | Keep rows whose global index is divisible by `every_n`. |
-| `squared_distances` | Squared distance from one point to many points at once, for the hitbox test. |
-| `heading_at` | Unit heading at a visited point from its neighbors, or None if they're at the same position. |
-| `find_lap_start` | Extend `VisitedPoints` with one page's sampled points, then search them in order and return the first revisit (closest candidate with a heading) and its heading. |
-| `build_gate` | Build a `Gate` (G1 left, G2 right) from a center, heading, and half width. |
-| `cross_2d` | The 2D cross product `ux·vy − uy·vx`. |
-| `is_past_line` | Whether a point is on or left of the arrow start → end (cross product ≥ 0). |
-| `is_past_gate` | Whether a point is on or past the gate line: `side(P) >= 0`. |
-| `is_between_gate` | Whether the path A → B goes between G1 and G2 (condition 2). |
-| `crosses_gate` | Both crossing conditions for one pair A → B. |
-| `find_crossings` | t(B) for every counted pair in a page, including (previous, first point). |
-| `apply_min_lap_time` | Drop crossings too soon after the last counted one. |
-| `build_lap_rows` | Turn crossings into finished-lap rows, and return the next lap_id and lap start. |
-
-The dataclasses are `Gate` (left end G1 and right end G2), `VisitedPoints`
-(parallel numpy float arrays `x`, `y`, `time_s`, `distance_m`), and `TrackPoint` (x, y,
-time: the point carried between pages when counting laps).
+| `to_local_xy` | Latitude/longitude → local x/y meters (section 5). |
+| `headings` | Unit heading at every point from its neighbors, (0, 0) where not moving. |
+| `distance_driven` | Total distance driven up to every point. |
+| `find_first_revisit` | Index of the first earlier point the car drives back over while moving, or None. |
+| `find_gate` | Downsample, find the first revisit, and build the `Gate` there, or None. |
+| `find_crossings` | Index of the first point past the gate for every forward pass through it. |
+| `apply_min_lap_time` | Drop crossings too soon after the previous lap boundary, starting from the run's start. |
+| `build_lap_rows` | Turn the crossings into `laps` rows. |
 
 ### How the base class's `run` drives `LapStep`
 
-`LapStep` doesn't override `run`. Like every other step, the base class calls
-`prepare` once, then `transform` and `write` once per page from `extract`. The
-run is read once, and `LapStep` never calls `extract` or `write` itself.
+`LapStep` doesn't override `run` or `prepare`. The base class:
 
-`prepare`:
+1. Calls `prepare`, which deletes the run's old laps so a re-run replaces
+   them.
+2. Calls `extract`, which reads the whole run with one query and yields it
+   as a single frame, or yields nothing for an empty run.
+3. Calls `transform` on that frame and `write`s the laps in one append.
 
-1. Calls the base class default, which deletes the run's old laps so a
-   re-run replaces them.
-2. Resets the carry-over state on the step, including the gate, and sets
-   `ctx.found_gate = False`.
-3. Reads the run's end time with one aggregate query
-   (`MAX(time) WHERE run_id = ...`). It's None for an empty run.
+`transform` is pure: no I/O and no state on `self` or `ctx`.
 
-`transform`, for each page:
+### Registration
 
-1. On the first page, `_setup_origin` records the origin and start time from
-   the first row, and opens lap 1.
-2. `_add_xy` converts the page to local x/y once.
-3. If `ctx.found_gate` is False, `_search_for_gate` searches the page.
-   `transform` stores the result in `_gate` and sets `ctx.found_gate`
-   from it. This is the only place either is set.
-4. If there's a gate, `_find_crossings` finds the page's crossings and applies
-   the minimum lap time. This runs after the search, so on the page where the
-   gate is found, that page is scanned from its first row. With no gate there
-   are no crossings.
-5. If the page's last time is the run's end time, that time is appended as
-   one last crossing, unless it's already a crossing. It's added after the
-   minimum lap time filter, so it's never dropped.
-6. Stores the page's last point in `_last_point`, in both modes.
-7. `_close_laps` turns the crossings into lap rows with `build_lap_rows`, and
-   stores the next lap id and lap start on the step.
-
-`transform` is still pure in that it does no I/O, but unlike other steps it
-reads and updates carry-over state on `self` and `ctx.found_gate`.
-
-### Why `LapStep` isn't registered yet
-
-`LapStep` has the `@register_step` decorator, but the decorator only runs
-when the module is imported, and steps are imported in `steps/__init__.py`.
-`LapStep` isn't imported there, so the pipeline never runs it. Registering it
-now would make **every** pipeline job fail, because its dependency
-`state_step` doesn't exist.
+`LapStep` has the `@register_step` decorator and is imported in
+`steps/__init__.py`, so it's registered. **But its dependency `state_step`
+isn't registered, so `ordered_steps()` raises `KeyError: 'state_step'`, and
+every pipeline job fails.** Until `state_step` exists, either remove the
+`lap_step` import from `steps/__init__.py`, or point `depends_on` at the step
+that does write `estimated_car_state`.
 
 ### Running the tests
 
@@ -736,14 +561,15 @@ uv run --project services/pipeline pytest services/pipeline/tests/test_lap_utils
 tests run from the repo root. The tests never connect to a database, so any
 valid URL works.
 
-## 15. Next steps
+## 13. Next steps
 
 In order:
 
-1. **Add a pytest job to `BackendCI.yml`.** The pipeline has tests (these and
+1. **Fix the registration** (section 12) so pipeline jobs don't fail before
+   `state_step` exists.
+2. **Add a pytest job to `BackendCI.yml`.** The pipeline has tests (these and
    the Kalman filter's), but CI doesn't run them yet.
-2. **Once `state_step` exists, import `LapStep` in `steps/__init__.py`** to
-   register it.
-3. **Tune the constants against real runs**, then move them to `Settings`.
-4. **Update the pipeline tables in `README.md` and `DevREADME.md`** with the
+3. **Build `state_step`**, so `estimated_car_state` has data.
+4. **Tune the `lap_*` defaults against real runs.**
+5. **Update the pipeline tables in `README.md` and `DevREADME.md`** with the
    `laps` output table and the step's status.
