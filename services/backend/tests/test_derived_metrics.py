@@ -4,7 +4,9 @@ import pandas as pd
 
 from orion_backend.derived_metrics.base_metric import DerivedMetric
 from orion_backend.derived_metrics.metric_registry import METRICS, register_metric
+from orion_backend.schemas.derived_metric_schema import DerivedMetricResponse
 from orion_backend.schemas.sensor_schema import SensorSeries
+from orion_backend.services.derived_metric_service import DerivedMetricService
 
 T0 = datetime(2026, 10, 1, 12, 0, 0, tzinfo=UTC)
 T1 = T0 + timedelta(seconds=1)
@@ -37,3 +39,9 @@ def test_run_converts_inputs_and_drops_nan_outputs():
         }
     )
     assert result == SensorSeries(time=[T0], values=[[6.0]])
+
+
+def test_list_metrics_returns_each_registered_metric():
+    assert DerivedMetricResponse(name="test/power", unit="W") in (
+        DerivedMetricService().list_metrics()
+    )
