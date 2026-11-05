@@ -17,6 +17,11 @@ export const sensorKeys = {
   all: ["sensors"] as const,
 };
 
+// Registered derived metrics: fixed until the backend redeploys.
+export const derivedMetricKeys = {
+  all: ["derived-metrics"] as const,
+};
+
 export const pipelineRunKeys = {
   all: ["pipeline-runs"] as const,
   list: (filters: PipelineRunFilters) => [...pipelineRunKeys.all, "list", filters] as const,
@@ -31,4 +36,6 @@ export const runDataKeys = {
     [...runDataKeys.all(runId), "state", range] as const,
   sensors: (runId: string | undefined, range: object | undefined) =>
     [...runDataKeys.all(runId), "sensors", range] as const,
+  derivedMetric: (runId: string | undefined, name: string | undefined, range: object | undefined) =>
+    [...runDataKeys.all(runId), "derived-metrics", name, range] as const,
 };
