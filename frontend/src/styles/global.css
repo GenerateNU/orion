@@ -39,9 +39,6 @@
 
   --focus-ring: var(--status-processing);
 
-  /* Band over a chart's time range, e.g. the lap hovered in the lap list */
-  --chart-highlight: var(--status-processing-tint);
-
   /* Type */
   --font-sans: "Inter", system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
   --font-mono: "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, monospace;
