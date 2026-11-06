@@ -5,13 +5,12 @@ type DashboardTimeSeriesChartProps = Pick<TimeSeriesChartProps, "series" | "heig
 
 export default function DashboardTimeSeriesChart(props: DashboardTimeSeriesChartProps) {
   const visibleWindow = useVisibleWindow();
-  const { previewWindow, commitWindow, resetWindow, setHoverTime } = useDashboardActions();
+  const { commitWindow, resetWindow, setHoverTime } = useDashboardActions();
 
   return (
     <TimeSeriesChart
       {...props}
       visibleWindow={visibleWindow}
-      onPreviewWindow={previewWindow}
       onCommitWindow={commitWindow}
       onResetWindow={resetWindow}
       onHoverTime={setHoverTime}

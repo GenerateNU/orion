@@ -17,15 +17,9 @@ import {
   useSelectedLaps,
 } from "@features/dashboard/state/useDashboard";
 import styles from "./DashboardView.module.css";
-import type { PanelSensor } from "@components/charts/SensorChartPanel";
 import SensorChartsPanel from "@components/charts/SensorChartPanel";
 
 const dashboardRoute = getRouteApi("/runs/$runId/dashboard");
-
-const VEHICLE_SENSORS: readonly PanelSensor[] = [
-  { name: "VCU/CarState/speed", label: "Speed", unit: "mph" },
-  { name: "VCU/IMU/Accelerometer", label: "Acceleration", unit: "g" },
-];
 
 // Route component for /runs/$runId/dashboard. Keyed by run id so another run
 // starts with a fresh interaction store.
@@ -99,7 +93,7 @@ function RunDashboard() {
           Run dashboard
         </h2>
         <SelectionSummary />
-        <SensorChartsPanel title="Vehicle" sensors={VEHICLE_SENSORS} />
+        <SensorChartsPanel />
       </section>
     </>
   );
