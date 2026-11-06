@@ -5,31 +5,38 @@
   gap: 12px;
 }
 
+.stale {
+  opacity: 0.6;
+  transition: opacity 150ms;
+}
+
 .stage {
   width: 100%;
   display: block;
 }
 
-.stage polyline {
+/* The whole run's path. */
+.track {
+  fill: none;
   stroke: #2563eb;
   stroke-width: 3;
 }
 
-.stage line {
+/* The committed window. */
+.committed {
+  stroke: #ef4444;
   stroke-width: 3;
 }
 
-.stage line[stroke="#ef4444"] {
-  stroke: #ef4444;
-}
-
-.stage line[stroke="#eab308"] {
+/* The window being dragged, before release. */
+.preview {
   stroke: #eab308;
   stroke-width: 2;
   opacity: 0.7;
 }
 
-.stage circle {
+/* The car at the hover time. */
+.car {
   fill: #ef4444;
 }
 

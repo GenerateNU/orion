@@ -4,11 +4,14 @@ import type { Segment } from "@features/dashboard/utils/trackmap";
 import styles from "@features/dashboard/TrackMap.module.css";
 
 export interface TrackVisualizationProps {
-  svgPoints: Array<{ x: number; y: number }>;
+  // The whole track as a polyline `points` string, in SVG units.
+  points: string;
   committedSegments: Segment[];
   previewSegments: Segment[];
-  carPos: { x: number; y: number } | null;
-  aspectRatio: number;
+  // The car marker. TrackMap moves it directly on hover, without re-rendering.
+  carRef: React.RefObject<SVGCircleElement | null>;
+  // The drawing's size in SVG units; also sets the element's aspect ratio.
+  viewSize: { width: number; height: number };
   onMouseDown: (e: React.MouseEvent<SVGSVGElement>) => void;
   onMouseMove: (e: React.MouseEvent<SVGSVGElement>) => void;
   onMouseUp: (e: React.MouseEvent<SVGSVGElement>) => void;
@@ -17,11 +20,11 @@ export interface TrackVisualizationProps {
 }
 
 export const TrackVisualization = React.memo(function TrackVisualization({
-  svgPoints,
+  points,
   committedSegments,
   previewSegments,
-  carPos,
-  aspectRatio,
+  carRef,
+  viewSize,
   onMouseDown,
   onMouseMove,
   onMouseUp,
@@ -31,50 +34,40 @@ export const TrackVisualization = React.memo(function TrackVisualization({
   return (
     <svg
       ref={stageRef}
-      width="100%"
-      height="auto"
-      viewBox="0 0 100 100"
+      viewBox={`0 0 ${viewSize.width} ${viewSize.height}`}
       preserveAspectRatio="xMidYMid meet"
-      style={{ aspectRatio }}
+      style={{ aspectRatio: viewSize.width / viewSize.height }}
       className={styles.stage}
       onMouseDown={onMouseDown}
       onMouseMove={onMouseMove}
       onMouseUp={onMouseUp}
       onMouseLeave={onMouseLeave}
     >
-      <polyline
-        points={svgPoints.map((p) => `${p.x},${p.y}`).join(" ")}
-        stroke="#2563eb"
-        strokeWidth="3"
-        fill="none"
-      />
+      <polyline className={styles.track} points={points} />
 
       {committedSegments.map((seg, i) => (
         <line
           key={`committed-${i}`}
+          className={styles.committed}
           x1={seg.x1}
           y1={seg.y1}
           x2={seg.x2}
           y2={seg.y2}
-          stroke="#ef4444"
-          strokeWidth="3"
         />
       ))}
 
       {previewSegments.map((seg, i) => (
         <line
           key={`preview-${i}`}
+          className={styles.preview}
           x1={seg.x1}
           y1={seg.y1}
           x2={seg.x2}
           y2={seg.y2}
-          stroke="#eab308"
-          strokeWidth="2"
-          opacity="0.7"
         />
       ))}
 
-      {carPos && <circle cx={carPos.x} cy={carPos.y} r="2" fill="#ef4444" />}
+      <circle ref={carRef} className={styles.car} r="2" visibility="hidden" />
     </svg>
   );
 });
