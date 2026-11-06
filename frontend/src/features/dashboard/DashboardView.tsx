@@ -11,11 +11,8 @@ import { ApiError } from "@api/client";
 import { formatDate, formatDuration } from "@utils/format";
 import DashboardStoreProvider from "@features/dashboard/state/DashboardStoreProvider";
 import { useLastRunStore } from "@features/dashboard/state/lastRunStore";
-import {
-  useCommittedWindow,
-  useDashboardRun,
-  useSelectedLaps,
-} from "@features/dashboard/state/useDashboard";
+import { useDashboardRun } from "@features/dashboard/state/useDashboard";
+import LapSelect from "@features/dashboard/components/LapSelect";
 import styles from "./DashboardView.module.css";
 import type { PanelSensor } from "@components/charts/SensorChartPanel";
 import SensorChartsPanel from "@components/charts/SensorChartPanel";
@@ -98,27 +95,9 @@ function RunDashboard() {
         <h2 id="run-dashboard-title" className={styles.placeholderTitle}>
           Run dashboard
         </h2>
-        <SelectionSummary />
+        <LapSelect />
         <SensorChartsPanel title="Vehicle" sensors={VEHICLE_SENSORS} />
       </section>
     </>
-  );
-}
-
-const formatRunTime = (ms: number) => formatDuration(ms / 1000);
-
-// Temporary: shows the shared selection until panels exist to show it.
-function SelectionSummary() {
-  const window = useCommittedWindow();
-  const laps = useSelectedLaps();
-  const windowLabel = window
-    ? `${formatRunTime(window[0])}–${formatRunTime(window[1])}`
-    : "whole run";
-  const lapsLabel = laps.length > 0 ? laps.join(", ") : "none";
-
-  return (
-    <p className={styles.placeholderText}>
-      Window: {windowLabel} · Laps: {lapsLabel}
-    </p>
   );
 }

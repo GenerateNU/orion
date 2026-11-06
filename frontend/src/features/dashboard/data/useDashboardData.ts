@@ -23,7 +23,7 @@ import { snapWindow, toIsoRange, type TimeWindow } from "@features/dashboard/uti
 //
 // Panels never pass a window: they pick a DataScope and the hook reads the
 // committed window from the URL itself. Time bounds change only through
-// useDashboardActions (commitWindow, selectLaps), and a brush drag
+// useDashboardActions (commitWindow, resetWindow), and a brush drag
 // (useVisibleWindow) can't trigger fetches. While a new window loads, the previous
 // one's data stays (`isPlaceholderData`).
 //

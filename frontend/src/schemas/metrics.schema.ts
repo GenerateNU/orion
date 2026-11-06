@@ -1,11 +1,10 @@
 import { z } from "zod";
 import { DateTimeSchema } from "@schemas/common.schema";
 
-// PLANNED: there is no metrics step or route yet, and which metrics to compute is
-// still open (docs/ARCHITECTURE.md). This shape follows the `metrics` table
-// (one row per lap with its time bounds). Update it when the route is built.
+// GET /runs/{run_id}/metrics: one entry per lap of the `metrics` table. Which
+// per-lap metrics to add is still open (docs/ARCHITECTURE.md).
 export const LapMetricsSchema = z.object({
-  lap_id: z.number().int(),
+  lap_number: z.number().int(),
   start_time: DateTimeSchema,
   end_time: DateTimeSchema,
 });

@@ -5,9 +5,8 @@ import { runDataKeys } from "@api/queryKeys";
 import type { DataQueryOptions } from "@api/queryOptions";
 import { apiUrls } from "@utils/urls";
 
-// Hook for the metrics stage's output (OrionDB `metrics`) for one run.
-// PLANNED: there is no metrics step or backend route yet, so this fails with
-// "... isn't available on the backend yet" until there is.
+// Hook for the laps of one run (OrionDB `metrics`). Fake laps for now, written by
+// hand; the pipeline's lap step will fill the same table.
 export const useMetrics = <TData = MetricsResponse>(
   runId: string | undefined,
   options: DataQueryOptions<MetricsResponse, TData> = {},
