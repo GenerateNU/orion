@@ -1,14 +1,11 @@
 import { useMemo } from "react";
-import {
-  type RunTime,
-} from "@features/dashboard/utils/time";
+import { type RunTime } from "@features/dashboard/utils/time";
 import { useSensorTrace } from "@features/dashboard/data/useDashboardData";
 import type { ChartSeries } from "./TimeSeriesChart";
 import ErrorState from "@components/ui/ErrorState";
 import LoadingState from "@components/ui/LoadingState";
 import EmptyState from "@components/ui/EmptyState";
 import TimeSeriesChartFunctionality from "./TimeSeriesChartFunctionality";
-
 
 type SensorChartProps = {
   name: string;
