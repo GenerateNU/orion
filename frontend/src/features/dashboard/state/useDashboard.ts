@@ -2,12 +2,10 @@ import { useEffect, useMemo, useRef } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { getRouteApi } from "@tanstack/react-router";
 import { useStore } from "zustand";
-import type { MetricsResponse } from "@schemas/metrics.schema";
 import type { RunResponse } from "@schemas/run.schema";
-import { runDataKeys, runKeys } from "@api/queryKeys";
+import { runKeys } from "@api/queryKeys";
 import { useRun } from "@hooks/useRuns";
 import { useDashboardStoreApi } from "@features/dashboard/state/dashboardStore";
-import { lapsFromMetrics, lapsToWindow } from "@features/dashboard/utils/laps";
 import type { DashboardSearch } from "@features/dashboard/utils/search";
 import {
   runTimeline,
@@ -37,7 +35,7 @@ export const useDashboardRun = () => {
 export const useSelectedLaps = (): readonly number[] =>
   dashboardRoute.useSearch({ select: (search) => search.laps ?? NO_LAPS });
 
-// The window set by commitWindow / selectLaps; null is the whole run. The data
+// The window set by commitWindow; null is the whole run. The data
 // hooks fetch it themselves (data/useDashboardData.ts, scope "detail").
 export const useCommittedWindow = (): TimeWindow | null =>
   dashboardRoute.useSearch({ select: (search) => search.t ?? null });
@@ -88,65 +86,35 @@ export const useDashboardActions = () => {
       return run ? runTimeline(run) : null;
     };
 
-    // The span of the laps; the current window when lap times aren't loaded.
-    const windowForLaps = (lapIds: readonly number[], current: TimeWindow | undefined) => {
-      if (lapIds.length === 0) return undefined;
-      const metrics = queryClient.getQueryData<MetricsResponse>(runDataKeys.metrics(runId));
-      const runTimes = timeline();
-      if (!metrics || !runTimes) return current;
-      return lapsToWindow(lapsFromMetrics(metrics, runTimes), lapIds) ?? current;
-    };
-
-    // The laps a window overlaps, even partly; undefined for the whole run or when
-    // lap times aren't loaded.
-    const lapsInWindow = (window: TimeWindow | null): number[] | undefined => {
-      const metrics = queryClient.getQueryData<MetricsResponse>(runDataKeys.metrics(runId));
-      const runTimes = timeline();
-      if (!window || !metrics || !runTimes) return undefined;
-      const ids = lapsFromMetrics(metrics, runTimes)
-        .filter((lap) => lap.window[0] < window[1] && lap.window[1] > window[0])
-        .map((lap) => lap.id)
-        .sort((a, b) => a - b);
-      return ids.length > 0 ? ids : undefined;
-    };
-
-    // Lap changes add a history entry, so Back undoes them.
+    // Lap changes add a history entry, so Back undoes them. They don't touch the
+    // time window.
     const setLaps = (update: (laps: readonly number[]) => readonly number[]) => {
-      store.getState().setDraftWindow(null);
       navigate({
         search: (prev: DashboardSearch): DashboardSearch => {
           const laps = [...new Set(update(prev.laps ?? NO_LAPS))].sort((a, b) => a - b);
-          return {
-            ...prev,
-            laps: laps.length > 0 ? laps : undefined,
-            t: windowForLaps(laps, prev.t),
-          };
+          return { ...prev, laps: laps.length > 0 ? laps : undefined };
         },
       });
     };
 
     // Window changes replace the history entry, so a drag doesn't fill history.
-    // The lap selection follows the window: the laps it overlaps, none for the whole
-    // run. Overlap is taken from the window as dragged, before snapping, so snapping
-    // can't tick a neighbouring lap.
     const setWindow = (window: TimeWindow | null) => {
       store.getState().setDraftWindow(null);
       const runTimes = timeline();
       const t = window && runTimes ? snapWindow(window, runTimes.durationMs) : window;
-      const laps = t ? lapsInWindow(window) : undefined;
       navigate({
-        search: (prev: DashboardSearch): DashboardSearch => ({
-          ...prev,
-          laps,
-          t: t ?? undefined,
-        }),
+        search: (prev: DashboardSearch): DashboardSearch => ({ ...prev, t: t ?? undefined }),
         replace: true,
       });
     };
 
     return {
-      // Selecting laps also zooms to their span; an empty list shows the whole run.
+      // An empty list means all laps.
       selectLaps: (lapIds: readonly number[]) => setLaps(() => lapIds),
+      toggleLap: (lapId: number) =>
+        setLaps((laps) =>
+          laps.includes(lapId) ? laps.filter((id) => id !== lapId) : [...laps, lapId],
+        ),
       // While a brush is dragged: panels redraw from loaded data, nothing is fetched.
       previewWindow: (window: TimeWindow) => store.getState().setDraftWindow(window),
       // On release: snapped, written to the URL, and the detail data fetched.
