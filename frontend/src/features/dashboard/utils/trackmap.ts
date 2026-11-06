@@ -2,9 +2,14 @@
  * Helper functions for TrackMap component (SVG version)
  *
  * Every helper reads the cached position data (useRunPositions) in place: it
- * never maps, copies or mutates the arrays. Times here are the cached array's
- * own unit, epoch ms; TrackMap converts to and from RunTime at its edges.
+ * never maps, copies or mutates the arrays.
+ *
+ * Every time a helper takes or returns is RunTime (ms since the run's start),
+ * like the rest of the dashboard. The cached `time` array is epoch ms, so the
+ * helpers convert with `track.startMs`, and nothing outside this file has to.
  */
+
+import type { RunTime } from "@features/dashboard/utils/time";
 
 export type Position = [number, number]; // [x, y] in SVG units
 
@@ -15,13 +20,16 @@ export interface Track {
   latLon: readonly (readonly [number, number])[];
   // Epoch ms, ascending. The cached array: read only.
   time: Float64Array;
+  // The run's start in epoch ms: RunTime = time[i] - startMs.
+  startMs: number;
   project: (lat: number, lon: number) => Position;
   // The drawing's size in SVG units.
   viewSize: { width: number; height: number };
 }
 
-// Margin in SVG units so the stroke isn't clipped at the drawing's edges.
-const PAD = 3;
+// Margin in SVG units around the track: room for the lines across it and the
+// "S/F" label, so nothing is clipped at the drawing's edges.
+const PAD = 8;
 
 /**
  * Fit the track into a drawing whose longer side is 100 SVG units, north up,
@@ -30,6 +38,7 @@ const PAD = 3;
 export function makeTrack(
   latLon: readonly (readonly [number, number])[],
   time: Float64Array,
+  startMs: number,
 ): Track {
   // A loop, not Math.min(...array): spreading a whole run (100 Hz) overflows the stack.
   let minLat = Infinity;
@@ -60,6 +69,7 @@ export function makeTrack(
   return {
     latLon,
     time,
+    startMs,
     project,
     viewSize: { width: width * scale + 2 * PAD, height: height * scale + 2 * PAD },
   };
@@ -85,20 +95,21 @@ const pointAt = (track: Track, i: number): Position =>
 const TIME_PENALTY_PER_S = 0.1;
 
 /**
- * Convert mouse position to time (epoch ms) based on closest track point.
+ * Convert mouse position to a RunTime based on closest track point.
  *
  * Laps overlap, so several points can be under the mouse at once. With
- * `nearTime` (the drag's previous time, epoch ms), points far from it in time
- * are penalized, so a drag follows the lap it's on and only reaches the next
+ * `nearTime` (the drag's previous time), points far from it in time are
+ * penalized, so a drag follows the lap it's on and only reaches the next
  * lap by going around.
  */
 export function getTimeFromMouse(
   track: Track,
   mouseX: number,
   mouseY: number,
-  nearTime?: number,
-): number {
-  const { time } = track;
+  nearTime?: RunTime,
+): RunTime {
+  const { time, startMs } = track;
+  const near = nearTime === undefined ? undefined : nearTime + startMs;
   let bestScore = Infinity;
   let closestIdx = 0;
   let closestDist = 0;
@@ -107,9 +118,7 @@ export function getTimeFromMouse(
     const [x, y] = pointAt(track, i);
     const dist = Math.hypot(mouseX - x, mouseY - y);
     const score =
-      nearTime === undefined
-        ? dist
-        : dist + (Math.abs(time[i] - nearTime) / 1000) * TIME_PENALTY_PER_S;
+      near === undefined ? dist : dist + (Math.abs(time[i] - near) / 1000) * TIME_PENALTY_PER_S;
     if (score < bestScore) {
       bestScore = score;
       closestIdx = i;
@@ -119,30 +128,27 @@ export function getTimeFromMouse(
 
   // Interpolate time at closest index
   if (closestIdx === time.length - 1) {
-    return time[closestIdx];
+    return time[closestIdx] - startMs;
   }
 
   // Simple linear interpolation between closest points
   const t = Math.min(1, closestDist / 20); // Interpolate within 20px
-  return time[closestIdx] + (time[closestIdx + 1] - time[closestIdx]) * t;
+  return time[closestIdx] + (time[closestIdx + 1] - time[closestIdx]) * t - startMs;
 }
 
 /**
- * Get car position (SVG units) at `atTime` (epoch ms) by interpolating x,y directly
+ * Get car position (SVG units) at `runTime` by interpolating x,y directly
  */
 export function getCarPosition(
   track: Track,
-  atTime: number | null,
+  runTime: RunTime | null,
 ): { x: number; y: number } | null {
   const { time } = track;
-  if (atTime === null || time.length === 0) return null;
+  if (runTime === null || time.length === 0) return null;
+  const atTime = runTime + track.startMs;
 
-  // Find the two closest time points
-  let idx = 0;
-  for (let i = 0; i < time.length; i++) {
-    if (time[i] <= atTime) idx = i;
-    else break;
-  }
+  // The sample at or before `atTime`; the car is between it and the next one.
+  const idx = indexAt(time, atTime);
 
   const [x0, y0] = pointAt(track, idx);
   if (idx === time.length - 1) {
@@ -165,30 +171,74 @@ export function getCarPosition(
   return { x: x0 + (x1 - x0) * factor, y: y0 + (y1 - y0) * factor };
 }
 
-export interface Segment {
+// Index of the last sample at or before `at` (epoch ms), by binary search.
+function indexAt(time: Float64Array, at: number): number {
+  let lo = 0;
+  let hi = time.length - 1;
+  while (lo < hi) {
+    const mid = (lo + hi + 1) >> 1;
+    if (time[mid] <= at) lo = mid;
+    else hi = mid - 1;
+  }
+  return lo;
+}
+
+/**
+ * The part of the track between `windowStart` and `windowEnd` (RunTime), as an
+ * SVG polyline `points` string. One element however long the window is.
+ */
+export function windowPoints(track: Track, windowStart: RunTime, windowEnd: RunTime): string {
+  const { time, startMs } = track;
+  if (time.length === 0) return "";
+  // Include the samples either side of the window, so the line reaches its edges.
+  const first = indexAt(time, windowStart + startMs);
+  const last = Math.min(time.length - 1, indexAt(time, windowEnd + startMs) + 1);
+  let points = "";
+  for (let i = first; i <= last; i++) {
+    const [x, y] = pointAt(track, i);
+    points += `${x},${y} `;
+  }
+  return points;
+}
+
+export interface Tick {
   x1: number;
   y1: number;
   x2: number;
   y2: number;
+  // The end on the outside of the track (away from the drawing's centre).
+  outer: { x: number; y: number };
 }
 
 /**
- * Generate window line segments (committed or preview); start and end are epoch ms.
+ * A short line across the track at `runTime`, `halfLength` SVG units each side:
+ * for the window's edges.
  */
-export function generateSegments(track: Track, windowStart: number, windowEnd: number): Segment[] {
-  const { time } = track;
-  const segments: Segment[] = [];
+export function tickAt(track: Track, runTime: RunTime, halfLength: number): Tick | null {
+  return tickAtIndex(track, indexAt(track.time, runTime + track.startMs), halfLength);
+}
 
-  for (let i = 0; i < time.length - 1; i++) {
-    // Check if this segment overlaps the window
-    if (time[i + 1] >= windowStart && time[i] <= windowEnd) {
-      const [x1, y1] = pointAt(track, i);
-      const [x2, y2] = pointAt(track, i + 1);
-      segments.push({ x1, y1, x2, y2 });
-    }
-  }
+/** The start/finish line: a tick at the run's first sample, where it starts. */
+export function startFinishTick(track: Track, halfLength: number): Tick | null {
+  return tickAtIndex(track, 0, halfLength);
+}
 
-  return segments;
+function tickAtIndex(track: Track, i: number, halfLength: number): Tick | null {
+  const { time, viewSize } = track;
+  if (time.length < 2) return null;
+  const [x, y] = pointAt(track, i);
+  // Direction of travel from the neighbouring samples; the tick is perpendicular.
+  const [ax, ay] = pointAt(track, Math.max(0, i - 1));
+  const [bx, by] = pointAt(track, Math.min(time.length - 1, i + 1));
+  const len = Math.hypot(bx - ax, by - ay) || 1;
+  const nx = (-(by - ay) / len) * halfLength;
+  const ny = ((bx - ax) / len) * halfLength;
+  const p1 = { x: x + nx, y: y + ny };
+  const p2 = { x: x - nx, y: y - ny };
+  const cx = viewSize.width / 2;
+  const cy = viewSize.height / 2;
+  const outer = Math.hypot(p1.x - cx, p1.y - cy) > Math.hypot(p2.x - cx, p2.y - cy) ? p1 : p2;
+  return { x1: p1.x, y1: p1.y, x2: p2.x, y2: p2.y, outer };
 }
 
 export function getMousePosOnSVG(

@@ -12,14 +12,22 @@ import { useRunPositions } from "@features/dashboard/data/useDashboardData";
 import {
   getTimeFromMouse,
   getCarPosition,
-  generateSegments,
   getMousePosOnSVG,
   makeTrack,
+  startFinishTick,
+  tickAt,
   trackPoints,
+  windowPoints,
+  type Tick,
 } from "@features/dashboard/utils/trackmap";
 import { TrackVisualization } from "./TrackVisualization";
 import styles from "@features/dashboard/TrackMap.module.css";
 import { cx } from "@utils/classNames";
+import type { TimeWindow } from "@features/dashboard/utils/time";
+
+// Half the length of the lines across the track, in SVG units (the drawing's
+// longer side is 100).
+const TICK_HALF_LENGTH = 3;
 
 export function TrackMap() {
   const stageRef = useRef<SVGSVGElement | null>(null);
@@ -42,14 +50,12 @@ export function TrackMap() {
     positionsError: error,
   } = useRunPositions("overview");
 
-  // The helpers read the cached arrays in place (no copies) and work in their
-  // unit, epoch ms. Convert RunTime <-> epoch ms only where a time crosses over:
-  //   RunTime = epoch - startMs
-  const startMs = positions?.startMs ?? 0;
+  // Every time here is RunTime; the trackmap helpers convert to the cached
+  // array's epoch ms themselves, using the run's start stored on the track.
   const track = useMemo(
     () =>
       positions && positions.time.length > 0
-        ? makeTrack(positions.positions, positions.time)
+        ? makeTrack(positions.positions, positions.time, positions.startMs)
         : null,
     [positions],
   );
@@ -60,7 +66,7 @@ export function TrackMap() {
   useHoverTimeSubscription((t) => {
     const car = carRef.current;
     if (!car || !track) return;
-    const pos = getCarPosition(track, t === null ? null : t + startMs);
+    const pos = getCarPosition(track, t);
     if (!pos) {
       car.setAttribute("visibility", "hidden");
       return;
@@ -72,28 +78,48 @@ export function TrackMap() {
 
   // Hidden while a new drag is in progress, so only the new selection shows.
   const isDragging = dragStart !== null;
-  const committedSegments = useMemo(() => {
-    if (isDragging || !committedWindow || !track) return [];
-    return generateSegments(track, committedWindow[0] + startMs, committedWindow[1] + startMs);
-  }, [isDragging, committedWindow, track, startMs]);
+  const dragWindow = useMemo(
+    (): TimeWindow | null =>
+      dragStart === null || dragEnd === null
+        ? null
+        : [Math.min(dragStart, dragEnd), Math.max(dragStart, dragEnd)],
+    [dragStart, dragEnd],
+  );
+  const shownWindow = isDragging ? dragWindow : committedWindow;
 
-  const previewSegments = useMemo(() => {
-    if (dragStart === null || dragEnd === null || !track) return [];
-    const start = Math.min(dragStart, dragEnd);
-    const end = Math.max(dragStart, dragEnd);
-    return generateSegments(track, start + startMs, end + startMs);
-  }, [dragStart, dragEnd, track, startMs]);
+  const committedPoints = useMemo(() => {
+    if (isDragging || !committedWindow || !track) return "";
+    return windowPoints(track, committedWindow[0], committedWindow[1]);
+  }, [isDragging, committedWindow, track]);
+
+  const previewPoints = useMemo(() => {
+    if (!dragWindow || !track) return "";
+    return windowPoints(track, dragWindow[0], dragWindow[1]);
+  }, [dragWindow, track]);
+
+  // Lines across the track at the shown window's edges, and at the run's start
+  // (the start/finish line, since a run starts there).
+  const windowTicks = useMemo((): Tick[] => {
+    if (!shownWindow || !track) return [];
+    return shownWindow
+      .map((t) => tickAt(track, t, TICK_HALF_LENGTH))
+      .filter((tick): tick is Tick => tick !== null);
+  }, [shownWindow, track]);
+  const startFinish = useMemo(
+    () => (track ? startFinishTick(track, TICK_HALF_LENGTH) : null),
+    [track],
+  );
 
   const handleMouseDown = useCallback(
     (e: React.MouseEvent<SVGSVGElement>) => {
       if (!track) return;
       const pos = getMousePosOnSVG(e, stageRef);
       if (!pos) return;
-      const timeVal = getTimeFromMouse(track, pos.x, pos.y) - startMs;
+      const timeVal = getTimeFromMouse(track, pos.x, pos.y);
       setDragStart(timeVal);
       setDragEnd(timeVal);
     },
-    [track, startMs],
+    [track],
   );
 
   const handleMouseMove = useCallback(
@@ -102,8 +128,7 @@ export function TrackMap() {
       const pos = getMousePosOnSVG(e, stageRef);
       if (!pos) return;
       // While dragging, stay on the lap the drag is following (see getTimeFromMouse).
-      const nearTime = dragEnd === null ? undefined : dragEnd + startMs;
-      const timeVal = getTimeFromMouse(track, pos.x, pos.y, nearTime) - startMs;
+      const timeVal = getTimeFromMouse(track, pos.x, pos.y, dragEnd ?? undefined);
 
       if (dragStart === null) {
         setDashboardHoverTime(timeVal);
@@ -113,7 +138,7 @@ export function TrackMap() {
         previewWindow([start, end]);
       }
     },
-    [dragStart, dragEnd, track, startMs, setDashboardHoverTime, previewWindow],
+    [dragStart, dragEnd, track, setDashboardHoverTime, previewWindow],
   );
 
   const handleMouseUp = useCallback(() => {
@@ -140,8 +165,10 @@ export function TrackMap() {
     <div className={cx(styles.container, isPlaceholderData && styles.stale)}>
       <TrackVisualization
         points={points}
-        committedSegments={committedSegments}
-        previewSegments={previewSegments}
+        committedPoints={committedPoints}
+        previewPoints={previewPoints}
+        windowTicks={windowTicks}
+        startFinish={startFinish}
         carRef={carRef}
         viewSize={track.viewSize}
         onMouseDown={handleMouseDown}

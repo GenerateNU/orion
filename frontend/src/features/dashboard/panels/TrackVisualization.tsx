@@ -1,13 +1,18 @@
 // TrackVisualization.tsx
 import React from "react";
-import type { Segment } from "@features/dashboard/utils/trackmap";
+import type { Tick } from "@features/dashboard/utils/trackmap";
 import styles from "@features/dashboard/TrackMap.module.css";
 
 export interface TrackVisualizationProps {
   // The whole track as a polyline `points` string, in SVG units.
   points: string;
-  committedSegments: Segment[];
-  previewSegments: Segment[];
+  // The committed window and the window being dragged, as `points` strings
+  // ("" when there is none).
+  committedPoints: string;
+  previewPoints: string;
+  // Lines across the track at the shown window's edges, and at start/finish.
+  windowTicks: Tick[];
+  startFinish: Tick | null;
   // The car marker. TrackMap moves it directly on hover, without re-rendering.
   carRef: React.RefObject<SVGCircleElement | null>;
   // The drawing's size in SVG units; also sets the element's aspect ratio.
@@ -19,10 +24,15 @@ export interface TrackVisualizationProps {
   stageRef: React.RefObject<SVGSVGElement | null>;
 }
 
+// How far the "S/F" label sits past the outer end of its tick, in SVG units.
+const LABEL_GAP = 3.5;
+
 export const TrackVisualization = React.memo(function TrackVisualization({
   points,
-  committedSegments,
-  previewSegments,
+  committedPoints,
+  previewPoints,
+  windowTicks,
+  startFinish,
   carRef,
   viewSize,
   onMouseDown,
@@ -45,29 +55,38 @@ export const TrackVisualization = React.memo(function TrackVisualization({
     >
       <polyline className={styles.track} points={points} />
 
-      {committedSegments.map((seg, i) => (
+      {committedPoints && <polyline className={styles.committed} points={committedPoints} />}
+      {previewPoints && <polyline className={styles.preview} points={previewPoints} />}
+
+      {windowTicks.map((tick, i) => (
         <line
-          key={`committed-${i}`}
-          className={styles.committed}
-          x1={seg.x1}
-          y1={seg.y1}
-          x2={seg.x2}
-          y2={seg.y2}
+          key={i}
+          className={styles.windowTick}
+          x1={tick.x1}
+          y1={tick.y1}
+          x2={tick.x2}
+          y2={tick.y2}
         />
       ))}
 
-      {previewSegments.map((seg, i) => (
-        <line
-          key={`preview-${i}`}
-          className={styles.preview}
-          x1={seg.x1}
-          y1={seg.y1}
-          x2={seg.x2}
-          y2={seg.y2}
-        />
-      ))}
+      {startFinish && (
+        <g className={styles.startFinish}>
+          <line x1={startFinish.x1} y1={startFinish.y1} x2={startFinish.x2} y2={startFinish.y2} />
+          {/* Below the tick in the bottom half of the drawing, above it in the top. */}
+          <text
+            x={startFinish.outer.x}
+            y={
+              startFinish.outer.y > viewSize.height / 2
+                ? startFinish.outer.y + LABEL_GAP
+                : startFinish.outer.y - LABEL_GAP
+            }
+          >
+            S/F
+          </text>
+        </g>
+      )}
 
-      <circle ref={carRef} className={styles.car} r="2" visibility="hidden" />
+      <circle ref={carRef} className={styles.car} r="1.8" visibility="hidden" />
     </svg>
   );
 });
