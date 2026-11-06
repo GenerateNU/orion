@@ -12,6 +12,7 @@ from sqlalchemy.sql.dml import ReturningDelete, ReturningInsert, ReturningUpdate
 from orion_core.models.orion import (
     CleanedData,
     EstimatedCarState,
+    Metrics,
     PipelineRun,
     PipelineStatus,
     Run,
@@ -34,6 +35,15 @@ def select_cleaned_readings(
     return select(CleanedData.time, CleanedData.sensor, CleanedData.values).where(
         CleanedData.run_id == run_id,
         CleanedData.sensor.in_(list(sensors)),
+    )
+
+
+def select_laps(run_id: str) -> Select[int, datetime, datetime]:
+    """One run's laps, ordered by lap number."""
+    return (
+        select(Metrics.lap_number, Metrics.start_time, Metrics.end_time)
+        .where(Metrics.run_id == run_id)
+        .order_by(Metrics.lap_number)
     )
 
 
