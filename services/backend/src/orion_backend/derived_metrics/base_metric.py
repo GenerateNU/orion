@@ -20,6 +20,7 @@ class DerivedMetric(ABC):
     def align(self, inputs: dict[str, pd.DataFrame]) -> pd.DataFrame:
         """Put the inputs onto one shared time index."""
         # STUB: align the input sensors' data into a shared time index
+        raise NotImplementedError
 
     @abstractmethod
     def compute(self, aligned: pd.DataFrame) -> pd.Series:
