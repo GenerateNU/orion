@@ -46,6 +46,55 @@ export function progressAtTimes(
   return result;
 }
 
+// The stretch of the lap driven between two times (epoch ms). One across the
+// start/finish line keeps only its part before the line. Null outside the points.
+export function progressRangeBetween(
+  points: LapProgressPoints,
+  from: number,
+  to: number,
+): ProgressRange | null {
+  const { progress, lapId } = progressAtTimes([from, to], points);
+  const [start, end] = progress;
+  if (start === null || end === null) return null;
+  return lapId[0] === lapId[1] ? [start, end] : [start, 1];
+}
+
+// When a lap was in `range`: the times (epoch ms) of its longest unbroken run of
+// points there, and how much of the range that run covers. Null if none.
+export function lapStretch(points: LapProgressPoints, lapId: number, [start, end]: ProgressRange) {
+  let best: { from: number; to: number; covers: number } | null = null;
+  let first = -1;
+  for (let i = 0; i <= points.time.length; i++) {
+    const inside =
+      i < points.time.length &&
+      points.lapId[i] === lapId &&
+      points.progress[i] >= start &&
+      points.progress[i] <= end;
+    if (inside && first < 0) first = i;
+    if (inside || first < 0) continue;
+    const covers = points.progress[i - 1] - points.progress[first];
+    if (!best || covers > best.covers) {
+      best = { from: points.time[first], to: points.time[i - 1], covers };
+    }
+    first = -1;
+  }
+  return best;
+}
+
+// The lap the track map draws: the lowest selected lap with points, else the lap
+// covering the most of the lap (the first one on a tie). Null with no points.
+export function mapLap(points: LapProgressPoints, selectedLaps: readonly number[]): number | null {
+  const lapIds = new Set(points.lapId);
+  const selected = selectedLaps.find((lapId) => lapIds.has(lapId));
+  if (selected !== undefined) return selected;
+  let best: { lapId: number; covers: number } | null = null;
+  for (const lapId of lapIds) {
+    const covers = lapStretch(points, lapId, [0, 1])?.covers ?? -1;
+    if (!best || covers > best.covers) best = { lapId, covers };
+  }
+  return best?.lapId ?? null;
+}
+
 // Index of the value in `sorted` closest to `t`; ties go to the earlier one.
 function nearestIndex(sorted: Float64Array, t: number): number {
   let low = 0;

@@ -1,11 +1,17 @@
 import { useCallback, useLayoutEffect, useMemo, useRef, useState } from "react";
 import {
-  useCommittedWindow,
+  useCommittedProgressRange,
   useDashboardActions,
-  useDashboardRun,
 } from "@features/dashboard/state/useDashboard";
+import {
+  lapStretch,
+  progressRangeBetween,
+  snapProgressRange,
+  type LapProgressPoints,
+  type ProgressRange,
+} from "@features/dashboard/utils/progress";
 import { distanceAt, timeAtDistance, type Track } from "@features/dashboard/utils/trackmap";
-import { clampWindow, type RunTime, type TimeWindow } from "@features/dashboard/utils/time";
+import type { RunTime, TimeWindow } from "@features/dashboard/utils/time";
 
 // The track map's selection: the car's time and `halfM` metres of road either
 // side of it, so the window looks symmetric around the car on the map. Its time
@@ -20,7 +26,7 @@ const MIN_HALF_M = 5;
 export const clampHalf = (track: Track, halfM: number) =>
   Math.min(Math.max(halfM, MIN_HALF_M), Math.max(MIN_HALF_M, track.totalM / 2));
 
-// The selection as the time window other panels use.
+// The time window the selection covers.
 export const selectionWindow = (track: Track, s: TrackSelection): TimeWindow => {
   const at = distanceAt(track, s.center);
   return [timeAtDistance(track, at - s.halfM, "start"), timeAtDistance(track, at + s.halfM, "end")];
@@ -43,49 +49,66 @@ const defaultSelection = (track: Track): TrackSelection => {
   return { center: timeAtDistance(track, halfM, "end"), halfM };
 };
 
-const sameWindow = (a: TimeWindow | null, b: TimeWindow | null) =>
-  a === b || (!!a && !!b && Math.abs(a[0] - b[0]) < 1 && Math.abs(a[1] - b[1]) < 1);
+const sameRange = (a: ProgressRange | null, b: ProgressRange | null) =>
+  a === b || (!!a && !!b && a[0] === b[0] && a[1] === b[1]);
 
-// A selection the user moved on the map, and the URL windows it belongs to.
+// The selection showing a progress range on the map's lap.
+const selectionForRange = (
+  track: Track,
+  points: LapProgressPoints,
+  lapId: number,
+  range: ProgressRange,
+): TrackSelection | null => {
+  const stretch = lapStretch(points, lapId, range);
+  return stretch
+    ? selectionFor(track, [stretch.from - track.startMs, stretch.to - track.startMs])
+    : null;
+};
+
+// A selection the user moved on the map, and the URL progress ranges it belongs to.
 type Moved = {
+  // The track it was moved on: another lap's track drops it.
+  track: Track;
   selection: TrackSelection;
-  // The committed window when the move started.
-  base: TimeWindow | null;
-  // Once committed: the clamped window written to the URL.
-  sent?: TimeWindow | null;
+  // The committed range when the move started.
+  base: ProgressRange | null;
+  // Once committed: the snapped range written to the URL.
+  sent?: ProgressRange;
 };
 
 /**
- * Holds the selection locally while it's dragged, and commits it to the URL on
- * release. Other panels only read the committed window, so nothing is broadcast
- * mid-drag: no draft to clamp, cancel or clean up.
+ * Holds the selection locally while it's dragged, and commits its progress range
+ * to the URL on release. Other panels only read the committed range, so nothing
+ * is broadcast mid-drag: no draft to clamp, cancel or clean up.
  *
- * Otherwise the selection is worked out from the URL during render, so it's
- * there on the first frame the track is. The URL holds the committed window
- * clamped to the run (an edge past the start or end is cut off), so it can't
- * always give back the car time: the map keeps the exact selection it moved
- * while the URL still holds the window that move produced, and goes back to the
- * URL's when it changes for another reason (lap selection, a reset, Back, a
- * pasted link).
+ * Otherwise the selection is worked out from the URL during render, on the lap
+ * the map draws (`lapId`). A range doesn't give back the exact car position, so
+ * the map keeps the selection it moved while the URL still holds the range that
+ * move produced, and goes back to the URL's when it changes for another reason
+ * (a chart drag, a reset, Back, a pasted link).
  */
-export function useTrackSelection(track: Track | null) {
-  const { timeline } = useDashboardRun();
-  const committed = useCommittedWindow();
-  const { commitWindow } = useDashboardActions();
+export function useTrackSelection(
+  track: Track | null,
+  points: LapProgressPoints | null,
+  lapId: number | null,
+) {
+  const committed = useCommittedProgressRange();
+  const { commitProgressRange } = useDashboardActions();
 
   const [moved, setMoved] = useState<Moved | null>(null);
 
-  const fromUrl = useMemo(
-    () => (track ? (committed ? selectionFor(track, committed) : defaultSelection(track)) : null),
-    [track, committed],
-  );
-  // Before a commit, the move belongs to the window it started from; after, to
-  // the one it wrote (and not the old one, so Back to it shows that window).
+  const fromUrl = useMemo(() => {
+    if (!track) return null;
+    const shown =
+      committed && points && lapId !== null && selectionForRange(track, points, lapId, committed);
+    return shown || defaultSelection(track);
+  }, [track, points, lapId, committed]);
+  // Before a commit, the move belongs to the range it started from; after, to
+  // the one it wrote (and not the old one, so Back to it shows that range).
   const ownsUrl =
     moved !== null &&
-    (moved.sent !== undefined
-      ? sameWindow(moved.sent, committed)
-      : sameWindow(moved.base, committed));
+    moved.track === track &&
+    sameRange(moved.sent !== undefined ? moved.sent : moved.base, committed);
   const selection = track && ownsUrl ? moved.selection : fromUrl;
 
   // Mirrors `selection` for pointer handlers, which run between renders.
@@ -96,22 +119,25 @@ export function useTrackSelection(track: Track | null) {
 
   const update = useCallback(
     (next: TrackSelection) => {
+      if (!track) return;
       selectionRef.current = next;
-      setMoved({ selection: next, base: committed });
+      setMoved({ track, selection: next, base: committed });
     },
-    [committed],
+    [track, committed],
   );
 
   const commit = useCallback(() => {
     const current = selectionRef.current;
-    if (!current || !track) return;
-    const range = selectionWindow(track, current);
-    // commitWindow clamps the same way; remember the result to recognise it above.
-    const target = timeline ? clampWindow(range, timeline.durationMs) : range;
-    setMoved({ selection: current, base: committed, sent: target });
+    if (!current || !track || !points) return;
+    const [from, to] = selectionWindow(track, current);
+    const range = progressRangeBetween(points, from + track.startMs, to + track.startMs);
+    if (!range) return;
+    // commitProgressRange snaps the same way; remember the result to recognise it above.
+    const target = snapProgressRange(range);
+    setMoved({ track, selection: current, base: committed, sent: target });
     // Unchanged (a click on the car without moving it): don't write the same URL.
-    if (!sameWindow(target, committed)) commitWindow(range);
-  }, [track, timeline, committed, commitWindow]);
+    if (!sameRange(target, committed)) commitProgressRange(range);
+  }, [track, points, committed, commitProgressRange]);
 
   return {
     // Null only while there's no track.
@@ -120,7 +146,7 @@ export function useTrackSelection(track: Track | null) {
     // Moves the selection on the map only. Other panels see it once committed.
     update,
     commit,
-    // False until a window is in the URL: the default ±100 m is only a suggestion.
+    // False until a range is in the URL: the default ±100 m is only a suggestion.
     applied: committed !== null,
   };
 }

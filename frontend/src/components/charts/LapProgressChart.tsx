@@ -96,7 +96,13 @@ export const LapProgressChart = ({
       mode: 2,
       width: 0,
       height,
-      legend: { live: false },
+      legend: {
+        live: false,
+        markers: {
+          stroke: (_chart, i) => `var(${lapColor(laps[i - 1].lapId)})`,
+          fill: (_chart, i) => `var(${lapColor(laps[i - 1].lapId)})`,
+        },
+      },
       focus: { alpha: 0.3 },
       scales: {
         x: { time: false, auto: false },

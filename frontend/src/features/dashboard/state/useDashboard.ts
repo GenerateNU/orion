@@ -2,12 +2,10 @@ import { useEffect, useMemo, useRef } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { getRouteApi } from "@tanstack/react-router";
 import { useStore } from "zustand";
-import type { MetricsResponse } from "@schemas/metrics.schema";
 import type { RunResponse } from "@schemas/run.schema";
-import { runDataKeys, runKeys } from "@api/queryKeys";
+import { runKeys } from "@api/queryKeys";
 import { useRun } from "@hooks/useRuns";
 import { useDashboardStoreApi } from "@features/dashboard/state/dashboardStore";
-import { lapsFromMetrics, lapsToWindow } from "@features/dashboard/utils/laps";
 import { snapProgressRange, type ProgressRange } from "@features/dashboard/utils/progress";
 import type { DashboardSearch } from "@features/dashboard/utils/search";
 import {
@@ -40,7 +38,7 @@ export const useDashboardRun = () => {
 export const useSelectedLaps = (): readonly number[] =>
   dashboardRoute.useSearch({ select: (search) => search.laps ?? NO_LAPS });
 
-// The window set by commitWindow / selectLaps; null is the whole run. The data
+// The window set by commitWindow; null is the whole run. The data
 // hooks fetch it themselves (data/useDashboardData.ts, scope "detail").
 export const useCommittedWindow = (): TimeWindow | null =>
   dashboardRoute.useSearch({ select: (search) => search.t ?? null });
@@ -120,26 +118,13 @@ export const useDashboardActions = () => {
       return run ? runTimeline(run) : null;
     };
 
-    // The span of the laps; the current window when lap times aren't loaded.
-    const windowForLaps = (lapIds: readonly number[], current: TimeWindow | undefined) => {
-      if (lapIds.length === 0) return undefined;
-      const metrics = queryClient.getQueryData<MetricsResponse>(runDataKeys.metrics(runId));
-      const runTimes = timeline();
-      if (!metrics || !runTimes) return current;
-      return lapsToWindow(lapsFromMetrics(metrics, runTimes), lapIds) ?? current;
-    };
-
-    // Lap changes add a history entry, so Back undoes them.
+    // Lap changes add a history entry, so Back undoes them. They don't touch the
+    // time window.
     const setLaps = (update: (laps: readonly number[]) => readonly number[]) => {
-      store.getState().setDraftWindow(null);
       navigate({
         search: (prev: DashboardSearch): DashboardSearch => {
           const laps = [...new Set(update(prev.laps ?? NO_LAPS))].sort((a, b) => a - b);
-          return {
-            ...prev,
-            laps: laps.length > 0 ? laps : undefined,
-            t: windowForLaps(laps, prev.t),
-          };
+          return { ...prev, laps: laps.length > 0 ? laps : undefined };
         },
       });
     };
@@ -168,7 +153,7 @@ export const useDashboardActions = () => {
     };
 
     return {
-      // Selecting laps also zooms to their span; an empty list shows the whole run.
+      // An empty list means all laps.
       selectLaps: (lapIds: readonly number[]) => setLaps(() => lapIds),
       toggleLap: (lapId: number) =>
         setLaps((laps) =>

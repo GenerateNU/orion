@@ -3,8 +3,9 @@ import type { PointerEvent as ReactPointerEvent } from "react";
 import EmptyState from "@components/ui/EmptyState";
 import ErrorState from "@components/ui/ErrorState";
 import LoadingState from "@components/ui/LoadingState";
-import { useRunPositions } from "@features/dashboard/data/useDashboardData";
-import { useHoverTimeSubscription } from "@features/dashboard/state/useDashboard";
+import { useRunLapProgress, useRunPositions } from "@features/dashboard/data/useDashboardData";
+import { useHoverTimeSubscription, useSelectedLaps } from "@features/dashboard/state/useDashboard";
+import { lapStretch, mapLap } from "@features/dashboard/utils/progress";
 import {
   anchorAt,
   distanceAt,
@@ -77,14 +78,34 @@ export function TrackMap() {
     positionsError: error,
   } = useRunPositions("overview");
 
-  const track = useMemo(
-    () =>
-      positions && positions.time.length > 0
-        ? makeTrack(positions.positions, positions.time, positions.startMs)
-        : null,
-    [positions],
+  const { lapProgress, lapProgressError } = useRunLapProgress("overview");
+  const selectedLaps = useSelectedLaps();
+  const lapId = useMemo(
+    () => (lapProgress ? mapLap(lapProgress, selectedLaps) : null),
+    [lapProgress, selectedLaps],
   );
-  const { selection, selectionRef, update, commit, applied } = useTrackSelection(track);
+
+  // One lap of road, since every lap covers the same progress; the whole run
+  // until lap progress loads.
+  const track = useMemo(() => {
+    if (!positions) return null;
+    const { time } = positions;
+    const lap = lapProgress && lapId !== null ? lapStretch(lapProgress, lapId, [0, 1]) : null;
+    const first = lap ? time.findIndex((t) => t >= lap.from) : 0;
+    const after = lap ? time.findIndex((t) => t > lap.to) : -1;
+    const end = after < 0 ? time.length : after;
+    if (first < 0 || first >= end) return null;
+    return makeTrack(
+      positions.positions.slice(first, end),
+      time.subarray(first, end),
+      positions.startMs,
+    );
+  }, [positions, lapProgress, lapId]);
+  const { selection, selectionRef, update, commit, applied } = useTrackSelection(
+    track,
+    lapProgress ?? null,
+    lapId,
+  );
 
   // Static layers, once per track.
   const base = useMemo(() => {
@@ -275,9 +296,13 @@ export function TrackMap() {
       />
 
       <p className={styles.hint}>
-        {applied
-          ? "Drag the car to move the window · drag a handle to resize · Esc cancels"
-          : "Drag the car or click the track to select a window"}
+        {lapProgressError
+          ? `Selections can't reach the charts: ${lapProgressError.message}`
+          : !lapProgress
+            ? "Loading lap progress…"
+            : applied
+              ? "Drag the car to move the window · drag a handle to resize · Esc cancels"
+              : "Drag the car or click the track to select a window"}
       </p>
     </div>
   );
