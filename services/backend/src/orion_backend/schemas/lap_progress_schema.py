@@ -22,3 +22,8 @@ class LapProgressResponse(BaseModel):
         description="From 0 to 1, same length as `time`.",
         examples=[[0.412, 0.413]],
     )
+    lap_id: list[int] = Field(
+        default_factory=list,
+        description="The lap each point is in, same length as `time`.",
+        examples=[[3, 3]],
+    )

@@ -51,6 +51,7 @@ def test_whole_run_has_progress_per_lap_without_the_last_point(monkeypatch):
     response = get_lap_progress(monkeypatch, at(0), at(20))
     assert response.time == [row.time for row in ROWS[:20]]
     assert response.progress == pytest.approx([s / 9 for s in range(10)] * 2, abs=0.01)
+    assert response.lap_id == [1] * 10 + [2] * 10
 
 
 def test_window_inside_a_lap(monkeypatch):

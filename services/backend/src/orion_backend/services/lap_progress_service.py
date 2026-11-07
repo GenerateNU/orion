@@ -56,4 +56,5 @@ class LapProgressService:
             lon = [row.longitude for row in in_lap]
             response.time += [row.time for row in in_lap]
             response.progress += lap_progress(lat, lon, ref_lat, ref_lon).tolist()
+            response.lap_id += [lap.lap_id] * len(in_lap)
         return response
