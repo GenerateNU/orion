@@ -37,6 +37,17 @@
   --status-failed: #c42020;
   --status-failed-tint: rgb(220 38 38 / 0.12);
 
+  /* Lap lines in charts, by lap_id (repeating after 8). Validated as a categorical
+     palette against --bg-surface in both themes. */
+  --lap-1: #2a78d6;
+  --lap-2: #eb6834;
+  --lap-3: #1baf7a;
+  --lap-4: #eda100;
+  --lap-5: #e87ba4;
+  --lap-6: #008300;
+  --lap-7: #6250d6;
+  --lap-8: #e34948;
+
   --focus-ring: var(--status-processing);
 
   /* Type */
@@ -90,6 +101,15 @@
     --status-idle-tint: rgb(139 146 156 / 0.16);
     --status-failed: #ef4444;
     --status-failed-tint: rgb(239 68 68 / 0.16);
+
+    --lap-1: #3987e5;
+    --lap-2: #d95926;
+    --lap-3: #199e70;
+    --lap-4: #c98500;
+    --lap-5: #d55181;
+    --lap-6: #008300;
+    --lap-7: #9085e9;
+    --lap-8: #e66767;
   }
 }
 

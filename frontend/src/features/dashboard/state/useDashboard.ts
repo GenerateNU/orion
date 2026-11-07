@@ -8,6 +8,7 @@ import { runDataKeys, runKeys } from "@api/queryKeys";
 import { useRun } from "@hooks/useRuns";
 import { useDashboardStoreApi } from "@features/dashboard/state/dashboardStore";
 import { lapsFromMetrics, lapsToWindow } from "@features/dashboard/utils/laps";
+import { snapProgressRange, type ProgressRange } from "@features/dashboard/utils/progress";
 import type { DashboardSearch } from "@features/dashboard/utils/search";
 import {
   runTimeline,
@@ -19,8 +20,10 @@ import {
 // The dashboard's state API. Panels read and change shared state only through
 // these hooks, so a field can move between the URL and the store without
 // touching any panel:
-//   URL search params  laps, committed window  (durable, shareable, back/forward)
-//   dashboardStore     hover, draft window     (transient, up to once a frame)
+//   URL search params  laps, committed window and progress range
+//                      (durable, shareable, back/forward)
+//   dashboardStore     hover, draft window and progress range
+//                      (transient, up to once a frame)
 
 const dashboardRoute = getRouteApi("/runs/$runId/dashboard");
 
@@ -51,6 +54,17 @@ export const useVisibleWindow = (): TimeWindow | null => {
   return draft ?? committed;
 };
 
+// The stretch of the lap set by commitProgressRange; null is the whole lap.
+export const useCommittedProgressRange = (): ProgressRange | null =>
+  dashboardRoute.useSearch({ select: (search) => search.p ?? null });
+
+// The progress range to draw: the one being dragged if any, else the committed one.
+export const useVisibleProgressRange = (): ProgressRange | null => {
+  const draft = useStore(useDashboardStoreApi(), (state) => state.draftProgressRange);
+  const committed = useCommittedProgressRange();
+  return draft ?? committed;
+};
+
 // For React-rendered highlights (lap list rows). Fast-moving hover time has no
 // hook like this on purpose: use useHoverTimeSubscription.
 export const useHoverLap = (): number | null =>
@@ -69,6 +83,24 @@ export const useHoverTimeSubscription = (onChange: (time: RunTime | null) => voi
     () =>
       store.subscribe((state, previous) => {
         if (state.hoverTime !== previous.hoverTime) onChangeRef.current(state.hoverTime);
+      }),
+    [store],
+  );
+};
+
+// Like useHoverTimeSubscription, for the lap progress under the pointer.
+export const useHoverProgressSubscription = (onChange: (progress: number | null) => void) => {
+  const store = useDashboardStoreApi();
+  const onChangeRef = useRef(onChange);
+  useEffect(() => {
+    onChangeRef.current = onChange;
+  });
+  useEffect(
+    () =>
+      store.subscribe((state, previous) => {
+        if (state.hoverProgress !== previous.hoverProgress) {
+          onChangeRef.current(state.hoverProgress);
+        }
       }),
     [store],
   );
@@ -123,6 +155,16 @@ export const useDashboardActions = () => {
       });
     };
 
+    // Like setWindow: replaces the history entry.
+    const setProgressRange = (range: ProgressRange | null) => {
+      store.getState().setDraftProgressRange(null);
+      const p = range ? snapProgressRange(range) : undefined;
+      navigate({
+        search: (prev: DashboardSearch): DashboardSearch => ({ ...prev, p }),
+        replace: true,
+      });
+    };
+
     return {
       // Selecting laps also zooms to their span; an empty list shows the whole run.
       selectLaps: (lapIds: readonly number[]) => setLaps(() => lapIds),
@@ -137,6 +179,10 @@ export const useDashboardActions = () => {
       resetWindow: () => setWindow(null),
       setHoverTime: (time: RunTime | null) => store.getState().setHoverTime(time),
       setHoverLap: (lap: number | null) => store.getState().setHoverLap(lap),
+      previewProgressRange: (range: ProgressRange) => store.getState().setDraftProgressRange(range),
+      commitProgressRange: (range: ProgressRange) => setProgressRange(range),
+      resetProgressRange: () => setProgressRange(null),
+      setHoverProgress: (progress: number | null) => store.getState().setHoverProgress(progress),
     };
   }, [runId, navigate, store, queryClient]);
 };

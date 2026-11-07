@@ -1,11 +1,12 @@
 import { useMemo } from "react";
-import { type RunTime } from "@features/dashboard/utils/time";
-import { useSensorTrace } from "@features/dashboard/data/useDashboardData";
-import type { ChartSeries } from "./TimeSeriesChart";
+import { useRunLapProgress, useSensorTrace } from "@features/dashboard/data/useDashboardData";
+import { useSelectedLaps } from "@features/dashboard/state/useDashboard";
+import { progressAtTimes } from "@features/dashboard/utils/progress";
+import type { LapSeries } from "./LapProgressChart";
 import ErrorState from "@components/ui/ErrorState";
 import LoadingState from "@components/ui/LoadingState";
 import EmptyState from "@components/ui/EmptyState";
-import TimeSeriesChartFunctionality from "./TimeSeriesChartFunctionality";
+import DashboardLapProgressChart from "./DashboardLapProgressChart";
 
 type SensorChartProps = {
   name: string;
@@ -19,26 +20,39 @@ export default function SensorChart({ name, unit, height }: SensorChartProps) {
     sensorNames,
     "overview",
   );
+  const { lapProgress, lapProgressIsLoading, lapProgressError } = useRunLapProgress("overview");
+  const selectedLaps = useSelectedLaps();
 
-  const series = useMemo<ChartSeries[] | undefined>(() => {
+  // One series per lap, in lap order; only the selected laps when any are selected.
+  const laps = useMemo<LapSeries[] | undefined>(() => {
     const sensor = trace?.series[name];
-    if (!trace || !sensor) return undefined;
-    const time: RunTime[] = [];
-    const values: number[] = [];
-    sensor.time.forEach((t, i) => {
+    if (!sensor || !lapProgress) return undefined;
+    const matched = progressAtTimes(sensor.time, lapProgress);
+    const shown = new Set(selectedLaps);
+    const byLap = new Map<number, LapSeries>();
+    sensor.time.forEach((_time, i) => {
       const value = sensor.values[i]?.[0];
-      if (value == null) return;
-      time.push((t - trace.startMs) as RunTime);
-      values.push(value);
+      const lapId = matched.lapId[i];
+      const progress = matched.progress[i];
+      if (value == null || lapId == null || progress == null) return;
+      if (shown.size > 0 && !shown.has(lapId)) return;
+      let lap = byLap.get(lapId);
+      if (!lap) {
+        lap = { lapId, progress: [], values: [] };
+        byLap.set(lapId, lap);
+      }
+      lap.progress.push(progress);
+      lap.values.push(value);
     });
-    return [{ id: name, label: name, unit, time, values }];
-  }, [trace, name, unit]);
+    return byLap.size > 0 ? [...byLap.values()] : undefined;
+  }, [trace, lapProgress, name, selectedLaps]);
 
-  if (traceError) return <ErrorState error={traceError} />;
-  if (traceIsLoading || traceIsPlaceholderData || !trace) {
+  const error = traceError ?? lapProgressError;
+  if (error) return <ErrorState error={error} />;
+  if (traceIsLoading || traceIsPlaceholderData || !trace || lapProgressIsLoading) {
     return <LoadingState message="Loading sensor data…" />;
   }
-  if (!series) return <EmptyState message="This run has no readings for this sensor." />;
+  if (!laps) return <EmptyState message="This run has no readings for this sensor." />;
 
-  return <TimeSeriesChartFunctionality series={series} height={height} yLabel={unit} />;
+  return <DashboardLapProgressChart laps={laps} height={height} yLabel={unit} />;
 }

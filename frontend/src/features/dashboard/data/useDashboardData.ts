@@ -1,13 +1,16 @@
 import { useCallback, useMemo } from "react";
 import { keepPreviousData } from "@tanstack/react-query";
+import type { LapProgressResponse } from "@schemas/lapProgress.schema";
 import type { MetricsResponse } from "@schemas/metrics.schema";
 import type { SensorDataResponse, SensorSeries } from "@schemas/sensor.schema";
 import type { StateDataResponse } from "@schemas/state.schema";
+import { useLapProgress } from "@hooks/useLapProgress";
 import { useMetrics } from "@hooks/useMetrics";
 import { useSensorData } from "@hooks/useSensors";
 import { useStateEstimation } from "@hooks/useStateEstimation";
 import { useCommittedWindow, useDashboardRun } from "@features/dashboard/state/useDashboard";
 import { lapsFromMetrics, type Lap } from "@features/dashboard/utils/laps";
+import type { LapProgressPoints } from "@features/dashboard/utils/progress";
 import { snapWindow, toIsoRange, type TimeWindow } from "@features/dashboard/utils/time";
 
 // The data panels draw, for the opened run. Each hook wraps an API hook from
@@ -94,6 +97,26 @@ export const useRunPositions = (scope: DataScope) => {
     positionsIsPlaceholderData: stateDataIsPlaceholderData,
     positionsError: stateDataError,
   };
+};
+
+// Lap progress at each estimated position, matched to sensor readings by time
+// (progressAtTimes), so no startMs is needed.
+export const useRunLapProgress = (scope: DataScope) => {
+  const { runId, timeline } = useDashboardRun();
+  const window = useFetchWindow(scope);
+  const range = useMemo(
+    () => (timeline ? toIsoRange(timeline, window, "naive") : undefined),
+    [timeline, window],
+  );
+  const select = useCallback(
+    (data: LapProgressResponse): LapProgressPoints => ({
+      time: data.time,
+      progress: data.progress,
+      lapId: data.lap_id,
+    }),
+    [],
+  );
+  return useLapProgress(runId, range, { select, placeholderData: keepPreviousData });
 };
 
 export type SensorTraces = {

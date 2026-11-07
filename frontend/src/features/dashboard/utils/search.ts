@@ -1,13 +1,16 @@
+import type { ProgressRange } from "@features/dashboard/utils/progress";
 import type { TimeWindow } from "@features/dashboard/utils/time";
 
 // The dashboard's search params: the selection that survives a refresh and can be
-// shared as a link. Both are lists, written comma-separated (router.tsx):
-// ?t=120000,240000&laps=3,7
+// shared as a link. All are lists, written comma-separated (router.tsx):
+// ?t=120000,240000&laps=3,7&p=0.42,0.51
 export type DashboardSearch = {
   // Committed time window in RunTime ms; absent means the whole run.
   t?: TimeWindow;
   // Selected lap ids, ascending.
   laps?: number[];
+  // Committed stretch of the lap; absent means the whole lap.
+  p?: ProgressRange;
 };
 
 // Values arrive as strings from the URL, or as arrays from navigate().
@@ -28,6 +31,11 @@ function parseWindow(value: unknown): TimeWindow | undefined {
   return [start, end];
 }
 
+function parseProgressRange(value: unknown): ProgressRange | undefined {
+  const range = parseWindow(value);
+  return range && range[1] <= 1 ? range : undefined;
+}
+
 function parseLaps(value: unknown): number[] | undefined {
   if (value === undefined) return undefined;
   const laps = [...new Set(toNumbers(value).filter(Number.isInteger))].sort((a, b) => a - b);
@@ -37,5 +45,9 @@ function parseLaps(value: unknown): number[] | undefined {
 // A malformed param is dropped rather than failing the route: a hand-edited URL
 // still opens the run.
 export function validateDashboardSearch(search: Record<string, unknown>): DashboardSearch {
-  return { t: parseWindow(search.t), laps: parseLaps(search.laps) };
+  return {
+    t: parseWindow(search.t),
+    laps: parseLaps(search.laps),
+    p: parseProgressRange(search.p),
+  };
 }

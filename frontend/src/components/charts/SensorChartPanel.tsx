@@ -1,6 +1,9 @@
 import { useId, useMemo, useState } from "react";
 import { useSensors } from "@hooks/useSensors";
-import { useDashboardActions, useVisibleWindow } from "@features/dashboard/state/useDashboard";
+import {
+  useDashboardActions,
+  useVisibleProgressRange,
+} from "@features/dashboard/state/useDashboard";
 import styles from "./SensorChartPanel.module.css";
 import SensorChart from "./SensorChart";
 
@@ -19,8 +22,8 @@ export default function SensorChartsPanel({
   const [adding, setAdding] = useState(false);
 
   const { sensors } = useSensors();
-  const visibleWindow = useVisibleWindow();
-  const { resetWindow } = useDashboardActions();
+  const visibleRange = useVisibleProgressRange();
+  const { resetProgressRange } = useDashboardActions();
 
   const units = useMemo(
     () => new Map(sensors?.map((sensor) => [sensor.name, sensor.unit ?? ""])),
@@ -36,8 +39,8 @@ export default function SensorChartsPanel({
         <button
           type="button"
           className={styles.reset}
-          onClick={() => resetWindow()}
-          disabled={visibleWindow === null}
+          onClick={() => resetProgressRange()}
+          disabled={visibleRange === null}
         >
           Reset zoom
         </button>

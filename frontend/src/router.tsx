@@ -16,7 +16,7 @@ import App from "./App";
 // Routes, in code (few enough not to need file-based routing):
 //   /                        → redirect to /runs
 //   /runs                    → RunsView
-//   /runs/$runId/dashboard   → DashboardView, selection in ?t=&laps= (utils/search.ts)
+//   /runs/$runId/dashboard   → DashboardView, selection in ?t=&laps=&p= (utils/search.ts)
 
 const rootRoute = createRootRoute({ component: App });
 

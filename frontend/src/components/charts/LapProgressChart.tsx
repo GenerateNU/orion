@@ -1,39 +1,41 @@
 import { useEffect, useMemo, useRef } from "react";
 import uPlot from "uplot";
 import "uplot/dist/uPlot.min.css";
-import type { RunTime, TimeWindow } from "@features/dashboard/utils/time";
-import { formatDuration } from "@utils/format";
-import styles from "./TimeSeriesChart.module.css";
+import type { ProgressRange } from "@features/dashboard/utils/progress";
+import styles from "./LapProgressChart.module.css";
 
 const MIN_DRAG_PX = 4;
+const LAP_COLORS = 8;
+const WHOLE_LAP: ProgressRange = [0, 1];
+const linePaths = uPlot.paths.linear?.();
 
-export type ChartSeries = {
-  id: string;
-  label: string;
-  unit: string;
-  time: RunTime[];
+// One lap's readings: values[i] at progress[i] (0 to 1), in time order.
+export type LapSeries = {
+  lapId: number;
+  progress: number[];
   values: number[];
 };
 
-export type TimeSeriesChartProps = {
-  series: ChartSeries[];
+export type LapProgressChartProps = {
+  laps: LapSeries[];
   height?: number;
   yLabel?: string;
-  visibleWindow?: TimeWindow | null;
-  onCommitWindow?: (window: TimeWindow) => void;
-  onResetWindow?: () => void;
-  onHoverTime?: (time: RunTime | null) => void;
+  visibleRange?: ProgressRange | null;
+  onCommitRange?: (range: ProgressRange) => void;
+  onResetRange?: () => void;
+  onHoverProgress?: (progress: number | null) => void;
 };
 
 type ChartCallbacks = Pick<
-  TimeSeriesChartProps,
-  "onCommitWindow" | "onResetWindow" | "onHoverTime"
+  LapProgressChartProps,
+  "onCommitRange" | "onResetRange" | "onHoverProgress"
 >;
 
 const cssStyle = (chart: uPlot, name: string) =>
   getComputedStyle(chart.root).getPropertyValue(name).trim();
 
-const formatTime = (ms: number) => formatDuration(ms / 1000);
+// Color follows the lap, so a lap keeps its color whichever laps are shown.
+const lapColor = (lapId: number) => `--lap-${((lapId - 1) % LAP_COLORS) + 1}`;
 
 const formatTicks = (ticks: number[], increment: number) => {
   const largest = Math.max(...ticks.map(Math.abs));
@@ -45,57 +47,59 @@ const formatTicks = (ticks: number[], increment: number) => {
   return ticks.map((tick) => format.format(tick));
 };
 
-const selectionToWindow = (chart: uPlot): TimeWindow | null => {
+const selectionToRange = (chart: uPlot): ProgressRange | null => {
   const { left, width } = chart.select;
   if (width < MIN_DRAG_PX) return null;
-  const start = chart.posToVal(left, "x");
-  const end = chart.posToVal(left + width, "x");
-  return [start, end];
+  return [chart.posToVal(left, "x"), chart.posToVal(left + width, "x")];
 };
 
 const clearSelection = (chart: uPlot) => {
   chart.setSelect({ left: 0, top: 0, width: 0, height: 0 }, false);
 };
 
-const applyWindow = (chart: uPlot, timeWindow: TimeWindow | null) => {
-  const times = chart.data[0];
-  if (times.length === 0) return;
-  const [min, max] = timeWindow ?? [times[0], times[times.length - 1]];
+const applyRange = (chart: uPlot, range: ProgressRange | null) => {
+  const [min, max] = range ?? WHOLE_LAP;
   chart.setScale("x", { min, max });
 };
 
-export const TimeSeriesChart = ({
-  series,
+// Overlays one line per lap against lap progress, in uPlot's mode 2 so each lap
+// keeps its own progress/value arrays.
+export const LapProgressChart = ({
+  laps,
   height = 600,
   yLabel = "",
-  visibleWindow = null,
-  onCommitWindow,
-  onResetWindow,
-  onHoverTime,
-}: TimeSeriesChartProps) => {
+  visibleRange = null,
+  onCommitRange,
+  onResetRange,
+  onHoverProgress,
+}: LapProgressChartProps) => {
   const containerRef = useRef<HTMLDivElement>(null);
   const chartRef = useRef<uPlot | null>(null);
   const draggingRef = useRef(false);
-  const windowRef = useRef(visibleWindow);
+  const rangeRef = useRef(visibleRange);
 
   const callbacksRef = useRef<ChartCallbacks>({});
   useEffect(() => {
-    callbacksRef.current = { onCommitWindow, onResetWindow, onHoverTime };
+    callbacksRef.current = { onCommitRange, onResetRange, onHoverProgress };
   });
 
+  // Mode 2 data is [null, [x, y] per series]; uPlot's AlignedData type only
+  // describes mode 1.
   const data = useMemo(
-    () => uPlot.join(series.map((sensor): uPlot.AlignedData => [sensor.time, sensor.values])),
-    [series],
+    () => [null, ...laps.map((lap) => [lap.progress, lap.values])] as unknown as uPlot.AlignedData,
+    [laps],
   );
   const dataRef = useRef(data);
 
   const opts = useMemo(
     (): uPlot.Options => ({
+      mode: 2,
       width: 0,
       height,
-      legend: { show: false },
+      legend: { live: false },
+      focus: { alpha: 0.3 },
       scales: {
-        x: { time: false },
+        x: { time: false, auto: false },
         y: {
           range: (_chart, min, max) => {
             const pad = (max - min) * 0.1 || 1;
@@ -105,8 +109,8 @@ export const TimeSeriesChart = ({
       },
       axes: [
         {
-          label: "Time",
-          values: (_chart, ticks) => ticks.map(formatTime),
+          label: "Lap progress",
+          values: (_chart, ticks) => ticks.map((tick) => `${Math.round(tick * 100)}%`),
           stroke: (chart) => cssStyle(chart, "--text-muted"),
           grid: { stroke: (chart) => cssStyle(chart, "--border-default") },
           ticks: { stroke: (chart) => cssStyle(chart, "--border-default") },
@@ -126,13 +130,16 @@ export const TimeSeriesChart = ({
         sync: { key: "dashboard-run" },
         drag: { x: true, y: false, setScale: false },
         bind: { dblclick: () => null },
+        focus: { prox: 16 },
       },
       series: [
         {},
-        ...series.map(({ label }) => ({
-          label,
-          stroke: "#d4b06a",
+        ...laps.map(({ lapId }) => ({
+          label: `Lap ${lapId}`,
+          stroke: (chart: uPlot) => cssStyle(chart, lapColor(lapId)),
           width: 1.5,
+          paths: linePaths,
+          points: { show: false },
         })),
       ],
       hooks: {
@@ -140,23 +147,23 @@ export const TimeSeriesChart = ({
           (chart) => {
             if (draggingRef.current) {
               draggingRef.current = false;
-              const selected = selectionToWindow(chart);
-              if (selected) callbacksRef.current.onCommitWindow?.(selected);
+              const selected = selectionToRange(chart);
+              if (selected) callbacksRef.current.onCommitRange?.(selected);
             }
             clearSelection(chart);
           },
         ],
         setCursor: [
           (chart) => {
-            const idx = chart.cursor.idx;
-            callbacksRef.current.onHoverTime?.(
-              idx == null ? null : (chart.data[0][idx] as RunTime),
+            const { left } = chart.cursor;
+            callbacksRef.current.onHoverProgress?.(
+              left == null || left < 0 ? null : chart.posToVal(left, "x"),
             );
           },
         ],
       },
     }),
-    [height, yLabel, series],
+    [height, yLabel, laps],
   );
 
   useEffect(() => {
@@ -164,7 +171,7 @@ export const TimeSeriesChart = ({
     const chart = chartRef.current;
     if (!chart || chart.data === data) return;
     chart.setData(data);
-    applyWindow(chart, windowRef.current);
+    applyRange(chart, rangeRef.current);
   }, [data]);
 
   useEffect(() => {
@@ -173,7 +180,7 @@ export const TimeSeriesChart = ({
 
     const chart = new uPlot({ ...opts, width: el.clientWidth }, dataRef.current, el);
     chartRef.current = chart;
-    applyWindow(chart, windowRef.current);
+    applyRange(chart, rangeRef.current);
 
     const onDown = () => {
       draggingRef.current = true;
@@ -181,7 +188,7 @@ export const TimeSeriesChart = ({
     const onUp = () => {
       draggingRef.current = false;
     };
-    const onDoubleClick = () => callbacksRef.current.onResetWindow?.();
+    const onDoubleClick = () => callbacksRef.current.onResetRange?.();
 
     chart.over.addEventListener("mousedown", onDown);
     chart.over.addEventListener("dblclick", onDoubleClick);
@@ -201,11 +208,11 @@ export const TimeSeriesChart = ({
   }, [opts, height]);
 
   useEffect(() => {
-    windowRef.current = visibleWindow;
+    rangeRef.current = visibleRange;
     if (draggingRef.current) return;
     const chart = chartRef.current;
-    if (chart) applyWindow(chart, visibleWindow);
-  }, [visibleWindow]);
+    if (chart) applyRange(chart, visibleRange);
+  }, [visibleRange]);
 
   return <div ref={containerRef} className={styles.chart} />;
 };
