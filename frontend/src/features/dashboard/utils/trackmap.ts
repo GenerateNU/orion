@@ -22,6 +22,10 @@ export interface Track {
   // Projected positions in SVG units; NaN where the reading has no fix.
   xs: Float32Array;
   ys: Float32Array;
+  // Metres driven up to each sample, non-decreasing; flat where there's no fix.
+  dist: Float64Array;
+  // Metres driven over the whole run.
+  totalM: number;
   // RunTime of the first and last samples with a position.
   firstTime: RunTime;
   lastTime: RunTime;
@@ -35,6 +39,9 @@ export const GAP_MS = 2000;
 
 // Margin in SVG units around the track: room for the handles and the start label.
 const PAD = 8;
+
+// Metres in a degree of latitude (and in a degree of longitude times cos(latitude)).
+const M_PER_DEG = (6_371_000 * Math.PI) / 180;
 
 // A GPS reading of [0, 0] (or NaN) means no fix, not a car in the Gulf of Guinea.
 const hasFix = (lat: number, lon: number) =>
@@ -90,11 +97,28 @@ export function makeTrack(
     }
   }
 
+  // Distance driven, from fix to fix. Across a dropout this counts the straight
+  // line between its ends, which undercounts if the car took a corner unseen.
+  const dist = new Float64Array(latLon.length);
+  let prev = -1;
+  for (let i = 0; i < latLon.length; i++) {
+    dist[i] = i > 0 ? dist[i - 1] : 0;
+    const [lat, lon] = latLon[i];
+    if (!hasFix(lat, lon)) continue;
+    if (prev >= 0) {
+      const [prevLat, prevLon] = latLon[prev];
+      dist[i] += Math.hypot((lon - prevLon) * lonScale, lat - prevLat) * M_PER_DEG;
+    }
+    prev = i;
+  }
+
   return {
     time,
     startMs,
     xs,
     ys,
+    dist,
+    totalM: dist[latLon.length - 1],
     firstTime: time[first] - startMs,
     lastTime: time[last] - startMs,
     viewSize: { width: width * scale + 2 * PAD, height: height * scale + 2 * PAD },
@@ -193,6 +217,58 @@ export function windowPath(track: Track, from: RunTime, to: RunTime): string {
     if (b) yield [toMs, b.x, b.y] as const;
   }
   return pathThrough(entries());
+}
+
+/** Metres driven by `runTime`, interpolated; clamped to the recorded range. */
+export function distanceAt(track: Track, runTime: RunTime): number {
+  const { time, dist } = track;
+  const at = Math.min(Math.max(runTime, track.firstTime), track.lastTime) + track.startMs;
+  const i = indexAt(time, at);
+  const j = i + 1;
+  if (j >= time.length || time[j] <= time[i]) return dist[i];
+  const f = Math.min(1, Math.max(0, (at - time[i]) / (time[j] - time[i])));
+  return dist[i] + (dist[j] - dist[i]) * f;
+}
+
+// First index whose distance is >= d (strict: > d), or the length if none.
+function searchDist(dist: Float64Array, d: number, strict: boolean): number {
+  let lo = 0;
+  let hi = dist.length;
+  while (lo < hi) {
+    const mid = (lo + hi) >> 1;
+    if (strict ? dist[mid] > d : dist[mid] >= d) hi = mid;
+    else lo = mid + 1;
+  }
+  return lo;
+}
+
+/**
+ * The RunTime at which the car had driven `d` metres, interpolated; clamped to
+ * the recorded range. Where the car stood still (distance flat over a stretch of
+ * time), "start" gives the end of the stop and "end" its beginning, so a window
+ * edge never takes in time spent parked beyond it.
+ */
+export function timeAtDistance(track: Track, d: number, side: "start" | "end"): RunTime {
+  const { time, dist, startMs } = track;
+  const n = time.length;
+  let i: number;
+  let j: number;
+  if (side === "start") {
+    // The last sample at or before `d`, and the one after it.
+    i = searchDist(dist, d, true) - 1;
+    if (i < 0) return track.firstTime;
+    if (i >= n - 1) return track.lastTime;
+    j = i + 1;
+  } else {
+    // The first sample at or past `d`, and the one before it.
+    j = searchDist(dist, d, false);
+    if (j >= n) return track.lastTime;
+    if (j === 0) return track.firstTime;
+    i = j - 1;
+  }
+  const f = (d - dist[i]) / (dist[j] - dist[i]);
+  const at = time[i] + (time[j] - time[i]) * f - startMs;
+  return Math.min(Math.max(at, track.firstTime), track.lastTime);
 }
 
 /**

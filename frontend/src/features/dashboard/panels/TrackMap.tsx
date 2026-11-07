@@ -7,6 +7,7 @@ import { useRunPositions } from "@features/dashboard/data/useDashboardData";
 import { useHoverTimeSubscription } from "@features/dashboard/state/useDashboard";
 import {
   anchorAt,
+  distanceAt,
   gapPath,
   headingAt,
   makeTrack,
@@ -20,7 +21,7 @@ import { cx } from "@utils/classNames";
 import { formatDuration } from "@utils/format";
 import { TrackVisualization, type DragMode } from "./TrackVisualization";
 import {
-  MIN_HALF_MS,
+  clampHalf,
   selectionWindow,
   useTrackSelection,
   type TrackSelection,
@@ -53,7 +54,8 @@ function toSvgPoint(svg: SVGSVGElement, e: ReactPointerEvent) {
 }
 
 // The car sits at the window's centre: drag it to slide the window along the run;
-// drag either white handle to resize the window symmetrically around the car.
+// drag either white handle to resize the window, by the same distance of road on
+// both sides of the car.
 // A drag only redraws the map; the window is committed (and other panels update)
 // on release.
 export function TrackMap() {
@@ -91,7 +93,7 @@ export function TrackMap() {
   // The selection's layers, on every drag move.
   const shape = useMemo(() => {
     if (!track || !selection) return null;
-    const [from, to] = selectionWindow(selection);
+    const [from, to] = selectionWindow(track, selection);
     const handle = (t: number) => tickAt(track, anchorAt(track, t), HANDLE_HALF_LENGTH);
     const car = anchorAt(track, selection.center);
     return {
@@ -199,15 +201,15 @@ export function TrackMap() {
         if (hit && hit.time !== current.center) update({ ...current, center: hit.time });
         return;
       }
-      // Edge: the held edge follows the pointer; the other mirrors it around the car.
-      const edge = current.center + drag.side * current.half;
+      // Edge: the held edge follows the pointer; the other mirrors it around the
+      // car by the same distance of road.
+      const edge = selectionWindow(track, current)[drag.side < 0 ? 0 : 1];
       const hit = nearestSample(track, p.x, p.y, edge);
       if (!hit) return;
-      const offset = hit.time - current.center;
+      const offset = distanceAt(track, hit.time) - distanceAt(track, current.center);
       if (offset !== 0) drag.side = offset < 0 ? -1 : 1;
-      const maxHalf = Math.max(MIN_HALF_MS, (track.lastTime - track.firstTime) / 2);
-      const half = clamp(Math.abs(offset), MIN_HALF_MS, maxHalf);
-      if (half !== current.half) update({ ...current, half });
+      const halfM = clampHalf(track, Math.abs(offset));
+      if (halfM !== current.halfM) update({ ...current, halfM });
     },
     [track, selectionRef, update, finishDrag],
   );
@@ -218,7 +220,7 @@ export function TrackMap() {
     return <EmptyState message="No position data for this run." />;
   }
 
-  const [from, to] = selectionWindow(selection);
+  const [from, to] = selectionWindow(track, selection);
   const clock = (ms: number) => formatDuration(clamp(ms, 0, track.lastTime) / 1000);
 
   return (
@@ -257,8 +259,10 @@ export function TrackMap() {
           </dd>
         </div>
         <div className={styles.stat}>
-          <dt>Width</dt>
-          <dd>{Math.round((selection.half * 2) / 1000)} s</dd>
+          <dt>Length</dt>
+          <dd>
+            {Math.round(selection.halfM * 2)} m · {Math.round((to - from) / 1000)} s
+          </dd>
         </div>
       </dl>
       <p className={styles.hint}>
