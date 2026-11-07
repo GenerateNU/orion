@@ -34,10 +34,17 @@ const TICK_HALF_LENGTH = 2.6;
 const HANDLE_HALF_LENGTH = 3.4;
 // How close (screen px) a press must be to the road to move the car there.
 const ROAD_HIT_PX = 14;
+// The car's grab circle, in SVG units: this big when the handles are far away,
+// shrinking with a short window so it never covers them, but never below the min.
+const CAR_HIT_RADIUS = 4.5;
+const CAR_HIT_MIN_RADIUS = 0.8;
 
 type Drag = {
   mode: DragMode;
-  // Which edge is held: -1 the start, +1 the end (flips if dragged past the car).
+  // The pointer that started the drag; other pointers (a second finger) are ignored.
+  pointerId: number;
+  // Which edge is held: -1 the start, +1 the end. Mutated in place by the move
+  // handler when the edge is dragged past the car and becomes the other one.
   side: -1 | 1;
   // The selection before the drag, restored on Esc.
   before: TrackSelection;
@@ -94,12 +101,27 @@ export function TrackMap() {
   const shape = useMemo(() => {
     if (!track || !selection) return null;
     const [from, to] = selectionWindow(track, selection);
-    const handle = (t: number) => tickAt(track, anchorAt(track, t), HANDLE_HALF_LENGTH);
+    const ends = [anchorAt(track, from), anchorAt(track, to)] as const;
     const car = anchorAt(track, selection.center);
+    // At most half the way to the nearer handle, so a press between them goes to
+    // whichever is closer and a short window can still be resized.
+    const nearest = Math.min(...ends.map((end) => Math.hypot(end.x - car.x, end.y - car.y)));
     return {
+      from,
+      to,
+      // Can be shorter than 2 × halfM where the run's start or end cuts it off.
+      lengthM: distanceAt(track, to) - distanceAt(track, from),
       window: windowPath(track, from, to),
-      car: { x: car.x, y: car.y, heading: headingAt(track, car) },
-      edges: [handle(from), handle(to)] as const,
+      car: {
+        x: car.x,
+        y: car.y,
+        heading: headingAt(track, car),
+        hitRadius: clamp(nearest / 2, CAR_HIT_MIN_RADIUS, CAR_HIT_RADIUS),
+      },
+      edges: [
+        tickAt(track, ends[0], HANDLE_HALF_LENGTH),
+        tickAt(track, ends[1], HANDLE_HALF_LENGTH),
+      ] as const,
     };
   }, [track, selection]);
 
@@ -136,6 +158,15 @@ export function TrackMap() {
     commit();
   }, [commit, endDrag]);
 
+  // Pointer events end or cancel the drag only for the pointer that started it.
+  const isDragPointer = (e: ReactPointerEvent) => dragRef.current?.pointerId === e.pointerId;
+  const handlePointerUp = (e: ReactPointerEvent<SVGSVGElement>) => {
+    if (isDragPointer(e)) finishDrag();
+  };
+  const handlePointerCancel = (e: ReactPointerEvent<SVGSVGElement>) => {
+    if (isDragPointer(e)) cancelDrag();
+  };
+
   // Esc abandons the drag and puts the window back where it was.
   useEffect(() => {
     if (!dragMode) return;
@@ -150,22 +181,26 @@ export function TrackMap() {
     (e: ReactPointerEvent<SVGSVGElement>) => {
       const svg = svgRef.current;
       const current = selectionRef.current;
-      if (!svg || !track || !current || !e.isPrimary || e.button !== 0) return;
+      if (!svg || !track || !current || dragRef.current) return;
+      if (!e.isPrimary || e.button !== 0) return;
       const p = toSvgPoint(svg, e);
       if (!p) return;
 
       const role = (e.target as Element).closest("[data-handle]")?.getAttribute("data-handle");
+      const start = { pointerId: e.pointerId, before: current };
       let drag: Drag;
       if (role === "car") {
-        drag = { mode: "car", side: 1, before: current };
+        drag = { ...start, mode: "car", side: 1 };
       } else if (role === "start" || role === "end") {
-        drag = { mode: "edge", side: role === "start" ? -1 : 1, before: current };
+        drag = { ...start, mode: "edge", side: role === "start" ? -1 : 1 };
       } else {
-        // A press on the road moves the car there (preferring the pass nearest in
-        // time to where it is now); a press on empty space does nothing.
-        const hit = nearestSample(track, p.x, p.y, current.center);
-        if (!hit || hit.dist > ROAD_HIT_PX * p.unitsPerPx) return;
-        drag = { mode: "car", side: 1, before: current };
+        // A press on the road moves the car there; a press on empty space does
+        // nothing. Only passes under the pointer count, and of those the one
+        // nearest in time to the car wins, so any pass of the road can be picked
+        // (an out-lap or the pit lane too, however long ago it was driven).
+        const hit = nearestSample(track, p.x, p.y, current.center, ROAD_HIT_PX * p.unitsPerPx);
+        if (!hit) return;
+        drag = { ...start, mode: "car", side: 1 };
         update({ ...current, center: hit.time });
       }
 
@@ -187,7 +222,7 @@ export function TrackMap() {
       const drag = dragRef.current;
       const svg = svgRef.current;
       const current = selectionRef.current;
-      if (!drag || !svg || !track || !current) return;
+      if (!drag || !svg || !track || !current || e.pointerId !== drag.pointerId) return;
       // The button came up without a pointerup reaching us: treat it as release.
       if (e.buttons === 0) {
         finishDrag();
@@ -220,7 +255,7 @@ export function TrackMap() {
     return <EmptyState message="No position data for this run." />;
   }
 
-  const [from, to] = selectionWindow(track, selection);
+  const { from, to } = shape;
   const clock = (ms: number) => formatDuration(clamp(ms, 0, track.lastTime) / 1000);
 
   return (
@@ -242,9 +277,9 @@ export function TrackMap() {
         dragMode={dragMode}
         onPointerDown={handlePointerDown}
         onPointerMove={handlePointerMove}
-        onPointerUp={finishDrag}
-        onPointerCancel={cancelDrag}
-        onLostPointerCapture={finishDrag}
+        onPointerUp={handlePointerUp}
+        onPointerCancel={handlePointerCancel}
+        onLostPointerCapture={handlePointerUp}
       />
 
       <dl className={styles.readout}>
@@ -261,7 +296,7 @@ export function TrackMap() {
         <div className={styles.stat}>
           <dt>Length</dt>
           <dd>
-            {Math.round(selection.halfM * 2)} m · {Math.round((to - from) / 1000)} s
+            {Math.round(shape.lengthM)} m · {Math.round((to - from) / 1000)} s
           </dd>
         </div>
       </dl>

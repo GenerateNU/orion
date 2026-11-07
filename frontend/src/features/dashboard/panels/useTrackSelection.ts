@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useLayoutEffect, useMemo, useRef, useState } from "react";
 import {
   useCommittedWindow,
   useDashboardActions,
@@ -13,8 +13,8 @@ import { clampWindow, type RunTime, type TimeWindow } from "@features/dashboard/
 export type TrackSelection = { center: RunTime; halfM: number };
 
 // With no window in the URL, the window is the run's first 200 m, car in the middle.
-export const DEFAULT_HALF_M = 100;
-export const MIN_HALF_M = 5;
+const DEFAULT_HALF_M = 100;
+const MIN_HALF_M = 5;
 
 // A half-length that fits the run: at most half the distance driven.
 export const clampHalf = (track: Track, halfM: number) =>
@@ -27,9 +27,9 @@ export const selectionWindow = (track: Track, s: TrackSelection): TimeWindow => 
 };
 
 // The selection for a time window: its middle in distance, and half its length.
-const selectionFor = (track: Track, window: TimeWindow): TrackSelection => {
-  const from = distanceAt(track, window[0]);
-  const to = distanceAt(track, window[1]);
+const selectionFor = (track: Track, range: TimeWindow): TrackSelection => {
+  const from = distanceAt(track, range[0]);
+  const to = distanceAt(track, range[1]);
   return {
     center: timeAtDistance(track, (from + to) / 2, "end"),
     halfM: clampHalf(track, (to - from) / 2),
@@ -46,56 +46,79 @@ const defaultSelection = (track: Track): TrackSelection => {
 const sameWindow = (a: TimeWindow | null, b: TimeWindow | null) =>
   a === b || (!!a && !!b && Math.abs(a[0] - b[0]) < 1 && Math.abs(a[1] - b[1]) < 1);
 
+// A selection the user moved on the map, and the URL windows it belongs to.
+type Moved = {
+  selection: TrackSelection;
+  // The committed window when the move started.
+  base: TimeWindow | null;
+  // Once committed: the clamped window written to the URL.
+  sent?: TimeWindow | null;
+};
+
 /**
  * Holds the selection locally while it's dragged, and commits it to the URL on
  * release. Other panels only read the committed window, so nothing is broadcast
  * mid-drag: no draft to clamp, cancel or clean up.
  *
- * The URL holds the committed window clamped to the run (an edge past the start
- * or end is cut off), so it can't always give back the car time. The map keeps
- * the exact selection here and re-reads the URL only when it changes for another
- * reason (lap selection, a reset, Back, a pasted link).
+ * Otherwise the selection is worked out from the URL during render, so it's
+ * there on the first frame the track is. The URL holds the committed window
+ * clamped to the run (an edge past the start or end is cut off), so it can't
+ * always give back the car time: the map keeps the exact selection it moved
+ * while the URL still holds the window that move produced, and goes back to the
+ * URL's when it changes for another reason (lap selection, a reset, Back, a
+ * pasted link).
  */
 export function useTrackSelection(track: Track | null) {
   const { timeline } = useDashboardRun();
   const committed = useCommittedWindow();
   const { commitWindow } = useDashboardActions();
 
-  const [selection, setSelection] = useState<TrackSelection | null>(null);
+  const [moved, setMoved] = useState<Moved | null>(null);
+
+  const fromUrl = useMemo(
+    () => (track ? (committed ? selectionFor(track, committed) : defaultSelection(track)) : null),
+    [track, committed],
+  );
+  // Before a commit, the move belongs to the window it started from; after, to
+  // the one it wrote (and not the old one, so Back to it shows that window).
+  const ownsUrl =
+    moved !== null &&
+    (moved.sent !== undefined
+      ? sameWindow(moved.sent, committed)
+      : sameWindow(moved.base, committed));
+  const selection = track && ownsUrl ? moved.selection : fromUrl;
+
   // Mirrors `selection` for pointer handlers, which run between renders.
-  const selectionRef = useRef<TrackSelection | null>(null);
-  // The clamped window this map last wrote to the URL; undefined when none.
-  const sentRef = useRef<TimeWindow | null | undefined>(undefined);
+  const selectionRef = useRef<TrackSelection | null>(selection);
+  useLayoutEffect(() => {
+    selectionRef.current = selection;
+  });
 
-  const set = useCallback((next: TrackSelection) => {
-    selectionRef.current = next;
-    setSelection(next);
-  }, []);
-
-  useEffect(() => {
-    if (!track) return;
-    // Our own commit coming back through the URL: keep the exact selection.
-    if (sentRef.current !== undefined && sameWindow(sentRef.current, committed)) return;
-    sentRef.current = undefined;
-    set(committed ? selectionFor(track, committed) : defaultSelection(track));
-  }, [track, committed, set]);
+  const update = useCallback(
+    (next: TrackSelection) => {
+      selectionRef.current = next;
+      setMoved({ selection: next, base: committed });
+    },
+    [committed],
+  );
 
   const commit = useCallback(() => {
     const current = selectionRef.current;
     if (!current || !track) return;
-    const window = selectionWindow(track, current);
+    const range = selectionWindow(track, current);
     // commitWindow clamps the same way; remember the result to recognise it above.
-    const target = timeline ? clampWindow(window, timeline.durationMs) : window;
-    sentRef.current = target;
+    const target = timeline ? clampWindow(range, timeline.durationMs) : range;
+    setMoved({ selection: current, base: committed, sent: target });
     // Unchanged (a click on the car without moving it): don't write the same URL.
-    if (!sameWindow(target, committed)) commitWindow(window);
+    if (!sameWindow(target, committed)) commitWindow(range);
   }, [track, timeline, committed, commitWindow]);
 
   return {
+    // Null only while there's no track.
     selection,
     selectionRef,
     // Moves the selection on the map only. Other panels see it once committed.
-    update: set,
+    update,
     commit,
     // False until a window is in the URL: the default ±100 m is only a suggestion.
     applied: committed !== null,

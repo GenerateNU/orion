@@ -20,8 +20,10 @@ export interface TrackVisualizationProps {
   window: string;
   // A line across the track where the run starts.
   start: Tick;
-  // The car, pointing in its direction of travel (degrees, SVG rotation).
-  car: Point & { heading: number };
+  // The car, pointing in its direction of travel (degrees, SVG rotation), and
+  // the radius of its grab circle (SVG units): small enough not to cover the
+  // handles, since the car is drawn above them.
+  car: Point & { heading: number; hitRadius: number };
   // Lines across the track at the window's start and end; both are handles.
   edges: readonly [Tick, Tick];
   // The window is only a suggestion until it's committed: drawn fainter.
@@ -121,7 +123,7 @@ export const TrackVisualization = memo(function TrackVisualization({
         <title>Drag to move the window</title>
         <circle className={styles.carHalo} r={3.8} />
         <path className={styles.carBody} d={CAR_ARROW} />
-        <circle className={styles.hitArea} r={4.5} />
+        <circle className={styles.hitArea} r={car.hitRadius} />
       </g>
     </svg>
   );

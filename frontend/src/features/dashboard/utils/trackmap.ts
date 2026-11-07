@@ -43,6 +43,10 @@ const PAD = 8;
 // Metres in a degree of latitude (and in a degree of longitude times cos(latitude)).
 const M_PER_DEG = (6_371_000 * Math.PI) / 180;
 
+// Movement smaller than this, in metres, isn't counted as distance driven: it's
+// GPS jitter, not driving.
+const MIN_MOVE_M = 1;
+
 // A GPS reading of [0, 0] (or NaN) means no fix, not a car in the Gulf of Guinea.
 const hasFix = (lat: number, lon: number) =>
   Number.isFinite(lat) && Number.isFinite(lon) && !(lat === 0 && lon === 0);
@@ -97,19 +101,28 @@ export function makeTrack(
     }
   }
 
-  // Distance driven, from fix to fix. Across a dropout this counts the straight
-  // line between its ends, which undercounts if the car took a corner unseen.
+  // Distance driven. It only grows once the car is MIN_MOVE_M from the point it
+  // was last counted at, so GPS jitter while parked adds nothing and a stop stays
+  // flat (timeAtDistance relies on that), whatever the sample rate. A per-step
+  // threshold wouldn't work: at 100 Hz a moving car's steps are tiny too. Across
+  // a dropout this counts the straight line between its ends, which undercounts
+  // if the car took a corner unseen.
   const dist = new Float64Array(latLon.length);
-  let prev = -1;
+  let counted = -1;
   for (let i = 0; i < latLon.length; i++) {
     dist[i] = i > 0 ? dist[i - 1] : 0;
     const [lat, lon] = latLon[i];
     if (!hasFix(lat, lon)) continue;
-    if (prev >= 0) {
-      const [prevLat, prevLon] = latLon[prev];
-      dist[i] += Math.hypot((lon - prevLon) * lonScale, lat - prevLat) * M_PER_DEG;
+    if (counted < 0) {
+      counted = i;
+      continue;
     }
-    prev = i;
+    const [fromLat, fromLon] = latLon[counted];
+    const step = Math.hypot((lon - fromLon) * lonScale, lat - fromLat) * M_PER_DEG;
+    if (step >= MIN_MOVE_M) {
+      dist[i] += step;
+      counted = i;
+    }
   }
 
   return {
@@ -345,13 +358,17 @@ const TIME_PENALTY_PER_S = 0.1;
 /**
  * The recorded sample nearest the point (x, y), as a RunTime, and its plain
  * distance in SVG units. Laps overlap, so with `nearTime` samples far from it in
- * time are penalized: a drag follows the lap it's on. Null if nothing has a fix.
+ * time are penalized: a drag follows the lap it's on. With `maxDist`, only
+ * samples that close count, so the penalty just picks between the passes under
+ * a click instead of preferring a far-off sample on the current lap. Null if no
+ * sample qualifies.
  */
 export function nearestSample(
   track: Track,
   x: number,
   y: number,
   nearTime?: RunTime,
+  maxDist = Infinity,
 ): { time: RunTime; dist: number } | null {
   const { time, xs, ys, startMs } = track;
   const near = nearTime === undefined ? undefined : nearTime + startMs;
@@ -362,6 +379,7 @@ export function nearestSample(
     const px = xs[i];
     if (Number.isNaN(px)) continue;
     const dist = Math.hypot(x - px, y - ys[i]);
+    if (dist > maxDist) continue;
     const score =
       near === undefined ? dist : dist + (Math.abs(time[i] - near) / 1000) * TIME_PENALTY_PER_S;
     if (score < bestScore) {

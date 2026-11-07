@@ -36,5 +36,4 @@ async def get_state_data(
     The time bounds are required so a request can't pull a whole run. An unknown run
     or a range with no rows comes back with empty lists.
     """
- 
     return await service.get_state_data(run_id, start, end)
