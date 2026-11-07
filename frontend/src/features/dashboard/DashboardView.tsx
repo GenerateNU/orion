@@ -17,7 +17,7 @@ import {
   useSelectedLaps,
 } from "@features/dashboard/state/useDashboard";
 import styles from "./DashboardView.module.css";
-import SensorChartsPanel from "@components/charts/SensorChartPanel";
+import { TrackMap } from "@features/dashboard/panels/TrackMap";
 
 const dashboardRoute = getRouteApi("/runs/$runId/dashboard");
 
@@ -32,8 +32,8 @@ export default function DashboardView() {
   );
 }
 
-// Figma "Run Dashboard — Placeholder". Charts, track map and sensor panels go in
-// the placeholder panel once they're designed; each reads shared state through
+// The run dashboard: the track map, with charts and sensor panels to come in the
+// placeholder beside it. Each panel reads shared state through
 // state/useDashboard.ts and data through data/useDashboardData.ts.
 function RunDashboard() {
   const { runId, run, runIsLoading, runError } = useDashboardRun();
@@ -88,13 +88,18 @@ function RunDashboard() {
           </ButtonLink>
         }
       />
-      <section className={styles.placeholder} aria-labelledby="run-dashboard-title">
-        <h2 id="run-dashboard-title" className={styles.placeholderTitle}>
-          Run dashboard
-        </h2>
-        <SelectionSummary />
-        <SensorChartsPanel />
-      </section>
+
+      <div className={styles.layout}>
+        <section className={styles.panel} aria-labelledby="track-map-heading">
+          <h2 id="track-map-heading" className={styles.panelHeading}>
+            Track position
+          </h2>
+          <TrackMap />
+        </section>
+        <section className={styles.placeholder} aria-label="Selection">
+          <SelectionSummary />
+        </section>
+      </div>
     </>
   );
 }

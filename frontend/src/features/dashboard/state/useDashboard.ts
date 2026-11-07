@@ -10,8 +10,8 @@ import { useDashboardStoreApi } from "@features/dashboard/state/dashboardStore";
 import { lapsFromMetrics, lapsToWindow } from "@features/dashboard/utils/laps";
 import type { DashboardSearch } from "@features/dashboard/utils/search";
 import {
+  clampWindow,
   runTimeline,
-  snapWindow,
   type RunTime,
   type TimeWindow,
 } from "@features/dashboard/utils/time";
@@ -116,7 +116,9 @@ export const useDashboardActions = () => {
     const setWindow = (window: TimeWindow | null) => {
       store.getState().setDraftWindow(null);
       const runTimes = timeline();
-      const t = window && runTimes ? snapWindow(window, runTimes.durationMs) : window;
+      // Stored exactly (clamped, whole ms). Fetches snap it themselves
+      // (useDashboardData), so this doesn't cost cache hits.
+      const t = window && runTimes ? clampWindow(window, runTimes.durationMs) : window;
       navigate({
         search: (prev: DashboardSearch): DashboardSearch => ({ ...prev, t: t ?? undefined }),
         replace: true,
@@ -132,7 +134,7 @@ export const useDashboardActions = () => {
         ),
       // While a brush is dragged: panels redraw from loaded data, nothing is fetched.
       previewWindow: (window: TimeWindow) => store.getState().setDraftWindow(window),
-      // On release: snapped, written to the URL, and the detail data fetched.
+      // On release: clamped, written to the URL, and the detail data fetched.
       commitWindow: (window: TimeWindow) => setWindow(window),
       resetWindow: () => setWindow(null),
       setHoverTime: (time: RunTime | null) => store.getState().setHoverTime(time),
