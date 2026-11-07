@@ -16,12 +16,36 @@
   justify-content: flex-start;
 }
 
-.placeholderTitle {
-  font-size: 16px;
-  font-weight: 600;
-}
-
 .placeholderText {
   font-size: 13px;
   color: var(--text-muted);
+}
+
+/* Track map on the left, the other panels on the right; stacked when narrow. */
+.layout {
+  display: grid;
+  grid-template-columns: minmax(320px, 440px) minmax(0, 1fr);
+  gap: var(--space-4);
+  align-items: start;
+}
+
+@media (max-width: 960px) {
+  .layout {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+.panel {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  padding: var(--space-4);
+  background: var(--bg-surface);
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-lg);
+}
+
+.panelHeading {
+  font-size: 14px;
+  font-weight: 600;
 }
