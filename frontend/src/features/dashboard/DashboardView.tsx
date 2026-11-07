@@ -11,13 +11,10 @@ import { ApiError } from "@api/client";
 import { formatDate, formatDuration } from "@utils/format";
 import DashboardStoreProvider from "@features/dashboard/state/DashboardStoreProvider";
 import { useLastRunStore } from "@features/dashboard/state/lastRunStore";
-import {
-  useCommittedWindow,
-  useDashboardRun,
-  useSelectedLaps,
-} from "@features/dashboard/state/useDashboard";
+import { useDashboardRun } from "@features/dashboard/state/useDashboard";
 import styles from "./DashboardView.module.css";
 import { TrackMap } from "@features/dashboard/panels/TrackMap";
+import SensorChartsPanel from "@components/charts/SensorChartPanel";
 
 const dashboardRoute = getRouteApi("/runs/$runId/dashboard");
 
@@ -32,8 +29,7 @@ export default function DashboardView() {
   );
 }
 
-// The run dashboard: the track map, with charts and sensor panels to come in the
-// placeholder beside it. Each panel reads shared state through
+// The run dashboard: the track map beside the sensor charts. Each panel reads shared state through
 // state/useDashboard.ts and data through data/useDashboardData.ts.
 function RunDashboard() {
   const { runId, run, runIsLoading, runError } = useDashboardRun();
@@ -96,28 +92,13 @@ function RunDashboard() {
           </h2>
           <TrackMap />
         </section>
-        <section className={styles.placeholder} aria-label="Selection">
-          <SelectionSummary />
+        <section className={styles.panel} aria-labelledby="sensor-charts-heading">
+          <h2 id="sensor-charts-heading" className={styles.panelHeading}>
+            Sensors
+          </h2>
+          <SensorChartsPanel />
         </section>
       </div>
     </>
-  );
-}
-
-const formatRunTime = (ms: number) => formatDuration(ms / 1000);
-
-// Temporary: shows the shared selection until panels exist to show it.
-function SelectionSummary() {
-  const window = useCommittedWindow();
-  const laps = useSelectedLaps();
-  const windowLabel = window
-    ? `${formatRunTime(window[0])}–${formatRunTime(window[1])}`
-    : "whole run";
-  const lapsLabel = laps.length > 0 ? laps.join(", ") : "none";
-
-  return (
-    <p className={styles.placeholderText}>
-      Window: {windowLabel} · Laps: {lapsLabel}
-    </p>
   );
 }
