@@ -10,7 +10,7 @@ from orion_pipeline.steps.state_estimation.ukf_step import Tick
 
 def _is_startup(tick: Tick) -> bool:
     """A startup tick has no prediction linking it to the tick before it."""
-    return tick.x_pred is None or tick.p_pred is None or tick.c is None
+    return tick.x_pred is None or tick.p_pred is None or tick.cross_cov is None
 
 
 def _stack_or_empty(
@@ -74,14 +74,14 @@ class ForwardPass:
         predicted_covariances: list[np.ndarray] = []
         cross_covariances: list[np.ndarray] = []
         for index, tick in enumerate(ticks[1:], start=1):
-            if tick.x_pred is None or tick.p_pred is None or tick.c is None:
+            if tick.x_pred is None or tick.p_pred is None or tick.cross_cov is None:
                 raise ValueError(
                     f"Tick {index} has no prediction; "
                     "a segment cannot contain a restart."
                 )
             predicted_states.append(tick.x_pred)
             predicted_covariances.append(tick.p_pred)
-            cross_covariances.append(tick.c)
+            cross_covariances.append(tick.cross_cov)
 
         size = STATE_SIZE
         return cls(
