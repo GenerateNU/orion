@@ -1,17 +1,14 @@
 import numpy as np
-from numpy.typing import NDArray
 
-from .phys_model_config import PhysicsModelConfig
+from .physics_model import PhysicsModel
 from .state import OMEGA, PX, PY, STATE_SIZE, THETA, A, V, wrap_angle
 
-FloatArray = NDArray[np.float64]
 
+class CTRAModel(PhysicsModel):
+    """Constant turn rate and acceleration: the car drives an arc whose speed
+    changes at a steady rate."""
 
-class CTRAModel:
-    def __init__(self, config: PhysicsModelConfig) -> None:
-        self.config = config
-
-    def predict_forward(self, state: FloatArray, dt: float) -> FloatArray:
+    def predict_forward(self, state: np.ndarray, dt: float) -> np.ndarray:
         """Move the state forward by dt seconds.
 
         Args:
@@ -68,30 +65,23 @@ class CTRAModel:
 
         return out
 
-    def process_noise(self, dt: float) -> FloatArray:
-        """Process noise Q for a step of dt seconds.
+    def process_noise(self, dt: float) -> np.ndarray:
+        """Process noise Q for a step of dt seconds, shape (STATE_SIZE, STATE_SIZE).
 
-        Q adds a little extra doubt for that:
+        The model assumes acceleration and turn rate stay constant, but really
+        they drift. Two model_params set how fast:
 
-        - sigma_jerk: how much acceleration can randomly change (affects speed).
-        - sigma_alpha: how much turn rate can randomly change (affects heading).
+        - sigma_jerk (m/s^3, default 1.0): acceleration drift, adding doubt to speed.
+        - sigma_alpha (rad/s^2, default 0.1): turn rate drift, adding doubt to heading.
 
         Position (PX, PY) gets no direct noise. It becomes uncertain indirectly,
         because errors in speed and heading carry into position.
-
-        Args:
-            dt: Time step
-
-        Returns:
-            Array of shape (STATE_SIZE, STATE_SIZE).
         """
-        accel_jerk = self.config.model_params.get("sigma_jerk", 1.0)
-        heading_jerk = self.config.model_params.get("sigma_alpha", 0.1)
-
+        params = self.config.model_params
         q = np.zeros((STATE_SIZE, STATE_SIZE))
         for rate, integrated, sigma in (
-            (A, V, accel_jerk),
-            (OMEGA, THETA, heading_jerk),
+            (A, V, params.get("sigma_jerk", 1.0)),
+            (OMEGA, THETA, params.get("sigma_alpha", 0.1)),
         ):
             var = sigma**2
             q[integrated, integrated] = var * dt**3 / 3

@@ -2,7 +2,6 @@ import numpy as np
 import pytest
 
 from orion_pipeline.steps.state_estimation.ctra_model import CTRAModel
-from orion_pipeline.steps.state_estimation.phys_model_config import PhysicsModelConfig
 from orion_pipeline.steps.state_estimation.state import (
     OMEGA,
     PX,
@@ -12,6 +11,7 @@ from orion_pipeline.steps.state_estimation.state import (
     A,
     V,
 )
+from orion_pipeline.steps.state_estimation.state_model_config import PhysicsModelConfig
 
 
 @pytest.fixture
@@ -94,11 +94,14 @@ def test_wrong_state_size_raises(model):
         model.predict_forward(np.zeros(STATE_SIZE - 1), dt=0.1)
 
 
-def test_just_above_threshold_is_close_to_straight(model):
+def test_no_jump_at_straight_threshold(model):
+    # Just below uses the straight formula, just above the turning one
     threshold = model.config.straight_threshold
-    straight = model.predict_forward(make_state(v=10.0, theta=0.3, a=1.0), dt=0.1)
-    turning = model.predict_forward(
-        make_state(v=10.0, theta=0.3, omega=threshold * 10, a=1.0), dt=0.1
+    straight, turning = (
+        model.predict_forward(
+            make_state(v=10.0, theta=0.3, omega=threshold * k, a=1.0), dt=0.1
+        )
+        for k in (0.99, 1.01)
     )
 
     np.testing.assert_allclose(turning[[PX, PY]], straight[[PX, PY]], atol=1e-4)
