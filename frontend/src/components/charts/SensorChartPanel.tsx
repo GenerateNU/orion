@@ -1,70 +1,37 @@
-import { useMemo, type ReactNode } from "react";
-import EmptyState from "@components/ui/EmptyState";
-import ErrorState from "@components/ui/ErrorState";
-import LoadingState from "@components/ui/LoadingState";
-import { useSensorTrace } from "@features/dashboard/data/useDashboardData";
+import { useId, useMemo, useState } from "react";
+import { useSensors } from "@hooks/useSensors";
 import { useDashboardActions, useVisibleWindow } from "@features/dashboard/state/useDashboard";
-import type { RunTime } from "@features/dashboard/utils/time";
 import styles from "./SensorChartPanel.module.css";
-import TimeSeriesChartFunctionality from "./TimeSeriesChartFunctionality";
+import SensorChart from "./SensorChart";
 
-export type PanelSensor = {
-  name: string;
-  label?: string;
-  unit: string;
-};
+const MAX_NUM_CHARTS = 6;
 
 type SensorChartsPanelProps = {
-  title: string;
-  sensors: readonly PanelSensor[];
+  defaultSensors?: readonly string[];
   height?: number;
 };
 
 export default function SensorChartsPanel({
-  title,
-  sensors,
+  defaultSensors = [],
   height = 240,
 }: SensorChartsPanelProps) {
-  const names = useMemo(() => sensors.map((sensor) => sensor.name), [sensors]);
-  const { trace, traceIsLoading, traceError } = useSensorTrace(names, "overview");
+  const [selected, setSelected] = useState<readonly string[]>(defaultSensors);
+  const [adding, setAdding] = useState(false);
+
+  const { sensors } = useSensors();
   const visibleWindow = useVisibleWindow();
   const { resetWindow } = useDashboardActions();
 
-  const charts = useMemo(() => {
-    if (!trace) return [];
-    return sensors.flatMap(({ name, label, unit }) => {
-      const sensor = trace.series[name];
-      if (!sensor) return [];
-      const time: RunTime[] = [];
-      const values: number[] = [];
-      sensor.time.forEach((t, i) => {
-        const value = sensor.values[i]?.[0];
-        if (value == null) return;
-        time.push((t - trace.startMs) as RunTime);
-        values.push(value);
-      });
-      return [{ name, unit, series: [{ id: name, label: label ?? name, unit, time, values }] }];
-    });
-  }, [trace, sensors]);
-
-  let content: ReactNode;
-  if (traceIsLoading || (!trace && !traceError))
-    content = <LoadingState message="Loading sensor data…" />;
-  else if (traceError) content = <ErrorState error={traceError} />;
-  else if (charts.length === 0)
-    content = <EmptyState message="This run has no readings for these sensors." />;
-  else
-    content = charts.map((chart) => (
-      <div key={chart.name} className={styles.chart}>
-        <h4 className={styles.chartTitle}>
-          {chart.name} ({chart.unit})
-        </h4>
-        <TimeSeriesChartFunctionality series={chart.series} height={height} yLabel={chart.unit} />
-      </div>
-    ));
+  const units = useMemo(
+    () => new Map(sensors?.map((sensor) => [sensor.name, sensor.unit ?? ""])),
+    [sensors],
+  );
+  const available = (sensors ?? [])
+    .map((sensor) => sensor.name)
+    .filter((name) => name.trim() !== "" && !selected.includes(name));
 
   return (
-    <section className={styles.panel} aria-label={title}>
+    <section className={styles.panel}>
       <header className={styles.header}>
         <button
           type="button"
@@ -75,7 +42,107 @@ export default function SensorChartsPanel({
           Reset zoom
         </button>
       </header>
-      {content}
+
+      <div className={styles.grid}>
+        {selected.map((name, index) => (
+          <div key={name} className={styles.chart}>
+            <div className={styles.chartHeader}>
+              <SensorPicker
+                value={name}
+                options={available}
+                label="Sensor"
+                onPick={(next) =>
+                  setSelected((prev) => prev.map((n, i) => (i === index ? next : n)))
+                }
+              />
+              <button
+                type="button"
+                className={styles.remove}
+                onClick={() => setSelected((prev) => prev.filter((n) => n !== name))}
+              >
+                ×
+              </button>
+            </div>
+            <SensorChart name={name} unit={units.get(name) ?? ""} height={height} />
+          </div>
+        ))}
+
+        {selected.length < MAX_NUM_CHARTS && (
+          <div className={styles.addSlot} style={{ minHeight: height }}>
+            {adding ? (
+              <SensorPicker
+                options={available}
+                label="Select a sensor to view"
+                autoFocus
+                onPick={(name) => {
+                  setSelected((prev) => [...prev, name]);
+                  setAdding(false);
+                }}
+                onCancel={() => setAdding(false)}
+              />
+            ) : (
+              <button
+                type="button"
+                className={styles.add}
+                onClick={() => setAdding(true)}
+                disabled={!sensors}
+              >
+                +
+              </button>
+            )}
+          </div>
+        )}
+      </div>
     </section>
+  );
+}
+
+type SensorPickerProps = {
+  value?: string;
+  options: readonly string[];
+  label: string;
+  autoFocus?: boolean;
+  onPick: (name: string) => void;
+  onCancel?: () => void;
+};
+
+function SensorPicker({
+  value = "",
+  options,
+  label,
+  autoFocus,
+  onPick,
+  onCancel,
+}: SensorPickerProps) {
+  const listId = useId();
+  const [text, setText] = useState(value);
+
+  return (
+    <>
+      <input
+        className={styles.picker}
+        list={listId}
+        value={text}
+        placeholder={value || label}
+        autoFocus={autoFocus}
+        onFocus={() => setText("")}
+        onChange={(e) => {
+          if (options.includes(e.target.value)) onPick(e.target.value);
+          else setText(e.target.value);
+        }}
+        onBlur={() => {
+          setText(value);
+          onCancel?.();
+        }}
+        onKeyDown={(e) => {
+          if (e.key === "Escape") e.currentTarget.blur();
+        }}
+      />
+      <datalist id={listId}>
+        {options.map((name) => (
+          <option key={name} value={name} />
+        ))}
+      </datalist>
+    </>
   );
 }
