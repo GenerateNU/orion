@@ -242,8 +242,8 @@ def test_smooth_frame_matches_smooth_ticks():
     expected = URTS.smooth_ticks(ticks)
     assert list(frame["time"]) == [t.time for t in expected]
     np.testing.assert_allclose(
-        np.stack(frame["x_smooth"]), np.stack([t.state for t in expected])
+        np.stack(frame["x_smooth"].tolist()), np.stack([t.state for t in expected])
     )
     np.testing.assert_allclose(
-        np.stack(frame["p_smooth"]), np.stack([t.covariance for t in expected])
+        np.stack(frame["p_smooth"].tolist()), np.stack([t.covariance for t in expected])
     )
