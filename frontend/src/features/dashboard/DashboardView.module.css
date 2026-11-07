@@ -13,6 +13,7 @@
   background: var(--bg-surface);
   border: 1.5px dashed var(--border-default);
   border-radius: var(--radius-lg);
+  justify-content: flex-start;
 }
 
 .placeholderText {

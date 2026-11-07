@@ -20,8 +20,23 @@ class Settings(BaseSettings):
     pipeline_api_url: str = "http://localhost:8200"
     # How many rows each extract section can pull at once.
     pipeline_page_size: int = 100_000
-    # Seconds added to gps_location timestamps in the clean step (GPS lags the other sensors).
+    # Seconds added to lagged sensors' timestamps (gps_lagged in sensor_catalog), by both
+    # the clean step and the backend sensors API. 0 disables the correction.
     gps_time_offset_s: float = 3.0
+
+    # Lap detection (see docs/lap_detection.md). Untuned starting guesses.
+    # Radius of each remembered point's hitbox, in meters.
+    lap_hitbox_radius_m: float = 3.0
+    # Minimum time between two points for a revisit to count, in seconds.
+    lap_min_revisit_time_s: float = 5.0
+    # Minimum distance driven between two points for a revisit to count, in meters.
+    lap_min_revisit_distance_m: float = 50.0
+    # Searching for the gate only looks at every Nth point. 1 uses every point.
+    lap_gate_search_sample_every: int = 5
+    # The gate reaches this far on each side of its center, in meters.
+    lap_gate_half_width_m: float = 5.0
+    # Minimum time between two counted gate crossings, in seconds.
+    lap_min_lap_time_s: float = 10.0
 
 
 class SettingsError(RuntimeError):

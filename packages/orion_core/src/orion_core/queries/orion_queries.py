@@ -1,6 +1,7 @@
 """OrionDB statement builders. They build statements but never run them, so the
 async backend and the sync pipeline can share them."""
 
+from collections.abc import Iterable
 from datetime import datetime
 from typing import Any
 
@@ -9,6 +10,7 @@ from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.sql.dml import ReturningDelete, ReturningInsert, ReturningUpdate
 
 from orion_core.models.orion import (
+    CleanedData,
     EstimatedCarState,
     PipelineRun,
     PipelineStatus,
@@ -22,6 +24,29 @@ def select_sensor_sources() -> Select[*tuple[Any, ...]]:
     return select(
         SensorSources.source_data_type_name.label("raw_tag"),
         SensorSources.sensor,
+    )
+
+
+def select_cleaned_readings(
+    run_id: str, sensors: Iterable[str]
+) -> Select[datetime, str, list[float]]:
+    """One run's cleaned readings for the given sensors."""
+    return select(CleanedData.time, CleanedData.sensor, CleanedData.values).where(
+        CleanedData.run_id == run_id,
+        CleanedData.sensor.in_(list(sensors)),
+    )
+
+
+def select_estimated_positions(run_id: str) -> Select[datetime, float, float]:
+    """Estimated (lat, lon) for one whole run, ordered by time."""
+    return (
+        select(
+            EstimatedCarState.time,
+            EstimatedCarState.lattitude,
+            EstimatedCarState.longitude,
+        )
+        .where(EstimatedCarState.run_id == run_id)
+        .order_by(EstimatedCarState.time)
     )
 
 

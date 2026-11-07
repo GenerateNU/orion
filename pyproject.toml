@@ -129,3 +129,4 @@ init_forbid_extra = true
 [tool.pytest.ini_options]
 testpaths = ["services/*/tests"]
 addopts = "--import-mode=importlib"
+pythonpath = ["packages/orion_core/src", "services/pipeline/src", "services/backend/src"]
