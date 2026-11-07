@@ -31,6 +31,7 @@ export interface TrackVisualizationProps {
   onPointerMove: PointerHandler;
   onPointerUp: PointerHandler;
   onPointerCancel: PointerHandler;
+  onLostPointerCapture: PointerHandler;
 }
 
 // How far the "START" label sits past the outer end of its tick, in SVG units.
@@ -70,6 +71,7 @@ export const TrackVisualization = memo(function TrackVisualization({
   onPointerMove,
   onPointerUp,
   onPointerCancel,
+  onLostPointerCapture,
 }: TrackVisualizationProps) {
   const labelBelow = start.outer.y > viewSize.height / 2;
   return (
@@ -85,6 +87,7 @@ export const TrackVisualization = memo(function TrackVisualization({
       onPointerMove={onPointerMove}
       onPointerUp={onPointerUp}
       onPointerCancel={onPointerCancel}
+      onLostPointerCapture={onLostPointerCapture}
     >
       <path className={styles.roadCasing} d={road} />
       <path className={styles.road} d={road} />

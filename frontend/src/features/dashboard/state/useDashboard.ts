@@ -134,8 +134,6 @@ export const useDashboardActions = () => {
         ),
       // While a brush is dragged: panels redraw from loaded data, nothing is fetched.
       previewWindow: (window: TimeWindow) => store.getState().setDraftWindow(window),
-      // A drag abandoned without committing (Esc, pointer cancelled): drop the draft.
-      cancelPreview: () => store.getState().setDraftWindow(null),
       // On release: clamped, written to the URL, and the detail data fetched.
       commitWindow: (window: TimeWindow) => setWindow(window),
       resetWindow: () => setWindow(null),

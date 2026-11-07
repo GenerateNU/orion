@@ -24,8 +24,9 @@ const sameWindow = (a: TimeWindow | null, b: TimeWindow | null) =>
   a === b || (!!a && !!b && Math.abs(a[0] - b[0]) < 1 && Math.abs(a[1] - b[1]) < 1);
 
 /**
- * Holds the selection locally while it's dragged, previews it to other panels,
- * and commits it to the URL on release.
+ * Holds the selection locally while it's dragged, and commits it to the URL on
+ * release. Other panels only read the committed window, so nothing is broadcast
+ * mid-drag: no draft to clamp, cancel or clean up.
  *
  * The URL holds the committed window clamped to the run (an edge past the start
  * or end is cut off), so it can't always give back the car time. The map keeps
@@ -35,12 +36,12 @@ const sameWindow = (a: TimeWindow | null, b: TimeWindow | null) =>
 export function useTrackSelection(track: Track | null) {
   const { timeline } = useDashboardRun();
   const committed = useCommittedWindow();
-  const { previewWindow, commitWindow, cancelPreview } = useDashboardActions();
+  const { commitWindow } = useDashboardActions();
 
   const [selection, setSelection] = useState<TrackSelection | null>(null);
   // Mirrors `selection` for pointer handlers, which run between renders.
   const selectionRef = useRef<TrackSelection | null>(null);
-  // The snapped window this map last wrote to the URL; undefined when none.
+  // The clamped window this map last wrote to the URL; undefined when none.
   const sentRef = useRef<TimeWindow | null | undefined>(undefined);
 
   const set = useCallback((next: TrackSelection) => {
@@ -62,37 +63,23 @@ export function useTrackSelection(track: Track | null) {
     );
   }, [track, committed, set]);
 
-  const preview = useCallback(
-    (next: TrackSelection) => {
-      set(next);
-      previewWindow(selectionWindow(next));
-    },
-    [set, previewWindow],
-  );
-
   const commit = useCallback(() => {
     const current = selectionRef.current;
     if (!current) return;
     const window = selectionWindow(current);
     // commitWindow clamps the same way; remember the result to recognise it above.
-    sentRef.current = timeline ? clampWindow(window, timeline.durationMs) : window;
-    commitWindow(window);
-  }, [timeline, commitWindow]);
-
-  const cancel = useCallback(
-    (restore: TrackSelection) => {
-      set(restore);
-      cancelPreview();
-    },
-    [set, cancelPreview],
-  );
+    const target = timeline ? clampWindow(window, timeline.durationMs) : window;
+    sentRef.current = target;
+    // Unchanged (a click on the car without moving it): don't write the same URL.
+    if (!sameWindow(target, committed)) commitWindow(window);
+  }, [timeline, committed, commitWindow]);
 
   return {
     selection,
     selectionRef,
-    preview,
+    // Moves the selection on the map only. Other panels see it once committed.
+    update: set,
     commit,
-    cancel,
     // False until a window is in the URL: the default ±15 s is only a suggestion.
     applied: committed !== null,
   };

@@ -54,7 +54,8 @@ function toSvgPoint(svg: SVGSVGElement, e: ReactPointerEvent) {
 
 // The car sits at the window's centre: drag it to slide the window along the run;
 // drag either white handle to resize the window symmetrically around the car.
-// Moves are previewed to the other panels; the window is committed on release.
+// A drag only redraws the map; the window is committed (and other panels update)
+// on release.
 export function TrackMap() {
   const svgRef = useRef<SVGSVGElement | null>(null);
   const ghostRef = useRef<SVGCircleElement | null>(null);
@@ -75,7 +76,7 @@ export function TrackMap() {
         : null,
     [positions],
   );
-  const { selection, selectionRef, preview, commit, cancel, applied } = useTrackSelection(track);
+  const { selection, selectionRef, update, commit, applied } = useTrackSelection(track);
 
   // Static layers, once per track.
   const base = useMemo(() => {
@@ -122,8 +123,16 @@ export function TrackMap() {
     const drag = dragRef.current;
     if (!drag) return;
     endDrag();
-    cancel(drag.before);
-  }, [cancel, endDrag]);
+    update(drag.before);
+  }, [update, endDrag]);
+
+  // Release: commit the window. Also reached if the pointer is lost or released
+  // without a pointerup, so a drag can never get stuck following the pointer.
+  const finishDrag = useCallback(() => {
+    if (!dragRef.current) return;
+    endDrag();
+    commit();
+  }, [commit, endDrag]);
 
   // Esc abandons the drag and puts the window back where it was.
   useEffect(() => {
@@ -155,15 +164,20 @@ export function TrackMap() {
         const hit = nearestSample(track, p.x, p.y, current.center);
         if (!hit || hit.dist > ROAD_HIT_PX * p.unitsPerPx) return;
         drag = { mode: "car", side: 1, before: current };
-        preview({ ...current, center: hit.time });
+        update({ ...current, center: hit.time });
       }
 
       e.preventDefault();
-      svg.setPointerCapture(e.pointerId);
+      try {
+        // Keep receiving moves when the pointer leaves the map mid-drag.
+        svg.setPointerCapture(e.pointerId);
+      } catch {
+        // The pointer is already gone; the drag still works while it's over the map.
+      }
       dragRef.current = drag;
       setDragMode(drag.mode);
     },
-    [track, selectionRef, preview],
+    [track, selectionRef, update],
   );
 
   const handlePointerMove = useCallback(
@@ -172,12 +186,17 @@ export function TrackMap() {
       const svg = svgRef.current;
       const current = selectionRef.current;
       if (!drag || !svg || !track || !current) return;
+      // The button came up without a pointerup reaching us: treat it as release.
+      if (e.buttons === 0) {
+        finishDrag();
+        return;
+      }
       const p = toSvgPoint(svg, e);
       if (!p) return;
 
       if (drag.mode === "car") {
         const hit = nearestSample(track, p.x, p.y, current.center);
-        if (hit && hit.time !== current.center) preview({ ...current, center: hit.time });
+        if (hit && hit.time !== current.center) update({ ...current, center: hit.time });
         return;
       }
       // Edge: the held edge follows the pointer; the other mirrors it around the car.
@@ -188,16 +207,10 @@ export function TrackMap() {
       if (offset !== 0) drag.side = offset < 0 ? -1 : 1;
       const maxHalf = Math.max(MIN_HALF_MS, (track.lastTime - track.firstTime) / 2);
       const half = clamp(Math.abs(offset), MIN_HALF_MS, maxHalf);
-      if (half !== current.half) preview({ ...current, half });
+      if (half !== current.half) update({ ...current, half });
     },
-    [track, selectionRef, preview],
+    [track, selectionRef, update, finishDrag],
   );
-
-  const handlePointerUp = useCallback(() => {
-    if (!dragRef.current) return;
-    endDrag();
-    commit();
-  }, [commit, endDrag]);
 
   if (isLoading) return <LoadingState message="Loading track…" />;
   if (error) return <ErrorState error={error} />;
@@ -227,8 +240,9 @@ export function TrackMap() {
         dragMode={dragMode}
         onPointerDown={handlePointerDown}
         onPointerMove={handlePointerMove}
-        onPointerUp={handlePointerUp}
+        onPointerUp={finishDrag}
         onPointerCancel={cancelDrag}
+        onLostPointerCapture={finishDrag}
       />
 
       <dl className={styles.readout}>
