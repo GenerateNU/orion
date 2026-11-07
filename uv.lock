@@ -1,5 +1,5 @@
 version = 1
-revision = 3
+revision = 5
 requires-python = "==3.13.*"
 resolution-markers = [
     "sys_platform == 'win32'",
@@ -501,6 +501,7 @@ version = "0.1.0"
 source = { editable = "services/pipeline" }
 dependencies = [
     { name = "fastapi" },
+    { name = "numpy" },
     { name = "orion-core" },
     { name = "pandas" },
     { name = "uvicorn", extra = ["standard"] },
@@ -509,6 +510,7 @@ dependencies = [
 [package.metadata]
 requires-dist = [
     { name = "fastapi", specifier = ">=0.115" },
+    { name = "numpy", specifier = ">=2.5" },
     { name = "orion-core", editable = "packages/orion_core" },
     { name = "pandas", specifier = ">=2.2" },
     { name = "uvicorn", extras = ["standard"], specifier = ">=0.34" },
