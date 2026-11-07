@@ -1,10 +1,13 @@
 from collections.abc import Iterator
 
+import numpy as np
 import pandas as pd
 
 from orion_core.queries.orion_queries import select_cleaned_readings
 from orion_pipeline.runner.run_context import RunContext
 from orion_pipeline.steps.base_step import PipelineStep
+from orion_pipeline.steps.state_estimation.state import PX, PY
+from orion_pipeline.steps.state_estimation.state_model_config import UnitConversions
 from orion_pipeline.steps.state_estimation.ukf_step import UKFStep
 from orion_pipeline.steps.state_estimation.urts_smoother import URTS
 from orion_pipeline.steps.step_registry import register_step
@@ -13,10 +16,10 @@ from orion_pipeline.steps.step_registry import register_step
 @register_step
 class StateStep(PipelineStep):
     """Forward pass: run UKFStep over cleaned sensor data and write its ticks.
-    DB TABLES: FROM Orion[cleaned_data] -> TO Orion[ukf_states]
+    DB TABLES: FROM Orion[cleaned_data] -> TO Orion[estimated_car_state]
 
     Schema: FROM [time, sensor, values]
-    -> TO [run_id, time, origin_lat, origin_lon, x, p, x_pred, p_pred, cross_cov]
+    -> TO [run_id, time, lattitude, longitude]
     """
 
     name = "state_step"
@@ -47,14 +50,24 @@ class StateStep(PipelineStep):
             yield frame
 
     def transform(self, df: pd.DataFrame, ctx: RunContext) -> pd.DataFrame:
-        """Forward pass -> ukf_states rows, with the arrays flattened to lists."""
-        arrays = df[["x", "p", "x_pred", "p_pred", "cross_cov"]]
-        flat = arrays.map(lambda a: a.ravel().tolist(), na_action="ignore")
-        return df.assign(run_id=ctx.run_id, **flat)
+        """Forward pass -> estimated_car_state rows: the state's east/north
+        meters converted back to lat/lon around the run's origin."""
+        east = df["x"].map(lambda x: x[PX])
+        north = df["x"].map(lambda x: x[PY])
+        meters_per_degree = UnitConversions.METERS_PER_DEGREE_LAT
+        return pd.DataFrame(
+            {
+                "run_id": ctx.run_id,
+                "time": df["time"],
+                "lattitude": df["origin_lat"] + north / meters_per_degree,
+                "longitude": df["origin_lon"]
+                + east / (meters_per_degree * np.cos(np.radians(df["origin_lat"]))),
+            }
+        )
 
     def run(self, ctx: RunContext) -> None:
         """UKF forward pass, then URTS smoothing. Writes the forward pass to
-        ukf_states and keeps the smoothed rows on self.smoothed.
+        estimated_car_state and keeps the smoothed rows on self.smoothed.
         TODO: persist the smoothed rows once their table/columns exist."""
         self.prepare(ctx)
         frame = self._forward_pass(ctx)
