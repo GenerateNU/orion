@@ -1,4 +1,5 @@
 from collections.abc import Iterator
+from datetime import datetime
 
 import pandas as pd
 
@@ -33,9 +34,14 @@ class CleanStep(PipelineStep):
     def __init__(self, reader: PenelopeClient, writer: OrionDBClient):
         super().__init__(reader, writer)
         self.sensor_map: dict[str, str] = {}
+        # Earliest and latest cleaned reading time across every page written.
+        self.start_time: datetime | None = None
+        self.end_time: datetime | None = None
 
     def prepare(self, ctx: RunContext) -> None:
         super().prepare(ctx)
+        self.start_time = None
+        self.end_time = None
         # sensor_sources lives in OrionDB, so it's read through the writer.
         # TODO: move to the step's own OrionDB access once steps own their DB clients.
         self.sensor_map = self.writer.read_sensor_map()
@@ -51,3 +57,26 @@ class CleanStep(PipelineStep):
     def transform(self, df: pd.DataFrame, ctx: RunContext) -> pd.DataFrame:
         cleaned = map_sensor_names(df, self.sensor_map, ctx.run_id)
         return shift_sensor_time(cleaned, lagged_sensors(), ctx.gps_time_offset_s)
+
+    def write(self, df: pd.DataFrame, ctx: RunContext) -> None:
+        """Writes the page and widens the run's time bounds to cover it.
+
+        Bounds come from the cleaned (time-shifted) rows, so they match what
+        `cleaned_data` holds. Pages are ordered by raw time, but the GPS shift
+        can move rows past a page edge, so every page is checked.
+        """
+        if not df.empty:
+            page_start, page_end = df["time"].min(), df["time"].max()
+            if self.start_time is None or page_start < self.start_time:
+                self.start_time = page_start
+            if self.end_time is None or page_end > self.end_time:
+                self.end_time = page_end
+        super().write(df, ctx)
+
+    def run(self, ctx: RunContext) -> None:
+        """Cleans every page, then records the run's bounds on `runs`.
+
+        A run with no readings gets NULL bounds, clearing any from an earlier run.
+        """
+        super().run(ctx)
+        self.writer.set_run_bounds(ctx.run_id, self.start_time, self.end_time)

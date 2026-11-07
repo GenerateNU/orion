@@ -1,4 +1,5 @@
 import logging
+from datetime import datetime
 from typing import Any, cast
 
 import pandas as pd
@@ -7,7 +8,7 @@ from psycopg import sql
 from sqlalchemy import delete
 
 from orion_core.models import Base
-from orion_core.queries.orion_queries import select_sensor_sources
+from orion_core.queries.orion_queries import select_sensor_sources, update_run
 from orion_pipeline.clients.base_client import BaseClient
 
 logger = logging.getLogger(__name__)
@@ -20,6 +21,14 @@ class OrionDBClient(BaseClient):
         """Penelope raw tag -> generic sensor name, from `sensor_sources`."""
         df = self.read_frame(select_sensor_sources())
         return dict(zip(df["raw_tag"], df["sensor"], strict=True))
+
+    def set_run_bounds(
+        self, run_id: str, start_time: datetime | None, end_time: datetime | None
+    ) -> None:
+        """Write the run's first and last reading times to `runs`."""
+        with self.engine.begin() as conn:
+            conn.execute(update_run(run_id, start_time=start_time, end_time=end_time))
+        logger.info("run %s bounds: %s -> %s", run_id, start_time, end_time)
 
     def delete_for_run(self, table: str, run_id: str) -> None:
         """Delete all of `run_id`'s rows in `table`.
