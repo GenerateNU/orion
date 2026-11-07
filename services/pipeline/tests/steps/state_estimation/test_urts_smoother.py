@@ -219,3 +219,31 @@ def test_urts_class_on_ukf_output_with_a_restart() -> None:
         np.testing.assert_array_equal(out[i].state, ticks[i].x)
     for i in startups:
         assert not np.array_equal(out[i].state, ticks[i].x)
+
+
+def test_smooth_frame_matches_smooth_ticks():
+    rng = np.random.default_rng(0)
+    ticks = []
+    for i in range(8):
+        x, p = rng.normal(size=6), np.eye(6)
+        startup = i in (0, 4)
+        pred = (None, None, None) if startup else (x + 0.1, 1.5 * p, 0.5 * p)
+        ticks.append(
+            Tick(
+                pd.Timestamp("2026-01-01") + pd.Timedelta(milliseconds=10 * i),
+                x,
+                p,
+                *pred,
+            )
+        )
+
+    frame = URTS.smooth_frame(pd.DataFrame(ticks))
+
+    expected = URTS.smooth_ticks(ticks)
+    assert list(frame["time"]) == [t.time for t in expected]
+    np.testing.assert_allclose(
+        np.stack(frame["x_smooth"]), np.stack([t.state for t in expected])
+    )
+    np.testing.assert_allclose(
+        np.stack(frame["p_smooth"]), np.stack([t.covariance for t in expected])
+    )

@@ -94,6 +94,34 @@ class ForwardPass:
             cross_covariances=_stack_or_empty(cross_covariances, (0, size, size)),
         )
 
+    @classmethod
+    def from_frame(cls, df: pd.DataFrame) -> "ForwardPass":
+        """Build from one segment's rows of [x, p, x_pred, p_pred, cross_cov].
+
+        Same rules as from_ticks: the first row's prediction fields are ignored
+        and every later row must have them.
+        """
+        if df.empty:
+            raise ValueError("A forward pass needs at least one row.")
+        later = df.iloc[1:]
+        if later[["x_pred", "p_pred", "cross_cov"]].isna().any(axis=None):
+            raise ValueError(
+                "A row has no prediction; a segment cannot contain a restart."
+            )
+
+        size = STATE_SIZE
+        return cls(
+            states=_stack_or_empty(list(df["x"]), (0, size)),
+            covariances=_stack_or_empty(list(df["p"]), (0, size, size)),
+            predicted_states=_stack_or_empty(list(later["x_pred"]), (0, size)),
+            predicted_covariances=_stack_or_empty(
+                list(later["p_pred"]), (0, size, size)
+            ),
+            cross_covariances=_stack_or_empty(
+                list(later["cross_cov"]), (0, size, size)
+            ),
+        )
+
 
 @dataclass(frozen=True)
 class SmoothedTick:
@@ -161,6 +189,25 @@ class URTS:
                 covariances[k + 1],
             )
         return states, covariances
+
+    @classmethod
+    def smooth_frame(cls, df: pd.DataFrame) -> pd.DataFrame:
+        """Smooth a whole run's [time, x, p, x_pred, p_pred, cross_cov] rows,
+        restarts included. Returns [time, x_smooth, p_smooth], one row per input row."""
+        restarts = df["x_pred"].isna().cumsum()
+        parts = []
+        for _, segment in df.groupby(restarts, sort=False):
+            states, covariances = cls.smooth_segment(ForwardPass.from_frame(segment))
+            parts.append(
+                pd.DataFrame(
+                    {
+                        "time": segment["time"].to_numpy(),
+                        "x_smooth": list(states),
+                        "p_smooth": list(covariances),
+                    }
+                )
+            )
+        return pd.concat(parts, ignore_index=True)
 
     @classmethod
     def smooth_ticks(cls, ticks: Sequence[Tick]) -> list[SmoothedTick]:
