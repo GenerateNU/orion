@@ -15,7 +15,8 @@ from orion_pipeline.steps.step_registry import register_step
 
 @register_step
 class StateStep(PipelineStep):
-    """Forward pass: run UKFStep over cleaned sensor data and write its ticks.
+    """Run UKFStep over cleaned sensor data, smooth it with URTS, and write the
+    smoothed positions.
     DB TABLES: FROM Orion[cleaned_data] -> TO Orion[estimated_car_state]
 
     Schema: FROM [time, sensor, values]
@@ -50,27 +51,22 @@ class StateStep(PipelineStep):
             yield frame
 
     def transform(self, df: pd.DataFrame, ctx: RunContext) -> pd.DataFrame:
-        """Forward pass -> estimated_car_state rows: the state's east/north
-        meters converted back to lat/lon around the run's origin."""
-        east = df["x"].map(lambda x: x[PX])
-        north = df["x"].map(lambda x: x[PY])
+        """Forward pass -> estimated_car_state rows: URTS-smoothed states, their
+        east/north meters converted back to lat/lon around the run's origin.
+
+        Smoothing needs the whole run, which is fine: extract yields it as one page.
+        """
+        smoothed = URTS.smooth_frame(df)
+        east = smoothed["x_smooth"].map(lambda x: x[PX]).to_numpy()
+        north = smoothed["x_smooth"].map(lambda x: x[PY]).to_numpy()
+        origin_lat = df["origin_lat"].to_numpy()
         meters_per_degree = UnitConversions.METERS_PER_DEGREE_LAT
         return pd.DataFrame(
             {
                 "run_id": ctx.run_id,
-                "time": df["time"],
-                "lattitude": df["origin_lat"] + north / meters_per_degree,
-                "longitude": df["origin_lon"]
-                + east / (meters_per_degree * np.cos(np.radians(df["origin_lat"]))),
+                "time": smoothed["time"],
+                "lattitude": origin_lat + north / meters_per_degree,
+                "longitude": df["origin_lon"].to_numpy()
+                + east / (meters_per_degree * np.cos(np.radians(origin_lat))),
             }
         )
-
-    def run(self, ctx: RunContext) -> None:
-        """UKF forward pass, then URTS smoothing. Writes the forward pass to
-        estimated_car_state and keeps the smoothed rows on self.smoothed.
-        TODO: persist the smoothed rows once their table/columns exist."""
-        self.prepare(ctx)
-        frame = self._forward_pass(ctx)
-        if not frame.empty:
-            self.smoothed = URTS.smooth_frame(frame)
-            self.write(self.transform(frame, ctx), ctx)

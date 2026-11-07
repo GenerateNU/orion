@@ -51,17 +51,29 @@ export default function RunActions({ row, isPending, onQueue }: RunActionsProps)
       );
     }
 
-    case "loaded":
+    case "loaded": {
+      const rerunLabel = isPending ? "Queuing…" : "Re-run";
       return (
-        <ButtonLink
-          variant="secondary"
-          to="/runs/$runId/dashboard"
-          params={{ runId: row.runId }}
-          disabled={!row.canOpen}
-          aria-label={`Open dashboard for run ${row.runId}`}
-        >
-          Open dashboard <span aria-hidden="true">→</span>
-        </ButtonLink>
+        <div className={styles.actions}>
+          <Button
+            variant="ghost"
+            disabled={isPending}
+            aria-label={`${isPending ? "Queuing pipeline" : "Re-run pipeline"} for run ${row.runId}`}
+            onClick={() => onQueue(row.runId)}
+          >
+            {rerunLabel}
+          </Button>
+          <ButtonLink
+            variant="secondary"
+            to="/runs/$runId/dashboard"
+            params={{ runId: row.runId }}
+            disabled={!row.canOpen}
+            aria-label={`Open dashboard for run ${row.runId}`}
+          >
+            Open dashboard <span aria-hidden="true">→</span>
+          </ButtonLink>
+        </div>
       );
+    }
   }
 }

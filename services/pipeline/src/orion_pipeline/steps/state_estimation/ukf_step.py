@@ -9,8 +9,10 @@ from scipy.stats import chi2
 from orion_pipeline.steps.state_estimation.ctra_model import CTRAModel
 from orion_pipeline.steps.state_estimation.kalman_filter import UnscentedKalmanFilter
 from orion_pipeline.steps.state_estimation.physics_model import PhysicsModel
-from orion_pipeline.steps.state_estimation.state import PX, PY, V
+from orion_pipeline.steps.state_estimation.state import OMEGA, PX, PY, THETA, V
 from orion_pipeline.steps.state_estimation.state_model_config import (
+    STATIONARY_STD,
+    ImuMount,
     PhysicsModelConfig,
     UKFConfig,
     UnitConversions,
@@ -126,12 +128,20 @@ class UKFStep:
             R = s.noise_std**2 * np.eye(len(z))
             gate = s.gate_confidence and gate_threshold(s.gate_confidence, len(z))
             ukf.update(z, h, R, gate)
+            if sensor == "vcu_speed" and abs(z[0]) < self.config.stationary_speed_mps:
+                # Parked: hold speed and turn rate at 0
+                ukf.update(
+                    np.zeros(2),
+                    lambda s: s[:, [V, OMEGA]],
+                    np.diag(np.square(STATIONARY_STD)),
+                )
 
         self.ticks.append(Tick(tick_time, ukf.x.copy(), ukf.P.copy(), *prediction))
         self.tick_time = tick_time
 
     def _try_start(self, tick_time: pd.Timestamp, readings: pd.DataFrame) -> None:
-        """Start the filter once two GPS fixes are far enough apart to give a heading."""
+        """Start the filter once two GPS fixes, close enough in time, are far
+        enough apart to give a heading."""
         gps = readings.loc[readings["sensor"] == "gps_location", "values"]
         if gps.empty:
             return
@@ -141,7 +151,10 @@ class UKFStep:
             self.origin = (lat, lon)
         xy = self._to_xy(lat, lon)
 
-        if self.first_fix is None:
+        if (
+            self.first_fix is None
+            or tick_time - self.first_fix[0] > self.config.max_heading_time
+        ):
             self.first_fix = (tick_time, xy)
             return
 
@@ -153,11 +166,15 @@ class UKFStep:
 
         speed = distance / (tick_time - first_time).total_seconds()
         x0 = np.array([xy[0], xy[1], speed, np.arctan2(dy, dx), 0.0, 0.0])
+        # Both fixes are noisy, so the heading between them is only good to
+        # about sqrt(2) * gps_std / distance radians
+        p0 = self.p0.copy()
+        p0[THETA, THETA] = 2 * self.sensors["gps_location"].noise_std ** 2 / distance**2
 
-        self.ukf = UnscentedKalmanFilter(self.model, x0, self.p0)
+        self.ukf = UnscentedKalmanFilter(self.model, x0, p0)
         self.tick_time = tick_time
         self.first_fix = None
-        self.ticks.append(Tick(tick_time, x0, self.p0.copy(), None, None, None))
+        self.ticks.append(Tick(tick_time, x0, p0.copy(), None, None, None))
 
     def _measurement(
         self, sensor: str, values: list[float]
@@ -165,7 +182,14 @@ class UKFStep:
         """A reading -> (z in the filter's units, h picking the state columns it measures)."""
         if sensor == "gps_location":
             return self._to_xy(*values), lambda s: s[:, [PX, PY]]
-        return np.array([values[0] * UnitConversions.MPS_PER_MPH]), lambda s: s[:, [V]]
+        if sensor == "vcu_speed":
+            z = np.array([values[0] * UnitConversions.MPS_PER_MPH])
+            return z, lambda s: s[:, [V]]
+        if sensor == "vcu_imu_gyro":
+            # Gyro axes in mdps -> yaw rate about the car's up axis
+            yaw = np.dot(values, ImuMount.UP) * UnitConversions.RADPS_PER_MDPS
+            return np.array([yaw - ImuMount.YAW_BIAS_RADPS]), lambda s: s[:, [OMEGA]]
+        raise ValueError(f"No measurement model for sensor {sensor!r}.")
 
     def _to_xy(self, lat: float, lon: float) -> np.ndarray:
         """Latitude/longitude -> [x east, y north] meters from the origin. Fine at track scale."""

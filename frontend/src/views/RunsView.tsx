@@ -56,7 +56,7 @@ export default function RunsView() {
     <>
       <PageHeader
         title="Runs"
-        description="Queue a pipeline to process a run. Open a loaded run to view its dashboard."
+        description="Queue a pipeline to process or re-process a run. Open a loaded run to view its dashboard."
       />
 
       {!runRowsError && penelopeRunsError && (
