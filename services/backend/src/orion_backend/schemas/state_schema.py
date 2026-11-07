@@ -25,11 +25,3 @@ class StateDataResponse(BaseModel):
         ),
         examples=[[[42.3398, -71.0892], [42.3399, -71.0890]]],
     )
-    progress: list[float] = Field(
-        default_factory=list,
-        description=(
-            "How far through its lap the car is, from 0 to 1, same length as `time` "
-            "(see docs/lap_progress.md)."
-        ),
-        examples=[[0.412, 0.413]],
-    )

@@ -2,6 +2,7 @@ from fastapi import APIRouter
 
 from orion_backend.routes import (
     health_route,
+    lap_progress_route,
     penelope_run_route,
     pipeline_route,
     run_route,
@@ -16,3 +17,4 @@ api_router.include_router(pipeline_route.router)
 api_router.include_router(sensor_route.router)
 api_router.include_router(penelope_run_route.router)
 api_router.include_router(state_route.router)
+api_router.include_router(lap_progress_route.router)
