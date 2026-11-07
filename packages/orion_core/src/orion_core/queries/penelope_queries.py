@@ -40,7 +40,7 @@ def select_readings_between(
 ) -> Select[*tuple[Any, ...]]:
     """Readings for the given raw tags with `start <= time <= end`.
 
-    Tags in `lagged_names` are matched on `time + offset` instead, so the window
+    Tags in `lagged_names` are matched on `time - offset` instead, so the window
     applies to their corrected times. Unlike `select_readings`, every filter is
     required, so an API caller can't accidentally pull a whole run.
     """
@@ -50,7 +50,7 @@ def select_readings_between(
     return select_readings(run_id).where(
         or_(
             and_(tag.in_(plain), time >= start, time <= end),
-            and_(tag.in_(lagged), time >= start - offset, time <= end - offset),
+            and_(tag.in_(lagged), time >= start + offset, time <= end + offset),
         )
     )
 

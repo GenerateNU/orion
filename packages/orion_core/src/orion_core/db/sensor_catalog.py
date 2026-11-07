@@ -8,7 +8,9 @@ class CatalogEntry(TypedDict):
     raw_tag: str
     sensor: str
     unit: str | None  # None if unitless
-    gps_lagged: NotRequired[bool]  # True if timestamps need gps_time_offset_s
+    # True for GPS receiver data, which is stamped late: its times need the GPS lag
+    # subtracted. Not PPS, which is stamped separately.
+    gps_lagged: NotRequired[bool]
 
 
 SENSOR_CATALOG: list[CatalogEntry] = [
@@ -160,7 +162,6 @@ SENSOR_CATALOG: list[CatalogEntry] = [
         "raw_tag": "TPU/GPS/PPS",
         "sensor": "gps_pps",
         "unit": "NTP precison",
-        "gps_lagged": True,
     },
     {
         "raw_tag": "VCU/CarState/functional_state",
@@ -277,7 +278,3 @@ SENSOR_CATALOG: list[CatalogEntry] = [
 
 def lagged_raw_tags() -> frozenset[str]:
     return frozenset(e["raw_tag"] for e in SENSOR_CATALOG if e.get("gps_lagged"))
-
-
-def lagged_sensors() -> frozenset[str]:
-    return frozenset(e["sensor"] for e in SENSOR_CATALOG if e.get("gps_lagged"))

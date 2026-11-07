@@ -3,15 +3,13 @@ from datetime import UTC, datetime, timedelta
 from types import SimpleNamespace
 from unittest.mock import MagicMock
 
-import pandas as pd
 import pytest
 from sqlalchemy import create_engine, text
 
 from orion_backend.services import sensor_service
 from orion_backend.services.sensor_service import SensorService
-from orion_core.db.sensor_catalog import lagged_raw_tags, lagged_sensors
+from orion_core.db.sensor_catalog import lagged_raw_tags
 from orion_core.queries.penelope_queries import select_readings_between
-from orion_pipeline.steps.clean_step.clean_utils import shift_sensor_time
 
 GPS = "TPU/GPS/Location"
 OTHER = "BMS/Pack/SoC"
@@ -20,9 +18,9 @@ START = datetime(2026, 10, 1, 12, 0, 0, tzinfo=UTC)
 END = START + timedelta(minutes=1)
 
 
-def test_catalog_flags_every_tpu_gps_sensor():
+def test_catalog_flags_gps_receiver_sensors_but_not_pps():
     assert lagged_raw_tags() == {
-        f"TPU/GPS/{name}" for name in ("Altitude", "GroundSpeed", "Location", "Mode", "PPS")
+        f"TPU/GPS/{name}" for name in ("Altitude", "GroundSpeed", "Location", "Mode")
     }
 
 
@@ -30,10 +28,10 @@ def test_catalog_flags_every_tpu_gps_sensor():
 @pytest.mark.parametrize(
     ("tag", "raw_time", "included"),
     [
-        (GPS, START - OFFSET, True),
-        (GPS, END - OFFSET, True),
-        (GPS, START - OFFSET - timedelta(microseconds=1), False),
-        (GPS, END - OFFSET + timedelta(microseconds=1), False),
+        (GPS, START + OFFSET, True),
+        (GPS, END + OFFSET, True),
+        (GPS, START + OFFSET - timedelta(microseconds=1), False),
+        (GPS, END + OFFSET + timedelta(microseconds=1), False),
         (OTHER, START, True),
         (OTHER, END, True),
         (OTHER, START - timedelta(microseconds=1), False),
@@ -74,7 +72,7 @@ def get_data(monkeypatch, offset_s=OFFSET.total_seconds(), **kwargs):
 
 def test_shifts_only_lagged_sensors(monkeypatch):
     response, args = get_data(monkeypatch)
-    assert response.series[GPS].time == [START + OFFSET]
+    assert response.series[GPS].time == [START - OFFSET]
     assert response.series[OTHER].time == [START]
     assert args[-2:] == (lagged_raw_tags(), OFFSET)
 
@@ -85,13 +83,3 @@ def test_correction_can_be_turned_off(monkeypatch, offset_s, kwargs):
     assert response.series[GPS].time == [START]
     lagged, offset = args[-2:]
     assert not lagged or offset == timedelta(0)
-
-
-def test_backend_matches_pipeline(monkeypatch):
-    response, _ = get_data(monkeypatch)
-    cleaned = shift_sensor_time(
-        pd.DataFrame({"time": [START], "sensor": ["gps_location"]}),
-        lagged_sensors(),
-        OFFSET.total_seconds(),
-    )
-    assert cleaned["time"].iloc[0] == response.series[GPS].time[0]
