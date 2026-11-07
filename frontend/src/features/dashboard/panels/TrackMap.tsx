@@ -1,47 +1,65 @@
-// TrackMap.tsx
-import { useState, useMemo, useRef, useCallback } from "react";
-import {
-  useCommittedWindow,
-  useDashboardActions,
-  useHoverTimeSubscription,
-} from "@features/dashboard/state/useDashboard";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import type { PointerEvent as ReactPointerEvent } from "react";
 import EmptyState from "@components/ui/EmptyState";
 import ErrorState from "@components/ui/ErrorState";
 import LoadingState from "@components/ui/LoadingState";
 import { useRunPositions } from "@features/dashboard/data/useDashboardData";
+import { useHoverTimeSubscription } from "@features/dashboard/state/useDashboard";
 import {
-  getTimeFromMouse,
-  getCarPosition,
-  getMousePosOnSVG,
+  anchorAt,
+  gapPath,
+  headingAt,
   makeTrack,
-  startFinishTick,
+  nearestSample,
+  positionAt,
   tickAt,
-  trackPoints,
-  windowPoints,
-  type Tick,
+  trackPath,
+  windowPath,
 } from "@features/dashboard/utils/trackmap";
-import { TrackVisualization } from "./TrackVisualization";
-import styles from "@features/dashboard/TrackMap.module.css";
 import { cx } from "@utils/classNames";
-import type { TimeWindow } from "@features/dashboard/utils/time";
+import { formatDuration } from "@utils/format";
+import { TrackVisualization, type DragMode } from "./TrackVisualization";
+import {
+  MIN_HALF_MS,
+  selectionWindow,
+  useTrackSelection,
+  type TrackSelection,
+} from "./useTrackSelection";
+import styles from "./TrackMap.module.css";
 
-// Half the length of the lines across the track, in SVG units (the drawing's
-// longer side is 100).
-const TICK_HALF_LENGTH = 3;
+// Half the length of the lines across the track, in SVG units (longer side 100):
+// the start line, and the longer bars that are the window's resize handles.
+const TICK_HALF_LENGTH = 2.6;
+const HANDLE_HALF_LENGTH = 3.4;
+// How close (screen px) a press must be to the road to move the car there.
+const ROAD_HIT_PX = 14;
 
+type Drag = {
+  mode: DragMode;
+  // Which edge is held: -1 the start, +1 the end (flips if dragged past the car).
+  side: -1 | 1;
+  // The selection before the drag, restored on Esc.
+  before: TrackSelection;
+};
+
+const clamp = (v: number, lo: number, hi: number) => Math.min(Math.max(v, lo), hi);
+
+// The pointer in SVG units: track points are in viewBox units, not screen pixels.
+function toSvgPoint(svg: SVGSVGElement, e: ReactPointerEvent) {
+  const ctm = svg.getScreenCTM();
+  if (!ctm) return null;
+  const p = new DOMPoint(e.clientX, e.clientY).matrixTransform(ctm.inverse());
+  return { x: p.x, y: p.y, unitsPerPx: 1 / ctm.a };
+}
+
+// The car sits at the window's centre: drag it to slide the window along the run;
+// drag either white handle to resize the window symmetrically around the car.
+// Moves are previewed to the other panels; the window is committed on release.
 export function TrackMap() {
-  const stageRef = useRef<SVGSVGElement | null>(null);
-  const carRef = useRef<SVGCircleElement | null>(null);
-  // Drag ends in RunTime (ms since the run's start), like every dashboard window.
-  const [dragStart, setDragStart] = useState<number | null>(null);
-  const [dragEnd, setDragEnd] = useState<number | null>(null);
-
-  const {
-    previewWindow,
-    commitWindow,
-    setHoverTime: setDashboardHoverTime,
-  } = useDashboardActions();
-  const committedWindow = useCommittedWindow();
+  const svgRef = useRef<SVGSVGElement | null>(null);
+  const ghostRef = useRef<SVGCircleElement | null>(null);
+  const dragRef = useRef<Drag | null>(null);
+  const [dragMode, setDragMode] = useState<DragMode | null>(null);
 
   const {
     positions,
@@ -50,8 +68,6 @@ export function TrackMap() {
     positionsError: error,
   } = useRunPositions("overview");
 
-  // Every time here is RunTime; the trackmap helpers convert to the cached
-  // array's epoch ms themselves, using the run's start stored on the track.
   const track = useMemo(
     () =>
       positions && positions.time.length > 0
@@ -59,124 +75,183 @@ export function TrackMap() {
         : null,
     [positions],
   );
-  const points = useMemo(() => (track ? trackPoints(track) : ""), [track]);
+  const { selection, selectionRef, preview, commit, cancel, applied } = useTrackSelection(track);
 
-  // Hover changes come from any panel, up to once a frame. Move the marker
-  // directly instead of through React state, so the map doesn't re-render.
+  // Static layers, once per track.
+  const base = useMemo(() => {
+    if (!track) return null;
+    return {
+      road: trackPath(track),
+      gaps: gapPath(track),
+      start: tickAt(track, anchorAt(track, track.firstTime), TICK_HALF_LENGTH),
+    };
+  }, [track]);
+
+  // The selection's layers, on every drag move.
+  const shape = useMemo(() => {
+    if (!track || !selection) return null;
+    const [from, to] = selectionWindow(selection);
+    const handle = (t: number) => tickAt(track, anchorAt(track, t), HANDLE_HALF_LENGTH);
+    const car = anchorAt(track, selection.center);
+    return {
+      window: windowPath(track, from, to),
+      car: { x: car.x, y: car.y, heading: headingAt(track, car) },
+      edges: [handle(from), handle(to)] as const,
+    };
+  }, [track, selection]);
+
+  // Hover from other panels (charts) shows as a faint ghost marker. Moved
+  // directly, not through React state, so the map doesn't re-render per frame.
   useHoverTimeSubscription((t) => {
-    const car = carRef.current;
-    if (!car || !track) return;
-    const pos = getCarPosition(track, t);
-    if (!pos) {
-      car.setAttribute("visibility", "hidden");
-      return;
+    const ghost = ghostRef.current;
+    if (!ghost || !track) return;
+    const pos = positionAt(track, t);
+    ghost.setAttribute("visibility", pos ? "visible" : "hidden");
+    if (pos) {
+      ghost.setAttribute("cx", String(pos.x));
+      ghost.setAttribute("cy", String(pos.y));
     }
-    car.setAttribute("cx", String(pos.x));
-    car.setAttribute("cy", String(pos.y));
-    car.setAttribute("visibility", "visible");
   });
 
-  // Hidden while a new drag is in progress, so only the new selection shows.
-  const isDragging = dragStart !== null;
-  const dragWindow = useMemo(
-    (): TimeWindow | null =>
-      dragStart === null || dragEnd === null
-        ? null
-        : [Math.min(dragStart, dragEnd), Math.max(dragStart, dragEnd)],
-    [dragStart, dragEnd],
-  );
-  const shownWindow = isDragging ? dragWindow : committedWindow;
-
-  const committedPoints = useMemo(() => {
-    if (isDragging || !committedWindow || !track) return "";
-    return windowPoints(track, committedWindow[0], committedWindow[1]);
-  }, [isDragging, committedWindow, track]);
-
-  const previewPoints = useMemo(() => {
-    if (!dragWindow || !track) return "";
-    return windowPoints(track, dragWindow[0], dragWindow[1]);
-  }, [dragWindow, track]);
-
-  // Lines across the track at the shown window's edges, and at the run's start
-  // (the start/finish line, since a run starts there).
-  const windowTicks = useMemo((): Tick[] => {
-    if (!shownWindow || !track) return [];
-    return shownWindow
-      .map((t) => tickAt(track, t, TICK_HALF_LENGTH))
-      .filter((tick): tick is Tick => tick !== null);
-  }, [shownWindow, track]);
-  const startFinish = useMemo(
-    () => (track ? startFinishTick(track, TICK_HALF_LENGTH) : null),
-    [track],
-  );
-
-  const handleMouseDown = useCallback(
-    (e: React.MouseEvent<SVGSVGElement>) => {
-      if (!track) return;
-      const pos = getMousePosOnSVG(e, stageRef);
-      if (!pos) return;
-      const timeVal = getTimeFromMouse(track, pos.x, pos.y);
-      setDragStart(timeVal);
-      setDragEnd(timeVal);
-    },
-    [track],
-  );
-
-  const handleMouseMove = useCallback(
-    (e: React.MouseEvent<SVGSVGElement>) => {
-      if (!track) return;
-      const pos = getMousePosOnSVG(e, stageRef);
-      if (!pos) return;
-      // While dragging, stay on the lap the drag is following (see getTimeFromMouse).
-      const timeVal = getTimeFromMouse(track, pos.x, pos.y, dragEnd ?? undefined);
-
-      if (dragStart === null) {
-        setDashboardHoverTime(timeVal);
-      } else {
-        setDragEnd(timeVal);
-        const [start, end] = dragStart < timeVal ? [dragStart, timeVal] : [timeVal, dragStart];
-        previewWindow([start, end]);
-      }
-    },
-    [dragStart, dragEnd, track, setDashboardHoverTime, previewWindow],
-  );
-
-  const handleMouseUp = useCallback(() => {
-    if (dragStart === null || dragEnd === null) return;
-    const [start, end] = dragStart < dragEnd ? [dragStart, dragEnd] : [dragEnd, dragStart];
-    commitWindow([start, end]);
-    setDragStart(null);
-    setDragEnd(null);
-  }, [dragStart, dragEnd, commitWindow]);
-
-  const handleMouseLeave = useCallback(() => {
-    setDragStart(null);
-    setDragEnd(null);
+  const endDrag = useCallback(() => {
+    dragRef.current = null;
+    setDragMode(null);
   }, []);
+
+  const cancelDrag = useCallback(() => {
+    const drag = dragRef.current;
+    if (!drag) return;
+    endDrag();
+    cancel(drag.before);
+  }, [cancel, endDrag]);
+
+  // Esc abandons the drag and puts the window back where it was.
+  useEffect(() => {
+    if (!dragMode) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") cancelDrag();
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [dragMode, cancelDrag]);
+
+  const handlePointerDown = useCallback(
+    (e: ReactPointerEvent<SVGSVGElement>) => {
+      const svg = svgRef.current;
+      const current = selectionRef.current;
+      if (!svg || !track || !current || !e.isPrimary || e.button !== 0) return;
+      const p = toSvgPoint(svg, e);
+      if (!p) return;
+
+      const role = (e.target as Element).closest("[data-handle]")?.getAttribute("data-handle");
+      let drag: Drag;
+      if (role === "car") {
+        drag = { mode: "car", side: 1, before: current };
+      } else if (role === "start" || role === "end") {
+        drag = { mode: "edge", side: role === "start" ? -1 : 1, before: current };
+      } else {
+        // A press on the road moves the car there (preferring the pass nearest in
+        // time to where it is now); a press on empty space does nothing.
+        const hit = nearestSample(track, p.x, p.y, current.center);
+        if (!hit || hit.dist > ROAD_HIT_PX * p.unitsPerPx) return;
+        drag = { mode: "car", side: 1, before: current };
+        preview({ ...current, center: hit.time });
+      }
+
+      e.preventDefault();
+      svg.setPointerCapture(e.pointerId);
+      dragRef.current = drag;
+      setDragMode(drag.mode);
+    },
+    [track, selectionRef, preview],
+  );
+
+  const handlePointerMove = useCallback(
+    (e: ReactPointerEvent<SVGSVGElement>) => {
+      const drag = dragRef.current;
+      const svg = svgRef.current;
+      const current = selectionRef.current;
+      if (!drag || !svg || !track || !current) return;
+      const p = toSvgPoint(svg, e);
+      if (!p) return;
+
+      if (drag.mode === "car") {
+        const hit = nearestSample(track, p.x, p.y, current.center);
+        if (hit && hit.time !== current.center) preview({ ...current, center: hit.time });
+        return;
+      }
+      // Edge: the held edge follows the pointer; the other mirrors it around the car.
+      const edge = current.center + drag.side * current.half;
+      const hit = nearestSample(track, p.x, p.y, edge);
+      if (!hit) return;
+      const offset = hit.time - current.center;
+      if (offset !== 0) drag.side = offset < 0 ? -1 : 1;
+      const maxHalf = Math.max(MIN_HALF_MS, (track.lastTime - track.firstTime) / 2);
+      const half = clamp(Math.abs(offset), MIN_HALF_MS, maxHalf);
+      if (half !== current.half) preview({ ...current, half });
+    },
+    [track, selectionRef, preview],
+  );
+
+  const handlePointerUp = useCallback(() => {
+    if (!dragRef.current) return;
+    endDrag();
+    commit();
+  }, [commit, endDrag]);
 
   if (isLoading) return <LoadingState message="Loading track…" />;
   if (error) return <ErrorState error={error} />;
-  if (!track) return <EmptyState message="No position data for this run." />;
+  if (!track || !base || !shape || !selection) {
+    return <EmptyState message="No position data for this run." />;
+  }
+
+  const [from, to] = selectionWindow(selection);
+  const clock = (ms: number) => formatDuration(clamp(ms, 0, track.lastTime) / 1000);
 
   return (
-    // Placeholder data is the previous request's, shown while new data loads:
-    // dim it so it reads as out of date. (The "overview" scope never changes
-    // request within a run, so this only matters if the map moves to "detail".)
+    // Placeholder data is the previous request's, shown while new data loads: dim
+    // it so it reads as out of date. (The "overview" scope never changes request
+    // within a run, so this only matters if the map moves to "detail".)
     <div className={cx(styles.container, isPlaceholderData && styles.stale)}>
       <TrackVisualization
-        points={points}
-        committedPoints={committedPoints}
-        previewPoints={previewPoints}
-        windowTicks={windowTicks}
-        startFinish={startFinish}
-        carRef={carRef}
+        svgRef={svgRef}
+        ghostRef={ghostRef}
         viewSize={track.viewSize}
-        onMouseDown={handleMouseDown}
-        onMouseMove={handleMouseMove}
-        onMouseUp={handleMouseUp}
-        onMouseLeave={handleMouseLeave}
-        stageRef={stageRef}
+        road={base.road}
+        gaps={base.gaps}
+        start={base.start}
+        window={shape.window}
+        car={shape.car}
+        edges={shape.edges}
+        pending={!applied && !dragMode}
+        dragMode={dragMode}
+        onPointerDown={handlePointerDown}
+        onPointerMove={handlePointerMove}
+        onPointerUp={handlePointerUp}
+        onPointerCancel={cancelDrag}
       />
+
+      <dl className={styles.readout}>
+        <div className={styles.stat}>
+          <dt>Car</dt>
+          <dd>{clock(selection.center)}</dd>
+        </div>
+        <div className={styles.stat}>
+          <dt>Window</dt>
+          <dd>
+            {clock(from)} – {clock(to)}
+          </dd>
+        </div>
+        <div className={styles.stat}>
+          <dt>Width</dt>
+          <dd>{Math.round((selection.half * 2) / 1000)} s</dd>
+        </div>
+      </dl>
+      <p className={styles.hint}>
+        {applied
+          ? "Drag the car to move the window · drag a handle to resize · Esc cancels"
+          : "Drag the car or click the track to select a window"}
+      </p>
     </div>
   );
 }

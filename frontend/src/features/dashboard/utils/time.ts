@@ -61,7 +61,19 @@ const SNAP_FRACTION = 0.005;
 
 const clamp = (value: number, min: number, max: number) => Math.min(Math.max(value, min), max);
 
+// Clamps a window to the run and rounds it to whole ms, without snapping: what the
+// URL stores, so panels see exactly the window the user picked. Null when it
+// covers the whole run.
+export function clampWindow(window: TimeWindow, durationMs: number): TimeWindow | null {
+  const lo = clamp(Math.round(Math.min(window[0], window[1])), 0, durationMs);
+  const hi = clamp(Math.round(Math.max(window[0], window[1])), 0, durationMs);
+  const start = Math.min(lo, Math.max(0, durationMs - 1));
+  const end = Math.max(hi, start + 1);
+  return start === 0 && end >= durationMs ? null : [start, end];
+}
+
 // Clamps a window to the run and snaps it; null when it covers the whole run.
+// For fetching only (useDashboardData), so nearby windows share cache entries.
 export function snapWindow(window: TimeWindow, durationMs: number): TimeWindow | null {
   const step = Math.max(1, Math.round(durationMs * SNAP_FRACTION));
   const lo = Math.min(window[0], window[1]);
