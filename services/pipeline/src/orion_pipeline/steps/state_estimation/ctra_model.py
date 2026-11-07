@@ -71,8 +71,11 @@ class CTRAModel(PhysicsModel):
         The model assumes acceleration and turn rate stay constant, but really
         they drift. Two model_params set how fast:
 
-        - sigma_jerk (m/s^3, default 1.0): acceleration drift, adding doubt to speed.
-        - sigma_alpha (rad/s^2, default 0.1): turn rate drift, adding doubt to heading.
+        - sigma_jerk (m/s^3, default 15.0): acceleration drift, adding doubt to speed.
+        - sigma_alpha (rad/s^2, default 0.5): turn rate drift, adding doubt to heading.
+
+        Defaults were picked by sweeping both over recorded runs; alpha >= 2
+        made the covariance lose positive definiteness.
 
         Position (PX, PY) gets no direct noise. It becomes uncertain indirectly,
         because errors in speed and heading carry into position.
@@ -80,8 +83,8 @@ class CTRAModel(PhysicsModel):
         params = self.config.model_params
         q = np.zeros((STATE_SIZE, STATE_SIZE))
         for rate, integrated, sigma in (
-            (A, V, params.get("sigma_jerk", 1.0)),
-            (OMEGA, THETA, params.get("sigma_alpha", 0.1)),
+            (A, V, params.get("sigma_jerk", 15.0)),
+            (OMEGA, THETA, params.get("sigma_alpha", 0.5)),
         ):
             var = sigma**2
             q[integrated, integrated] = var * dt**3 / 3
