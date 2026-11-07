@@ -18,7 +18,6 @@ import {
   windowPath,
 } from "@features/dashboard/utils/trackmap";
 import { cx } from "@utils/classNames";
-import { formatDuration } from "@utils/format";
 import { TrackVisualization, type DragMode } from "./TrackVisualization";
 import {
   clampHalf,
@@ -107,10 +106,6 @@ export function TrackMap() {
     // whichever is closer and a short window can still be resized.
     const nearest = Math.min(...ends.map((end) => Math.hypot(end.x - car.x, end.y - car.y)));
     return {
-      from,
-      to,
-      // Can be shorter than 2 × halfM where the run's start or end cuts it off.
-      lengthM: distanceAt(track, to) - distanceAt(track, from),
       window: windowPath(track, from, to),
       car: {
         x: car.x,
@@ -255,9 +250,6 @@ export function TrackMap() {
     return <EmptyState message="No position data for this run." />;
   }
 
-  const { from, to } = shape;
-  const clock = (ms: number) => formatDuration(clamp(ms, 0, track.lastTime) / 1000);
-
   return (
     // Placeholder data is the previous request's, shown while new data loads: dim
     // it so it reads as out of date. (The "overview" scope never changes request
@@ -282,24 +274,6 @@ export function TrackMap() {
         onLostPointerCapture={handlePointerUp}
       />
 
-      <dl className={styles.readout}>
-        <div className={styles.stat}>
-          <dt>Car</dt>
-          <dd>{clock(selection.center)}</dd>
-        </div>
-        <div className={styles.stat}>
-          <dt>Window</dt>
-          <dd>
-            {clock(from)} – {clock(to)}
-          </dd>
-        </div>
-        <div className={styles.stat}>
-          <dt>Length</dt>
-          <dd>
-            {Math.round(shape.lengthM)} m · {Math.round((to - from) / 1000)} s
-          </dd>
-        </div>
-      </dl>
       <p className={styles.hint}>
         {applied
           ? "Drag the car to move the window · drag a handle to resize · Esc cancels"
