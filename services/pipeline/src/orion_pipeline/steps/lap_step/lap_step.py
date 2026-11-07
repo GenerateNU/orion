@@ -4,6 +4,7 @@ from datetime import datetime
 import numpy as np
 import pandas as pd
 
+from orion_core.geometry import to_local_xy
 from orion_core.queries.orion_queries import select_estimated_positions
 from orion_pipeline.clients.oriondb_client import OrionDBClient
 from orion_pipeline.runner.run_context import RunContext
@@ -13,7 +14,6 @@ from orion_pipeline.steps.lap_step.lap_utils import (
     build_lap_rows,
     find_crossings,
     find_gate,
-    to_local_xy,
 )
 from orion_pipeline.steps.step_registry import register_step
 

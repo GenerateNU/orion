@@ -4,18 +4,16 @@ import numpy as np
 import pandas as pd
 import pytest
 
+from orion_core.geometry import EARTH_RADIUS_M, distance_driven, to_local_xy
 from orion_pipeline.runner.run_context import RunContext
-from orion_pipeline.steps.lap_step.lap_constants import EARTH_RADIUS_M
 from orion_pipeline.steps.lap_step.lap_utils import (
     Gate,
     apply_min_lap_time,
     build_lap_rows,
-    distance_driven,
     find_crossings,
     find_first_revisit,
     find_gate,
     headings,
-    to_local_xy,
 )
 
 START = datetime(2026, 1, 1, 12, 0, 0)

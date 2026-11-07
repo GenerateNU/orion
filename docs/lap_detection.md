@@ -150,7 +150,7 @@ loop, and every piece is simple geometry that can be unit tested on its own.
 
 ## 5. Converting to meters
 
-`to_local_xy(lat, lon)`.
+`to_local_xy(lat, lon)`, in `orion_core.geometry`.
 
 Latitude and longitude are **angles**, not distances, so a "3 m" hitbox can't
 be measured in degrees:
@@ -176,7 +176,7 @@ x points east and y points north, both in meters. This is an
 and uses the origin's latitude to scale longitude. Over an area the size of a
 track (a few hundred meters), the error is negligible.
 
-`EARTH_RADIUS_M` lives in `lap_constants.py`. It's a physical constant, not
+`EARTH_RADIUS_M` lives in `orion_core.geometry`. It's a physical constant, not
 a tunable.
 
 ## 6. Finding the gate
@@ -218,7 +218,7 @@ neighbors are 5 points away.
 
 ### Distance driven
 
-`distance_driven(x, y)` is the running total (cumsum) of the straight-line
+`distance_driven(x, y)`, in `orion_core.geometry`, is the running total (cumsum) of the straight-line
 step between consecutive points, starting at 0.
 
 **Example:** points (0, 0), (3, 4), (6, 8) give 0, 5, 10. (Each step is a
@@ -504,7 +504,7 @@ These are deliberately not handled in this design.
 | --- | --- |
 | `services/pipeline/src/orion_pipeline/steps/lap_step/lap_step.py` | `LapStep`: `extract` (one query for the whole run) and `transform` (the four stages in section 4). |
 | `services/pipeline/src/orion_pipeline/steps/lap_step/lap_utils.py` | The `Gate` dataclass and the pure geometry helpers. |
-| `services/pipeline/src/orion_pipeline/steps/lap_step/lap_constants.py` | `EARTH_RADIUS_M`. |
+| `packages/orion_core/src/orion_core/geometry.py` | `EARTH_RADIUS_M`, `to_local_xy` and `distance_driven`, shared with the backend. |
 | `packages/orion_core/src/orion_core/settings.py` | The `lap_*` tunables (section 10). |
 | `services/pipeline/src/orion_pipeline/runner/run_context.py` | `RunContext`, which carries the `lap_*` tunables to the step. |
 | `packages/orion_core/src/orion_core/queries/orion_queries.py` | `select_estimated_positions`, the step's query. |
@@ -517,9 +517,7 @@ These are deliberately not handled in this design.
 
 | Function | Purpose |
 | --- | --- |
-| `to_local_xy` | Latitude/longitude → local x/y meters (section 5). |
 | `headings` | Unit heading at every point from its neighbors, (0, 0) where not moving. |
-| `distance_driven` | Total distance driven up to every point. |
 | `find_first_revisit` | Index of the first earlier point the car drives back over while moving, or None. |
 | `find_gate` | Downsample, find the first revisit, and build the `Gate` there, or None. |
 | `find_crossings` | Index of the first point past the gate for every forward pass through it. |

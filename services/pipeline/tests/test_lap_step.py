@@ -5,8 +5,8 @@ import numpy as np
 import pandas as pd
 import pytest
 
+from orion_core.geometry import EARTH_RADIUS_M
 from orion_pipeline.runner.run_context import RunContext
-from orion_pipeline.steps.lap_step.lap_constants import EARTH_RADIUS_M
 from orion_pipeline.steps.lap_step.lap_step import LapStep
 
 ORIGIN_LAT, ORIGIN_LON = 42.34, -71.09
