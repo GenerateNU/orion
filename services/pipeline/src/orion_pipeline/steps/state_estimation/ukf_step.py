@@ -1,11 +1,10 @@
-import math
-from collections.abc import Callable, Iterable, Sequence
+from collections.abc import Callable, Iterable
 from dataclasses import dataclass
-from statistics import NormalDist
-from typing import NamedTuple
+from functools import cache
 
 import numpy as np
 import pandas as pd
+from scipy.stats import chi2
 
 from orion_pipeline.steps.state_estimation.ctra_model import CTRAModel
 from orion_pipeline.steps.state_estimation.kalman_filter import UnscentedKalmanFilter
@@ -22,44 +21,22 @@ PHYSICS_MODELS: dict[str, Callable[[PhysicsModelConfig], PhysicsModel]] = {
 }
 
 
-class SensorKind(NamedTuple):
-    dim: int
-    h: Callable[[np.ndarray], np.ndarray]
-    to_z: Callable[[Sequence[float], Callable[[float, float], np.ndarray]], np.ndarray]
-
-
-SENSOR_KINDS: dict[str, SensorKind] = {
-    "gps_location": SensorKind(
-        2, lambda s: s[:, [PX, PY]], lambda values, to_xy: to_xy(values[0], values[1])
-    ),
-    "vcu_speed": SensorKind(
-        1,
-        lambda s: s[:, [V]],
-        lambda values, to_xy: np.array([values[0] * UnitConversions.MPS_PER_MPH]),
-    ),
-}
-
-
+@cache
 def gate_threshold(confidence: float, dof: int) -> float:
-    if dof == 1:
-        return NormalDist().inv_cdf((1 + confidence) / 2) ** 2
-    if dof == 2:
-        return -2.0 * math.log1p(-confidence)
-    from scipy.stats import chi2
-
+    """NIS above this is rejected: the chi-square quantile for dof dimensions."""
     return float(chi2.ppf(confidence, dof))
 
 
 @dataclass(frozen=True)
 class Tick:
-    """The filter's state at one tick. x_pred, P_pred and C are None on a startup tick."""
+    """The filter's state at one tick. The prediction fields are None on a startup tick."""
 
     time: pd.Timestamp
     x: np.ndarray
-    P: np.ndarray
+    p: np.ndarray
     x_pred: np.ndarray | None
-    P_pred: np.ndarray | None
-    C: np.ndarray | None
+    p_pred: np.ndarray | None
+    cross_cov: np.ndarray | None
 
 
 class UKFStep:
@@ -75,17 +52,7 @@ class UKFStep:
         cfg = self.config
         self.model = PHYSICS_MODELS[cfg.physics.model_name](cfg.physics)
         self.p0 = np.diag(cfg.p0)
-        # sensor -> (kind, R, NIS gate)
-        self.sensors: dict[str, tuple[SensorKind, np.ndarray, float | None]] = {}
-        for name, s in cfg.sensors.items():
-            kind = SENSOR_KINDS[name]
-            gate = (
-                None
-                if s.gate_confidence is None
-                else gate_threshold(s.gate_confidence, kind.dim)
-            )
-            R = np.diag(np.full(kind.dim, s.noise_std**2))
-            self.sensors[name] = (kind, R, gate)
+        self.sensors = cfg.sensors
 
         self.ukf: UnscentedKalmanFilter | None = None
         self.tick_time: pd.Timestamp | None = None
@@ -146,21 +113,21 @@ class UKFStep:
         self, tick_time: pd.Timestamp, readings: Iterable[tuple[str, list[float]]]
     ) -> None:
         """Predict to tick_time, apply each reading, and record the tick."""
-        ukf = self.ukf
-        prev = self.tick_time
+        ukf, prev = self.ukf, self.tick_time
         if ukf is None or prev is None:
             raise RuntimeError("Filter stepped before it was started.")
 
         dt = (tick_time - prev).total_seconds()
-        x_pred, P_pred, C = ukf.predict(dt)
+        prediction = ukf.predict(dt)
 
         for sensor, values in readings:
-            kind, R, gate = self.sensors[sensor]
-            ukf.update(kind.to_z(values, self._to_xy), kind.h, R, gate)
+            z, h = self._measurement(sensor, values)
+            s = self.sensors[sensor]
+            R = s.noise_std**2 * np.eye(len(z))
+            gate = s.gate_confidence and gate_threshold(s.gate_confidence, len(z))
+            ukf.update(z, h, R, gate)
 
-        self.ticks.append(
-            Tick(tick_time, ukf.x.copy(), ukf.P.copy(), x_pred, P_pred, C)
-        )
+        self.ticks.append(Tick(tick_time, ukf.x.copy(), ukf.P.copy(), *prediction))
         self.tick_time = tick_time
 
     def _try_start(self, tick_time: pd.Timestamp, readings: pd.DataFrame) -> None:
@@ -192,12 +159,13 @@ class UKFStep:
         self.first_fix = None
         self.ticks.append(Tick(tick_time, x0, self.p0.copy(), None, None, None))
 
-    def _measurement(self, sensor: str, values: list[float]) -> np.ndarray:
-        """A reading's values -> z in the filter's units."""
+    def _measurement(
+        self, sensor: str, values: list[float]
+    ) -> tuple[np.ndarray, Callable[[np.ndarray], np.ndarray]]:
+        """A reading -> (z in the filter's units, h picking the state columns it measures)."""
         if sensor == "gps_location":
-            lat, lon = values
-            return self._to_xy(lat, lon)
-        return np.array([values[0] * UnitConversions.MPS_PER_MPH])
+            return self._to_xy(*values), lambda s: s[:, [PX, PY]]
+        return np.array([values[0] * UnitConversions.MPS_PER_MPH]), lambda s: s[:, [V]]
 
     def _to_xy(self, lat: float, lon: float) -> np.ndarray:
         """Latitude/longitude -> [x east, y north] meters from the origin. Fine at track scale."""

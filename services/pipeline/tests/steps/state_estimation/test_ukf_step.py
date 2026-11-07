@@ -52,7 +52,7 @@ def test_starts_from_two_fixes():
     assert tick.time == T0 + pd.Timedelta(milliseconds=200)
     # Speed is measured from the first fix, not the one 1 m away
     np.testing.assert_allclose(tick.x, [3, 0, 15, 0, 0, 0], atol=1e-6)
-    assert tick.x_pred is None and tick.P_pred is None and tick.C is None
+    assert tick.x_pred is None and tick.p_pred is None and tick.cross_cov is None
 
 
 def test_ticks_with_no_readings_still_predict():
@@ -118,7 +118,7 @@ def test_chunk_size_does_not_change_ticks():
     assert len(ticks) == len(expected)
     for got, want in zip(ticks, expected, strict=True):
         assert got.time == want.time
-        for field in ("x", "P", "x_pred", "P_pred", "C"):
+        for field in ("x", "p", "x_pred", "p_pred", "cross_cov"):
             a, b = getattr(got, field), getattr(want, field)
             if b is None:
                 assert a is None

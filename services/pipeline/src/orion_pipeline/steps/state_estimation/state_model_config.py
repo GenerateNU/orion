@@ -21,7 +21,7 @@ class PhysicsModelConfig:
         self,
         model_name: str,
         model_params: dict[str, Any],
-        straight_threshold: float = 1e-6,
+        straight_threshold: float = 1e-3,
     ) -> None:
         self.model_name = model_name
         self.model_params = model_params
@@ -53,8 +53,8 @@ class UKFConfig:
     min_heading_distance_m: the first two GPS fixes must be this far apart.
     p0: diagonal of the starting covariance for [px, py, v, theta, omega, a].
     alpha, beta, kappa: unscented transform parameters.
-    physics: model name and params, looked up in PHYSICS_MODELS.
-    sensors: sensor name -> noise and gate; names must be in SENSOR_KINDS.
+    physics: model name and params, looked up in ukf_step.PHYSICS_MODELS.
+    sensors: sensor name -> noise and gate; UKFStep._measurement must know each name.
     """
 
     tick: pd.Timedelta = pd.Timedelta("10ms")
