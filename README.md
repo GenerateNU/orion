@@ -58,10 +58,10 @@ NER VPN, or `penelope2`, a copy hosted on Neon).
 ```bash
 cp .env.example .env        # set PENELOPE_DATABASE_URL
 docker compose up --build
-docker compose exec orion-backend python -m orion_core.db.scripts.seed_sensors   # once
+docker compose exec orion python -m orion_core.db.scripts.seed_sensors   # once
 ```
 
-Then open the dashboard at http://localhost:5173.
+Then open the dashboard at http://localhost:8100.
 
 ## Documentation
 

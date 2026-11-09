@@ -11,7 +11,7 @@ packages/orion_core/   shared Python: settings, DB models + migrations, queries
 services/backend/      main API (orion_backend)
 services/pipeline/     pipeline API + worker (orion_pipeline)
 frontend/              React app
-docker/                python.Dockerfile: one image for every Python service
+docker/                orion.Dockerfile + entrypoint.sh: the all-in-one app image
 docs/                  design notes (ARCHITECTURE.md, …)
 pyproject.toml         uv workspace root and shared ruff/mypy/pytest config
 docker-compose.yml     the local stack
@@ -28,27 +28,36 @@ docker compose up --build
 Then seed the sensor catalog once. The pipeline can't clean anything without it:
 
 ```bash
-docker compose exec orion-backend python -m orion_core.db.scripts.seed_sensors
+docker compose exec orion python -m orion_core.db.scripts.seed_sensors
 ```
 
-| Service                 | URL                          | What it is                               |
-| ----------------------- | ---------------------------- | ---------------------------------------- |
-| `frontend`              | http://localhost:5173        | React + Vite dev server                  |
-| `orion-backend`         | http://localhost:8100/docs   | Main API (Swagger UI)                    |
-| `orion-pipeline-api`    | http://localhost:8200/docs   | Pipeline trigger/status API              |
-| `orion-pipeline-worker` | (none)                       | Runs queued pipeline jobs                |
-| `orion-db`              | `localhost:5434`             | Local OrionDB (Postgres 16)              |
-| `orion-migrate`         | (one-shot)                   | `alembic upgrade head`, then exits       |
+| Service    | URL                                     | What it is                                         |
+| ---------- | --------------------------------------- | -------------------------------------------------- |
+| `orion`    | http://localhost:8100 (+ `/docs`)       | All-in-one: built frontend, backend, pipeline API and worker |
+| `orion-db` | `localhost:5434`                        | Local OrionDB (Postgres 16)                        |
 
-`packages/`, `services/` and `frontend/` are bind-mounted into the containers, so
-changes hot-reload. The worker doesn't reload: run `docker compose restart orion-pipeline-worker` after changing step code.
+On start, `orion` runs `alembic upgrade head`, then launches the backend (port 8000,
+which also serves the built frontend), the pipeline API (localhost:8200, internal
+only) and the pipeline worker via [docker/entrypoint.sh](docker/entrypoint.sh). If
+any of them exits, the container stops.
+
+Nothing is bind-mounted and nothing hot-reloads: rebuild with
+`docker compose up --build` after changing code. For hot reload, use `make dev`: it
+keeps the DB in Docker and runs the frontend (http://localhost:5173), backend
+(:8100), pipeline API (:8200) and worker locally. Ctrl+C stops them all. It uses
+the local DB on `localhost:5434` unless you pass `DEV_DATABASE_URL=...`. The worker
+still doesn't reload, so restart `make dev` after changing pipeline code.
 
 Run `make help` for the full list of shortcuts (`make up`, `make logs`, `make migrate`, `make quality`, …).
 
 ## Architecture
 
+In Docker, everything except the databases runs in the single `orion` container,
+and the backend serves the built frontend itself (`/api/*` goes straight to it).
+With `npm run dev`, Vite proxies `/api/*` to the backend instead.
+
 ```
-                 ┌──────────────┐   /api/*  (Vite proxy)
+                 ┌──────────────┐   /api/*
    browser ────► │   frontend   │ ─────────────────────────┐
                  └──────────────┘                          ▼
                                                  ┌───────────────────┐

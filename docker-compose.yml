@@ -1,35 +1,15 @@
 # Orion local stack.
 #
-#   New services (uv workspace: packages/ + services/)
-#     orion-db               local OrionDB (Postgres)       localhost:5434
-#     orion-migrate          one-shot: alembic upgrade head
-#     orion-backend          FastAPI API                    http://localhost:8100/docs
-#     orion-pipeline-api     pipeline trigger/status API    http://localhost:8200/docs
-#     orion-pipeline-worker  runs pipeline jobs (sync)
-#     frontend               React + Vite dev server         http://localhost:5173
+#     orion-db   local OrionDB (Postgres)                         localhost:5434
+#     orion      all-in-one app container (docker/orion.Dockerfile):
+#                  migrations on start, then backend + built frontend,
+#                  pipeline API and pipeline worker                http://localhost:8100
+#                                                                  http://localhost:8100/docs
 #
 # Point at Neon / Penelope by setting ORION_DATABASE_URL and PENELOPE_DATABASE_URL
 # in .env. Without them, OrionDB defaults to the local orion-db container.
 
-x-orion-env: &orion-env
-  ORION_DATABASE_URL: ${ORION_DATABASE_URL:-postgresql://orion:orion@orion-db:5432/orion}
-  PENELOPE_DATABASE_URL: ${PENELOPE_DATABASE_URL:-}
-  PIPELINE_API_URL: http://orion-pipeline-api:8000
-
-x-orion-python: &orion-python
-  build:
-    context: .
-    dockerfile: docker/python.Dockerfile
-  env_file:
-    - path: .env
-      required: false
-  environment: *orion-env
-  volumes:
-    - ./packages:/app/packages
-    - ./services:/app/services
-
 services:
-  # ==================== New stack ====================
   orion-db:
     image: postgres:16-alpine
     environment:
@@ -46,51 +26,23 @@ services:
       timeout: 5s
       retries: 15
 
-  orion-migrate:
-    <<: *orion-python
-    command: alembic -c packages/orion_core/alembic.ini upgrade head
-    depends_on:
-      orion-db:
-        condition: service_healthy
-
-  orion-backend:
-    <<: *orion-python
-    command: uvicorn orion_backend.main:app --host 0.0.0.0 --port 8000 --reload
+  orion:
+    image: orion
+    build:
+      context: .
+      dockerfile: docker/orion.Dockerfile
+    env_file:
+      - path: .env
+        required: false
+    environment:
+      ORION_DATABASE_URL: ${ORION_DATABASE_URL:-postgresql://orion:orion@orion-db:5432/orion}
+      PENELOPE_DATABASE_URL: ${PENELOPE_DATABASE_URL:-}
+      PIPELINE_API_URL: http://localhost:8200
     ports:
       - "8100:8000"
     depends_on:
-      orion-migrate:
-        condition: service_completed_successfully
-
-  orion-pipeline-api:
-    <<: *orion-python
-    command: orion-pipeline api --host 0.0.0.0 --port 8000 --reload
-    ports:
-      - "8200:8000"
-    depends_on:
-      orion-migrate:
-        condition: service_completed_successfully
-
-  orion-pipeline-worker:
-    <<: *orion-python
-    command: orion-pipeline worker
-    stop_signal: SIGINT
-    depends_on:
-      orion-migrate:
-        condition: service_completed_successfully
-
-  frontend:
-    build: ./frontend
-    ports:
-      - "5173:5173"
-    volumes:
-      - ./frontend:/app
-      - /app/node_modules
-    environment:
-      # Vite proxies the browser's /api requests to the new backend (see frontend/vite.config.ts).
-      API_PROXY_TARGET: http://orion-backend:8000
-    depends_on:
-      - orion-backend
+      orion-db:
+        condition: service_healthy
 
 volumes:
   orion-db-data:
