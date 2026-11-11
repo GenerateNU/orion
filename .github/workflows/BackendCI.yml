@@ -10,15 +10,10 @@ on:
       - "uv.lock"
       - "docker-compose.yml"
       - ".github/workflows/BackendCI.yml"
+  # No path filter here: these jobs are required checks, and a required check whose
+  # workflow is skipped by a path filter stays "pending" forever, blocking the PR.
   pull_request:
     branches: [main]
-    paths:
-      - "packages/**"
-      - "services/**"
-      - "pyproject.toml"
-      - "uv.lock"
-      - "docker-compose.yml"
-      - ".github/workflows/BackendCI.yml"
 
 jobs:
   lint-services:
@@ -59,3 +54,60 @@ jobs:
 
       - name: Run mypy
         run: uv run --no-sync mypy
+
+  alembic-migrations:
+    runs-on: ubuntu-latest
+
+    services:
+      postgres:
+        # Same image as orion-db in docker-compose.yml.
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: orion
+          POSTGRES_PASSWORD: orion
+          POSTGRES_DB: orion
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U orion -d orion"
+          --health-interval 2s
+          --health-timeout 5s
+          --health-retries 15
+
+    env:
+      # Must stay the throwaway service DB above: later steps run `downgrade base`.
+      ORION_DATABASE_URL: postgresql://orion:orion@localhost:5432/orion
+      ALEMBIC: uv run --no-sync alembic -c packages/orion_core/alembic.ini
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up uv
+        uses: astral-sh/setup-uv@v6
+
+      - name: Install dependencies
+        run: uv sync --frozen
+
+      # Two heads means two branches added migrations off the same parent:
+      # `upgrade head` would refuse to run. Fix with `alembic merge heads`.
+      - name: Check for a single migration head
+        run: |
+          heads=$($ALEMBIC heads | tee /dev/stderr | wc -l)
+          if [ "$heads" -ne 1 ]; then
+            echo "::error::Expected 1 Alembic head, found $heads. Run 'alembic merge heads'."
+            exit 1
+          fi
+
+      - name: Upgrade empty database to head
+        run: $ALEMBIC upgrade head
+
+      # Fails if the models have changes no migration covers (forgot `make migration`).
+      - name: Check models match migrations
+        run: $ALEMBIC check
+
+      - name: Downgrade to base
+        run: $ALEMBIC downgrade base
+
+      - name: Upgrade to head again
+        run: $ALEMBIC upgrade head
