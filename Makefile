@@ -25,7 +25,8 @@ NC := \033[0m
 
 DOCKER_COMPOSE := docker compose
 DB_SERVICE := orion-db
-BACKEND_SERVICE := orion-backend
+BACKEND_SERVICE := backend
+FRONTEND_SERVICE := frontend
 ALEMBIC := alembic -c packages/orion_core/alembic.ini
 
 .DEFAULT_GOAL := help
@@ -55,13 +56,36 @@ install: ## Install all workspace packages into .venv
 	@printf "$(GREEN)✓ Installed$(NC)\n"
 
 .PHONY: up
-up: ## Start the new stack (db, migrations, backend, pipeline API + worker)
+up: ## Start the stack (db, backend and frontend containers)
 	@printf "$(YELLOW)Starting services...$(NC)\n"
-	@$(DOCKER_COMPOSE) up -d --build orion-backend orion-pipeline-api orion-pipeline-worker
+	@$(DOCKER_COMPOSE) up -d --build --remove-orphans $(BACKEND_SERVICE) $(FRONTEND_SERVICE)
 	@printf "$(GREEN)✓ Services started$(NC)\n"
+	@echo "Frontend:      http://localhost:3000"
 	@echo "Backend docs:  http://localhost:8100/docs"
-	@echo "Pipeline docs: http://localhost:8200/docs"
 	@echo "Database:      localhost:5434"
+
+# .env's ORION_DATABASE_URL may use the compose-only host `orion-db`; on the host the
+# local DB is on :5434. Override with `make dev DEV_DATABASE_URL=...` (e.g. Neon).
+DEV_DATABASE_URL ?= postgresql://orion:orion@localhost:5434/orion
+
+.PHONY: dev
+dev: ## Run frontend, backend + pipeline locally with hot reload (db in Docker)
+	@$(DOCKER_COMPOSE) stop $(BACKEND_SERVICE) $(FRONTEND_SERVICE) >/dev/null 2>&1 || true
+	@$(DOCKER_COMPOSE) up -d --wait $(DB_SERVICE)
+	@[ -d frontend/node_modules ] || npm --prefix frontend ci
+	@export ORION_DATABASE_URL="$(DEV_DATABASE_URL)"; \
+	uv run $(ALEMBIC) upgrade head; \
+	trap 'kill $$(jobs -p) 2>/dev/null; wait' EXIT; \
+	uv run uvicorn orion_backend.main:app --port 8100 --reload & \
+	uv run orion-pipeline api --port 8200 --reload & \
+	uv run orion-pipeline worker & \
+	npm --prefix frontend run dev & \
+	printf "$(GREEN)✓ Dev servers starting (Ctrl+C stops all)$(NC)\n"; \
+	echo "Frontend:      http://localhost:3000"; \
+	echo "Backend docs:  http://localhost:8100/docs"; \
+	echo "Pipeline docs: http://localhost:8200/docs"; \
+	echo "Worker doesn't reload: restart make dev after changing pipeline code."; \
+	wait
 
 .PHONY: down
 down: ## Stop all services
@@ -73,8 +97,8 @@ restart: ## Restart all services
 	@$(MAKE) down && $(MAKE) up
 
 .PHONY: logs
-logs: ## Follow logs for the new stack
-	@$(DOCKER_COMPOSE) logs -f orion-backend orion-pipeline-api orion-pipeline-worker
+logs: ## Follow backend and frontend logs
+	@$(DOCKER_COMPOSE) logs -f $(BACKEND_SERVICE) $(FRONTEND_SERVICE)
 
 .PHONY: status
 status: ## Show service status
