@@ -1,9 +1,11 @@
 #!/usr/bin/env bash
-# Runs migrations, then the backend, pipeline API and pipeline worker in one container.
+# Runs migrations and seeds the sensor catalog (an idempotent upsert), then starts the
+# backend, pipeline API and pipeline worker in one container.
 # If any of the three exits, the others are stopped and the container exits with its status.
 set -uo pipefail
 
 alembic -c packages/orion_core/alembic.ini upgrade head || exit 1
+python -m orion_core.db.scripts.seed_sensors || exit 1
 
 orion-pipeline api --host 127.0.0.1 --port 8200 &
 pipeline_api=$!

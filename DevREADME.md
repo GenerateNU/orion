@@ -25,20 +25,18 @@ cp .env.example .env        # fill in PENELOPE_DATABASE_URL (see "Configuration"
 docker compose up --build
 ```
 
-Then seed the sensor catalog once. The pipeline can't clean anything without it:
-
-```bash
-docker compose exec orion python -m orion_core.db.scripts.seed_sensors
-```
+The container seeds the sensor catalog on every start (an idempotent upsert), so there's
+no separate seed step. To prune rows no longer in the catalog, run
+`docker compose exec orion python -m orion_core.db.scripts.seed_sensors --prune`.
 
 | Service    | URL                                     | What it is                                         |
 | ---------- | --------------------------------------- | -------------------------------------------------- |
 | `orion`    | http://localhost:8100 (+ `/docs`)       | All-in-one: built frontend, backend, pipeline API and worker |
 | `orion-db` | `localhost:5434`                        | Local OrionDB (Postgres 16)                        |
 
-On start, `orion` runs `alembic upgrade head`, then launches the backend (port 8000,
-which also serves the built frontend), the pipeline API (localhost:8200, internal
-only) and the pipeline worker via [docker/entrypoint.sh](docker/entrypoint.sh). If
+On start, `orion` runs `alembic upgrade head` and seeds the sensor catalog, then
+launches the backend (port 8000, which also serves the built frontend), the pipeline
+API (localhost:8200, internal only) and the pipeline worker via [docker/entrypoint.sh](docker/entrypoint.sh). If
 any of them exits, the container stops.
 
 Nothing is bind-mounted and nothing hot-reloads: rebuild with
