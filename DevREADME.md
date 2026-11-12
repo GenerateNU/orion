@@ -11,7 +11,7 @@ packages/orion_core/   shared Python: settings, DB models + migrations, queries
 services/backend/      main API (orion_backend)
 services/pipeline/     pipeline API + worker (orion_pipeline)
 frontend/              React app
-docker/                orion.Dockerfile + entrypoint.sh: the all-in-one app image
+docker/                backend + frontend Dockerfiles, entrypoint.sh, nginx.conf
 docs/                  design notes (ARCHITECTURE.md, …)
 pyproject.toml         uv workspace root and shared ruff/mypy/pytest config
 docker-compose.yml     the local stack
@@ -31,17 +31,17 @@ no separate seed step. To prune rows no longer in the catalog, run
 
 | Service    | URL                                     | What it is                                         |
 | ---------- | --------------------------------------- | -------------------------------------------------- |
-| `orion`    | http://localhost:8100 (+ `/docs`)       | All-in-one: built frontend, backend, pipeline API and worker |
+| `frontend` | http://localhost:3000                   | Built frontend on nginx; forwards `/api/*` to `backend` |
+| `backend`  | http://localhost:8100 (+ `/docs`)       | Backend, pipeline API and pipeline worker          |
 | `orion-db` | `localhost:5434`                        | Local OrionDB (Postgres 16)                        |
 
-On start, `orion` runs `alembic upgrade head` and seeds the sensor catalog, then
-launches the backend (port 8000, which also serves the built frontend), the pipeline
-API (localhost:8200, internal only) and the pipeline worker via [docker/entrypoint.sh](docker/entrypoint.sh). If
+On start, `backend` runs `alembic upgrade head` and seeds the sensor catalog, then
+launches the backend (port 8000), the pipeline API (localhost:8200, internal only) and the pipeline worker via [docker/entrypoint.sh](docker/entrypoint.sh). If
 any of them exits, the container stops.
 
 Nothing is bind-mounted and nothing hot-reloads: rebuild with
 `docker compose up --build` after changing code. For hot reload, use `make dev`: it
-keeps the DB in Docker and runs the frontend (http://localhost:5173), backend
+keeps the DB in Docker and runs the frontend (http://localhost:3000), backend
 (:8100), pipeline API (:8200) and worker locally. Ctrl+C stops them all. It uses
 the local DB on `localhost:5434` unless you pass `DEV_DATABASE_URL=...`. The worker
 still doesn't reload, so restart `make dev` after changing pipeline code.
@@ -50,9 +50,9 @@ Run `make help` for the full list of shortcuts (`make up`, `make logs`, `make mi
 
 ## Architecture
 
-In Docker, everything except the databases runs in the single `orion` container,
-and the backend serves the built frontend itself (`/api/*` goes straight to it).
-With `npm run dev`, Vite proxies `/api/*` to the backend instead.
+In Docker, the backend, pipeline API and worker share the `backend` container, and
+the `frontend` container's nginx forwards `/api/*` to it. With `npm run dev`, Vite
+proxies `/api/*` to the backend instead.
 
 ```
                  ┌──────────────┐   /api/*
@@ -208,10 +208,10 @@ src/components/  layout/, ui/, runs/, plus shared Loading/Empty/Error states
 src/utils/       apiUrls (every backend path), formatting, time helpers
 ```
 
-The browser only ever calls relative `/api/...` URLs, and Vite's dev server
-proxies them to `API_PROXY_TARGET`. This means the backend needs no CORS
-setup, and the same code works on the host (`:8100`) and in Docker
-(`orion-backend:8000`).
+The browser only ever calls relative `/api/...` URLs. Vite's dev server proxies
+them to `API_PROXY_TARGET`, and in Docker nginx forwards them to `backend:8000`
+([docker/nginx.conf](docker/nginx.conf)). This means the backend needs no CORS
+setup.
 
 ## Configuration
 
@@ -224,7 +224,7 @@ All variables go in the repo-root `.env`, which is shared by every service and t
 | `PIPELINE_API_URL`       | `http://localhost:8200`         | Where the backend reaches the pipeline API (compose sets it) |
 | `PIPELINE_PAGE_SIZE`     | `100000`                        | Max rows per page in each pipeline step         |
 | `GPS_TIME_OFFSET_S`      | `3`                             | Seconds added to `gps_location` timestamps      |
-| `API_PROXY_TARGET`       | `http://localhost:8100`         | Where Vite forwards `/api` (compose sets it)    |
+| `API_PROXY_TARGET`       | `http://localhost:8100`         | Where Vite forwards `/api` (`npm run dev` only) |
 
 ## Development without Docker
 

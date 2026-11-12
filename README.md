@@ -60,7 +60,7 @@ cp .env.example .env        # set PENELOPE_DATABASE_URL
 docker compose up --build
 ```
 
-Then open the dashboard at http://localhost:8100.
+Then open the dashboard at http://localhost:3000.
 
 ## Documentation
 

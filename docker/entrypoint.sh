@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Runs migrations and seeds the sensor catalog (an idempotent upsert), then starts the
-# backend, pipeline API and pipeline worker in one container.
+# backend, pipeline API and pipeline worker in the backend container.
 # If any of the three exits, the others are stopped and the container exits with its status.
 set -uo pipefail
 
