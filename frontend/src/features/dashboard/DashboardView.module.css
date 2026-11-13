@@ -1,25 +1,42 @@
-/* Track map on the left, the other panels on the right; stacked when narrow. */
+/* Fills the space below the header: track map (40%, fixed) beside the sensor charts
+   (60%, scrolls on its own). Stacked when narrow, and the page scrolls instead. */
 .layout {
+  flex: 1;
+  min-height: 0;
   display: grid;
-  grid-template-columns: minmax(320px, 440px) minmax(0, 1fr);
+  grid-template-columns: minmax(320px, 2fr) minmax(0, 3fr);
   gap: var(--space-4);
-  align-items: start;
-}
-
-@media (max-width: 960px) {
-  .layout {
-    grid-template-columns: minmax(0, 1fr);
-  }
 }
 
 .panel {
   display: flex;
   flex-direction: column;
   gap: var(--space-3);
+  min-height: 0;
   padding: var(--space-4);
   background: var(--bg-surface);
   border: 1px solid var(--border-default);
   border-radius: var(--radius-lg);
+}
+
+.left {
+  overflow: hidden;
+}
+
+.right {
+  overflow-y: auto;
+}
+
+@media (max-width: 960px) {
+  .layout {
+    flex: none;
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .left,
+  .right {
+    overflow: visible;
+  }
 }
 
 .panelHeading {
