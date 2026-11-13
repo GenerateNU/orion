@@ -8,6 +8,7 @@ import PageHeader from "@components/layout/PageHeader";
 import StatusBadge from "@components/runs/StatusBadge";
 import { ButtonLink } from "@components/ui/Button";
 import { ApiError } from "@api/client";
+import { cx } from "@utils/classNames";
 import { formatDate, formatDuration } from "@utils/format";
 import DashboardStoreProvider from "@features/dashboard/state/DashboardStoreProvider";
 import { useLastRunStore } from "@features/dashboard/state/lastRunStore";
@@ -86,13 +87,13 @@ function RunDashboard() {
       />
 
       <div className={styles.layout}>
-        <section className={styles.panel} aria-labelledby="track-map-heading">
+        <section className={cx(styles.panel, styles.left)} aria-labelledby="track-map-heading">
           <h2 id="track-map-heading" className={styles.panelHeading}>
             Track position
           </h2>
           <TrackMap />
         </section>
-        <section className={styles.panel} aria-labelledby="sensor-charts-heading">
+        <section className={cx(styles.panel, styles.right)} aria-labelledby="sensor-charts-heading">
           <h2 id="sensor-charts-heading" className={styles.panelHeading}>
             Sensors
           </h2>
