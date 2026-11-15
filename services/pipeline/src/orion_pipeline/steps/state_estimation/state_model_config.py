@@ -14,10 +14,10 @@ class UnitConversions:
 
 
 # Hardcoded that we have to figure out based on the lags on gps and speed
-GPS_STD_M = 1.5
-SPEED_STD_MPS = 0.5
+GPS_STD_M = 3.4
+SPEED_STD_MPS = 2.0
 # Yaw rate noise while driving (vibration), measured from recorded runs
-GYRO_STD_RADPS = 0.05
+GYRO_STD_RADPS = 0.5
 # Zero-speed update while parked: how tightly [speed m/s, turn rate rad/s] are
 # held at 0
 STATIONARY_STD = (0.05, 0.01)
