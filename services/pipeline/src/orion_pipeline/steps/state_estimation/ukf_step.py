@@ -171,7 +171,14 @@ class UKFStep:
         p0 = self.p0.copy()
         p0[THETA, THETA] = 2 * self.sensors["gps_location"].noise_std ** 2 / distance**2
 
-        self.ukf = UnscentedKalmanFilter(self.model, x0, p0)
+        self.ukf = UnscentedKalmanFilter(
+            self.model,
+            x0,
+            p0,
+            alpha=self.config.alpha,
+            beta=self.config.beta,
+            kappa=self.config.kappa,
+        )
         self.tick_time = tick_time
         self.first_fix = None
         self.ticks.append(Tick(tick_time, x0, p0.copy(), None, None, None))
