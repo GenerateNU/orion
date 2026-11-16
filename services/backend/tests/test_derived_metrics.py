@@ -12,32 +12,33 @@ from orion_backend.schemas.derived_metric_schema import DerivedMetricResponse
 from orion_backend.schemas.sensor_schema import SensorDataResponse, SensorSeries
 from orion_backend.services.derived_metric_service import DerivedMetricService
 
+CURRENT = "DTI/Power/DC_Current"
+VOLTAGE = "DTI/Power/Input_Voltage"
 T0 = datetime(2026, 10, 1, 12, 0, 0, tzinfo=UTC)
 T1 = T0 + timedelta(seconds=1)
 INPUTS = {
-    "current": SensorSeries(time=[T0, T1], values=[[2.0], [None]]),
-    "voltage": SensorSeries(time=[T0, T1], values=[[0.0, 3.0], [0.0, 4.0]]),
+    CURRENT: SensorSeries(time=[T0, T1], values=[[2.0], [None]]),
+    VOLTAGE: SensorSeries(time=[T0, T1], values=[[3.0], [4.0]]),
 }
 
 
-@register_metric
 class Power(DerivedMetric):
     name = "test/power"
     unit = "W"
-    inputs = ("current", "voltage")
-
-    def align(self, inputs: dict[str, pd.DataFrame]) -> pd.DataFrame:
-        return pd.DataFrame(
-            {"current": inputs["current"][0], "voltage": inputs["voltage"][1]}
-        )
+    inputs = (CURRENT, VOLTAGE)
 
     def compute(self, aligned: pd.DataFrame) -> pd.Series:
-        return aligned["current"] * aligned["voltage"]
+        return aligned[(CURRENT, 0)] * aligned[(VOLTAGE, 0)]
+
+
+@pytest.fixture(autouse=True)
+def power() -> None:
+    register_metric(Power)
 
 
 def service() -> DerivedMetricService:
     async def get_sensor_data(run_id, sensors, start, end):
-        assert sensors == ["current", "voltage"]
+        assert sensors == [CURRENT, VOLTAGE]
         return SensorDataResponse(run_id=run_id, start=start, end=end, series=INPUTS)
 
     return DerivedMetricService(SimpleNamespace(get_sensor_data=get_sensor_data))  # type: ignore[arg-type]
@@ -48,6 +49,7 @@ def test_register_metric_adds_an_instance_by_name():
 
 
 def test_run_converts_inputs_and_drops_nan_outputs():
+    # Current has no value at T1, so the product there is NaN and dropped.
     assert Power().run(INPUTS) == SensorSeries(time=[T0], values=[[6.0]])
 
 
