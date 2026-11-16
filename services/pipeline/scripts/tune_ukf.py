@@ -25,6 +25,7 @@ GRID = {
 # Seconds added to every GPS timestamp, relative to the cleaned data
 LAG_SHIFTS_S = [round(x, 2) for x in np.arange(-2.0, 2.01, 0.25)]
 
+
 def load_readings(args: argparse.Namespace) -> pd.DataFrame:
     if args.file:
         return pd.read_parquet(args.file).sort_values(["time", "sensor"])
@@ -41,6 +42,7 @@ def load_readings(args: argparse.Namespace) -> pd.DataFrame:
     query = select_cleaned_readings(args.run_id, UKFConfig().sensors.keys())
     return client.read_frame(query.order_by(None).order_by("time", "sensor"))
 
+
 def shift_gps(readings: pd.DataFrame, shift_s: float) -> pd.DataFrame:
     """Readings with GPS timestamps moved by the shift, re-sorted into time order."""
     if shift_s == 0:
@@ -52,13 +54,17 @@ def shift_gps(readings: pd.DataFrame, shift_s: float) -> pd.DataFrame:
     out["time"] = out["time"].where(~is_gps, out["time"] + delta)
     return out.sort_values(["time", "sensor"], kind="stable")
 
-def split_holdout(readings: pd.DataFrame, every: int) -> tuple[pd.DataFrame, pd.DataFrame]:
+
+def split_holdout(
+    readings: pd.DataFrame, every: int
+) -> tuple[pd.DataFrame, pd.DataFrame]:
     """(readings without every Nth GPS fix, the withheld fixes). The first fix
     is always kept, since it sets the filter's origin."""
     is_gps = (readings["sensor"] == "gps_location").to_numpy()
     gps_index = np.cumsum(is_gps) - 1
     held = is_gps & (gps_index % every == every - 1)
     return readings[~held], readings[held]
+
 
 def score(train: pd.DataFrame, held: pd.DataFrame, cfg: UKFConfig) -> float:
     ukf = UKFStep(cfg)
