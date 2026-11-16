@@ -1,5 +1,10 @@
 import type { MetricsResponse } from "@schemas/metrics.schema";
-import { toRunTime, type RunTimeline, type TimeWindow } from "@features/dashboard/utils/time";
+import {
+  toRunTime,
+  type RunTime,
+  type RunTimeline,
+  type TimeWindow,
+} from "@features/dashboard/utils/time";
 
 // A lap as the dashboard uses it: its id and where it sits in the run.
 export type Lap = {
@@ -13,6 +18,14 @@ export function lapsFromMetrics(metrics: MetricsResponse, timeline: RunTimeline)
     window: [toRunTime(timeline, lap.start_time), toRunTime(timeline, lap.end_time)],
   }));
 }
+
+// The lap being driven at `time`, if any (not during an out-lap or in the pits).
+export const lapContaining = (laps: readonly Lap[], time: RunTime): Lap | undefined =>
+  laps.find((lap) => time >= lap.window[0] && time <= lap.window[1]);
+
+// The id of the lap being driven at `time`, or null outside every lap.
+export const lapAt = (laps: readonly Lap[], time: RunTime): number | null =>
+  lapContaining(laps, time)?.id ?? null;
 
 // The window spanning the given laps, or null when none of them are known.
 export function lapsToWindow(laps: readonly Lap[], lapIds: readonly number[]): TimeWindow | null {

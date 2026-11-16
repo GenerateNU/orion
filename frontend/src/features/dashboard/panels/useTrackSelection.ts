@@ -4,6 +4,8 @@ import {
   useDashboardActions,
   useDashboardRun,
 } from "@features/dashboard/state/useDashboard";
+import { useLaps } from "@features/dashboard/data/useDashboardData";
+import { lapContaining, type Lap } from "@features/dashboard/utils/laps";
 import { distanceAt, timeAtDistance, type Track } from "@features/dashboard/utils/trackmap";
 import { clampWindow, type RunTime, type TimeWindow } from "@features/dashboard/utils/time";
 
@@ -16,30 +18,50 @@ export type TrackSelection = { center: RunTime; halfM: number };
 const DEFAULT_HALF_M = 100;
 const MIN_HALF_M = 5;
 
-// A half-length that fits the run: at most half the distance driven.
-export const clampHalf = (track: Track, halfM: number) =>
-  Math.min(Math.max(halfM, MIN_HALF_M), Math.max(MIN_HALF_M, track.totalM / 2));
+// A half-length that fits: at most `maxHalfM` (half a lap, see lapHalfM), and
+// never more than half the distance driven.
+export const clampHalf = (track: Track, halfM: number, maxHalfM = Infinity) =>
+  Math.min(Math.max(halfM, MIN_HALF_M), Math.max(MIN_HALF_M, Math.min(maxHalfM, track.totalM / 2)));
 
-// The selection as the time window other panels use.
-export const selectionWindow = (track: Track, s: TrackSelection): TimeWindow => {
+// Half a typical lap's road, so the window is never longer than one lap. The
+// median, so a lap with a pit stop or a detour in it doesn't raise the cap.
+// Infinity (no cap beyond the run) when the run has no laps.
+export const lapHalfM = (track: Track, laps: readonly Lap[] | undefined) => {
+  const lengths = (laps ?? [])
+    .map((lap) => distanceAt(track, lap.window[1]) - distanceAt(track, lap.window[0]))
+    .sort((a, b) => a - b);
+  const typical = lengths[Math.floor(lengths.length / 2)] ?? 0;
+  return typical > 0 ? typical / 2 : Infinity;
+};
+
+// The selection as the time window other panels use. With laps, it stays inside
+// the car's lap: an end that would cross START is cut off there.
+export const selectionWindow = (
+  track: Track,
+  s: TrackSelection,
+  laps?: readonly Lap[],
+): TimeWindow => {
   const at = distanceAt(track, s.center);
-  return [timeAtDistance(track, at - s.halfM, "start"), timeAtDistance(track, at + s.halfM, "end")];
+  const from = timeAtDistance(track, at - s.halfM, "start");
+  const to = timeAtDistance(track, at + s.halfM, "end");
+  const lap = laps && lapContaining(laps, s.center);
+  return lap ? [Math.max(from, lap.window[0]), Math.min(to, lap.window[1])] : [from, to];
 };
 
 // The selection for a time window: its middle in distance, and half its length.
-const selectionFor = (track: Track, range: TimeWindow): TrackSelection => {
+const selectionFor = (track: Track, range: TimeWindow, maxHalfM: number): TrackSelection => {
   const from = distanceAt(track, range[0]);
   const to = distanceAt(track, range[1]);
   return {
     center: timeAtDistance(track, (from + to) / 2, "end"),
-    halfM: clampHalf(track, (to - from) / 2),
+    halfM: clampHalf(track, (to - from) / 2, maxHalfM),
   };
 };
 
 // The default selection: the run's first stretch of road, car in the middle, so
 // the window starts at the first fix instead of half of it hanging before the data.
-const defaultSelection = (track: Track): TrackSelection => {
-  const halfM = clampHalf(track, DEFAULT_HALF_M);
+const defaultSelection = (track: Track, maxHalfM: number): TrackSelection => {
+  const halfM = clampHalf(track, DEFAULT_HALF_M, maxHalfM);
   return { center: timeAtDistance(track, halfM, "end"), halfM };
 };
 
@@ -72,12 +94,19 @@ export function useTrackSelection(track: Track | null) {
   const { timeline } = useDashboardRun();
   const committed = useCommittedWindow();
   const { commitWindow } = useDashboardActions();
+  const { laps } = useLaps();
+  const maxHalfM = useMemo(() => (track ? lapHalfM(track, laps) : Infinity), [track, laps]);
 
   const [moved, setMoved] = useState<Moved | null>(null);
 
   const fromUrl = useMemo(
-    () => (track ? (committed ? selectionFor(track, committed) : defaultSelection(track)) : null),
-    [track, committed],
+    () =>
+      track
+        ? committed
+          ? selectionFor(track, committed, maxHalfM)
+          : defaultSelection(track, maxHalfM)
+        : null,
+    [track, committed, maxHalfM],
   );
   // Before a commit, the move belongs to the window it started from; after, to
   // the one it wrote (and not the old one, so Back to it shows that window).
@@ -105,13 +134,13 @@ export function useTrackSelection(track: Track | null) {
   const commit = useCallback(() => {
     const current = selectionRef.current;
     if (!current || !track) return;
-    const range = selectionWindow(track, current);
+    const range = selectionWindow(track, current, laps);
     // commitWindow clamps the same way; remember the result to recognise it above.
     const target = timeline ? clampWindow(range, timeline.durationMs) : range;
     setMoved({ selection: current, base: committed, sent: target });
     // Unchanged (a click on the car without moving it): don't write the same URL.
     if (!sameWindow(target, committed)) commitWindow(range);
-  }, [track, timeline, committed, commitWindow]);
+  }, [track, laps, timeline, committed, commitWindow]);
 
   return {
     // Null only while there's no track.
@@ -122,5 +151,7 @@ export function useTrackSelection(track: Track | null) {
     commit,
     // False until a window is in the URL: the default ±100 m is only a suggestion.
     applied: committed !== null,
+    // The longest half-length allowed: half a lap. Pass it to clampHalf when resizing.
+    maxHalfM,
   };
 }

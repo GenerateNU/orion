@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef } from "react";
+import { useEffect, useImperativeHandle, useMemo, useRef, type Ref } from "react";
 import uPlot from "uplot";
 import "uplot/dist/uPlot.min.css";
 import type { RunTime, TimeWindow } from "@features/dashboard/utils/time";
@@ -15,11 +15,20 @@ export type ChartSeries = {
   values: number[];
 };
 
+// Moves the cursor to a time hovered elsewhere (another chart, the track map)
+// without re-rendering. Null hides it.
+export type TimeSeriesChartHandle = {
+  showHoverTime: (time: RunTime | null) => void;
+};
+
 export type TimeSeriesChartProps = {
+  ref?: Ref<TimeSeriesChartHandle>;
   series: ChartSeries[];
   height?: number;
   yLabel?: string;
   visibleWindow?: TimeWindow | null;
+  // A span drawn shaded behind the line, e.g. the hovered lap.
+  shadeWindow?: TimeWindow | null;
   onCommitWindow?: (window: TimeWindow) => void;
   onResetWindow?: () => void;
   onHoverTime?: (time: RunTime | null) => void;
@@ -65,10 +74,12 @@ const applyWindow = (chart: uPlot, timeWindow: TimeWindow | null) => {
 };
 
 export const TimeSeriesChart = ({
+  ref,
   series,
   height = 600,
   yLabel = "",
   visibleWindow = null,
+  shadeWindow = null,
   onCommitWindow,
   onResetWindow,
   onHoverTime,
@@ -77,6 +88,23 @@ export const TimeSeriesChart = ({
   const chartRef = useRef<uPlot | null>(null);
   const draggingRef = useRef(false);
   const windowRef = useRef(visibleWindow);
+  const shadeRef = useRef(shadeWindow);
+
+  useImperativeHandle(
+    ref,
+    () => ({
+      showHoverTime: (time) => {
+        const chart = chartRef.current;
+        // The chart under the pointer already draws its own cursor.
+        if (!chart || chart.over.matches(":hover")) return;
+        const left = time === null ? -1 : chart.valToPos(time, "x");
+        const inside = left >= 0 && left <= chart.over.clientWidth;
+        // fireHook false: a cursor moved from outside isn't reported back as hover.
+        chart.setCursor({ left: inside ? left : -10, top: chart.cursor.top ?? 0 }, false);
+      },
+    }),
+    [],
+  );
 
   const callbacksRef = useRef<ChartCallbacks>({});
   useEffect(() => {
@@ -105,16 +133,16 @@ export const TimeSeriesChart = ({
       },
       axes: [
         {
-          label: "Time",
           values: (_chart, ticks) => ticks.map(formatTime),
           stroke: (chart) => cssStyle(chart, "--text-muted"),
           grid: { stroke: (chart) => cssStyle(chart, "--border-default") },
           ticks: { stroke: (chart) => cssStyle(chart, "--border-default") },
         },
         {
-          label: yLabel,
+          // No label, no space reserved for one: callers can show the unit themselves.
+          label: yLabel || undefined,
           labelGap: 8,
-          size: 60,
+          size: 48,
           values: (_chart, ticks, _axisIdx, _space, increment) => formatTicks(ticks, increment),
           stroke: (chart) => cssStyle(chart, "--text-muted"),
           grid: { stroke: (chart) => cssStyle(chart, "--border-default") },
@@ -123,7 +151,6 @@ export const TimeSeriesChart = ({
       ],
       cursor: {
         y: false,
-        sync: { key: "dashboard-run" },
         drag: { x: true, y: false, setScale: false },
         bind: { dblclick: () => null },
       },
@@ -136,6 +163,22 @@ export const TimeSeriesChart = ({
         })),
       ],
       hooks: {
+        // Runs before the grid and line are drawn, so the shading sits behind them.
+        drawClear: [
+          (chart) => {
+            const span = shadeRef.current;
+            if (!span) return;
+            const { ctx, bbox } = chart;
+            const clampX = (x: number) => Math.min(Math.max(x, bbox.left), bbox.left + bbox.width);
+            const x0 = clampX(chart.valToPos(span[0], "x", true));
+            const x1 = clampX(chart.valToPos(span[1], "x", true));
+            ctx.save();
+            ctx.globalAlpha = 0.12;
+            ctx.fillStyle = cssStyle(chart, "--text-primary");
+            ctx.fillRect(x0, bbox.top, x1 - x0, bbox.height);
+            ctx.restore();
+          },
+        ],
         setSelect: [
           (chart) => {
             if (draggingRef.current) {
@@ -206,6 +249,11 @@ export const TimeSeriesChart = ({
     const chart = chartRef.current;
     if (chart) applyWindow(chart, visibleWindow);
   }, [visibleWindow]);
+
+  useEffect(() => {
+    shadeRef.current = shadeWindow;
+    chartRef.current?.redraw(false);
+  }, [shadeWindow]);
 
   return <div ref={containerRef} className={styles.chart} />;
 };
