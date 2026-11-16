@@ -87,7 +87,7 @@ function RunDashboard() {
       />
 
       <div className={styles.layout}>
-        <section className={styles.panel} aria-labelledby="track-map-heading">
+        <section className={cx(styles.panel, styles.left)} aria-labelledby="track-map-heading">
           <h2 id="track-map-heading" className={styles.panelHeading}>
             Track position
           </h2>
