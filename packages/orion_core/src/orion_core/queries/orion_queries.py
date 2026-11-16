@@ -12,6 +12,7 @@ from sqlalchemy.sql.dml import ReturningDelete, ReturningInsert, ReturningUpdate
 from orion_core.models.orion import (
     CleanedData,
     EstimatedCarState,
+    Lap,
     PipelineRun,
     PipelineStatus,
     Run,
@@ -65,6 +66,15 @@ def select_estimated_positions_between(
             EstimatedCarState.time.between(start, end),
         )
         .order_by(EstimatedCarState.time)
+    )
+
+
+def select_laps(run_id: str) -> Select[int, datetime, datetime]:
+    """One run's laps from the lap step, ordered by lap number."""
+    return (
+        select(Lap.lap_id, Lap.start_time, Lap.end_time)
+        .where(Lap.run_id == run_id)
+        .order_by(Lap.lap_id)
     )
 
 
