@@ -29,10 +29,10 @@ def load_readings(args: argparse.Namespace) -> pd.DataFrame:
     if args.file:
         return pd.read_parquet(args.file).sort_values(["time", "sensor"])
 
+    from orion_core.db.engines import make_sync_engine
     from orion_core.queries.orion_queries import select_cleaned_readings
     from orion_core.settings import get_settings
     from orion_pipeline.clients.oriondb_client import OrionDBClient
-    from orion_core.db.engines import make_sync_engine
 
     settings = get_settings()
     client = OrionDBClient(
