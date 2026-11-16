@@ -94,7 +94,7 @@ function RunDashboard() {
           <TrackMap />
         </section>
         <section className={cx(styles.panel, styles.right)} aria-labelledby="sensor-charts-heading">
-          <h2 id="sensor-charts-heading" className={styles.panelHeading}>
+          <h2 id="sensor-charts-heading" className={styles.visuallyHidden}>
             Sensors
           </h2>
           <SensorChartsPanel />
