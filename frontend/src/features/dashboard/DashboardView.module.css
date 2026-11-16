@@ -1,10 +1,11 @@
-/* Fills the space below the header: track map (40%, fixed) beside the sensor charts
-   (60%, scrolls on its own). Stacked when narrow, and the page scrolls instead. */
+/* Fills the space below the header: track map (40%, scaled to fit, never scrolls)
+   beside the sensor charts (60%, scrolls on its own). Stacked when narrow, and the
+   page scrolls instead. */
 .layout {
   flex: 1;
   min-height: 0;
   display: grid;
-  grid-template-columns: minmax(320px, 2fr) minmax(0, 3fr);
+  grid-template-columns: minmax(0, 2fr) minmax(0, 3fr);
   gap: var(--space-4);
 }
 
@@ -19,10 +20,6 @@
   border-radius: var(--radius-lg);
 }
 
-.left {
-  overflow: hidden;
-}
-
 .right {
   overflow-y: auto;
 }
@@ -33,7 +30,6 @@
     grid-template-columns: minmax(0, 1fr);
   }
 
-  .left,
   .right {
     overflow: visible;
   }
