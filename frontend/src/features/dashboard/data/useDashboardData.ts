@@ -107,8 +107,14 @@ export type SensorTraces = {
 
 // Raw readings straight from Penelope, keyed by `dataTypeName` (list them with
 // useSensors). Keep `sensors` stable (a constant or memo). Needs Penelope
-// reachable (VPN), unlike the pipeline outputs above.
-export const useSensorTrace = (sensors: readonly string[], scope: DataScope) => {
+// reachable (VPN), unlike the pipeline outputs above. With `withLapPercent`,
+// each series also has `lap_id` and `lap_percent` (a separate request and cache
+// entry, so the time view's stays as it is).
+export const useSensorTrace = (
+  sensors: readonly string[],
+  scope: DataScope,
+  withLapPercent = false,
+) => {
   const { runId, timeline } = useDashboardRun();
   // Queries only run once the timeline is known, so `select` never sees the 0.
   const startMs = timeline?.startMs ?? 0;
@@ -116,9 +122,13 @@ export const useSensorTrace = (sensors: readonly string[], scope: DataScope) => 
   const range = useMemo(
     () =>
       timeline
-        ? { sensors: [...sensors].sort(), ...toIsoRange(timeline, window, "utc") }
+        ? {
+            sensors: [...sensors].sort(),
+            ...toIsoRange(timeline, window, "utc"),
+            ...(withLapPercent ? { with_lap_percent: true } : {}),
+          }
         : undefined,
-    [timeline, window, sensors],
+    [timeline, window, sensors, withLapPercent],
   );
   const select = useCallback(
     (data: SensorDataResponse): SensorTraces => ({ startMs, series: data.series }),

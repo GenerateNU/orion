@@ -7,17 +7,16 @@ import pandas as pd
 import pytest
 
 from orion_pipeline.runner.run_context import RunContext
-from orion_pipeline.steps.lap_progress_step import lap_progress_constants
 from orion_pipeline.steps.lap_progress_step.ideal_lap import assign_lap_ids
-from orion_pipeline.steps.lap_progress_step.lap_progress_step import (
-    IDEAL_LAP_TABLE,
-    LapProgressStep,
-)
+from orion_pipeline.steps.lap_progress_step.lap_progress_step import LapProgressStep
 from orion_pipeline.steps.lap_progress_step.lap_progress_utils import (
+    drop_forward_jumps,
     lap_percentages,
-    to_lat_lon,
+    match_to_ideal_lap,
+    resample,
 )
-from orion_pipeline.steps.lap_step.lap_utils import to_local_xy
+from orion_pipeline.steps.lap_step.lap_constants import EARTH_RADIUS_M
+from orion_pipeline.steps.lap_step.lap_utils import headings, to_local_xy
 
 ORIGIN_LAT, ORIGIN_LON = 42.34, -71.09
 START = datetime(2026, 1, 1, 12, 0, 0)
@@ -112,20 +111,34 @@ def drive(laps: list[dict[str, Any]], start_u: float = 0.0, end_u: float = 1.0):
     return positions.drop(columns="lap_id"), lap_rows, u
 
 
+def to_lat_lon(x, y, origin_lat, origin_lon):
+    """Local x/y meters back to latitude/longitude (undoes `to_local_xy`)."""
+    lat = origin_lat + np.degrees(y / EARTH_RADIUS_M)
+    lon = origin_lon + np.degrees(x / (EARTH_RADIUS_M * np.cos(np.radians(origin_lat))))
+    return lat, lon
+
+
 def track_frame(x: np.ndarray, y: np.ndarray) -> pd.DataFrame:
     lat, lon = to_lat_lon(x, y, ORIGIN_LAT, ORIGIN_LON)
     time = START + pd.to_timedelta(np.arange(len(x)) * DT_S, unit="s")
     return pd.DataFrame({"time": time, "lattitude": lat, "longitude": lon})
 
 
-def run_step(positions: pd.DataFrame, laps: pd.DataFrame):
-    """Run the step without a database. Returns (progress, ideal lap, writer)."""
+def run_step(positions: pd.DataFrame, laps: pd.DataFrame, **ctx_overrides):
+    """Run the step without a database.
+
+    Returns (the frame written with `update_for_run`, plus each point's lap_id
+    for the assertions, or None if nothing was written; the writer mock).
+    """
     reader = MagicMock()
     reader.read_frame.side_effect = [positions, laps]
     writer = MagicMock()
-    LapProgressStep(reader=reader, writer=writer).run(RunContext(run_id="run-1"))
-    written = {call.args[0]: call.args[1] for call in writer.append.call_args_list}
-    return written.get("lap_progress"), written.get(IDEAL_LAP_TABLE), writer
+    ctx = RunContext(run_id="run-1", **ctx_overrides)
+    LapProgressStep(reader=reader, writer=writer).run(ctx)
+    if not writer.update_for_run.called:
+        return None, writer
+    progress = writer.update_for_run.call_args.args[2]
+    return progress.assign(lap_id=assign_lap_ids(progress["time"], laps)), writer
 
 
 VARIED_LAPS = [
@@ -148,8 +161,9 @@ def percent_at(progress: pd.DataFrame, u: np.ndarray, lap_id: int, grid: np.ndar
 
 def test_same_place_gets_same_percentage_across_speeds_and_lines():
     positions, laps, u = drive(VARIED_LAPS)
-    progress, ideal, _ = run_step(positions, laps)
+    progress, _ = run_step(positions, laps)
 
+    assert list(progress.columns[:2]) == ["time", "lap_percent"]
     assert progress["lap_percent"].notna().all()
     grid = np.linspace(0.02, 0.98, 49)
     per_lap = np.array([percent_at(progress, u, lap, grid) for lap in laps["lap_id"]])
@@ -157,12 +171,11 @@ def test_same_place_gets_same_percentage_across_speeds_and_lines():
     assert spread.max() < 1.0
     # And it tracks distance around the track, not time.
     assert per_lap.mean(axis=0) == pytest.approx(100 * grid, abs=1.5)
-    assert ideal["lap_percent"].iloc[0] == 0.0
 
 
 def test_percentages_rise_through_each_lap_without_jumps():
     positions, laps, _ = drive(VARIED_LAPS, start_u=0.4, end_u=0.7)
-    progress, _, _ = run_step(positions, laps)
+    progress, _ = run_step(positions, laps)
 
     for _, lap in progress.groupby("lap_id"):
         steps = np.diff(lap["lap_percent"].astype(float).to_numpy())
@@ -193,7 +206,7 @@ def test_hairpin_parallel_sections_never_swap():
             "end_time": [*starts[1:], positions["time"].iloc[-1]],
         }
     )
-    progress, _, _ = run_step(positions, laps)
+    progress, _ = run_step(positions, laps)
 
     percent = progress["lap_percent"].astype(float).to_numpy()
     for k in range(5):
@@ -217,51 +230,45 @@ def test_off_track_points_get_no_percentage():
     positions[["lattitude", "longitude"]] = np.column_stack(
         to_lat_lon(x, y, ORIGIN_LAT, ORIGIN_LON)
     )
-    progress, _, _ = run_step(positions, laps)
+    progress, _ = run_step(positions, laps)
 
     percent = progress["lap_percent"]
     far = detour & (30 * bump > 20)
     assert far.any()
-    # Really None (written as NULL), not NaN, even mixed in with numbers.
-    assert percent[far].map(lambda v: v is None).all()
+    # NaN here; the client writes it as NULL (see test_oriondb_client.py).
+    assert percent[far].isna().all()
     # Back on track afterwards, and everywhere off the detour.
     assert percent[~detour].notna().all()
 
 
-def test_off_track_percent_is_written_as_none_not_nan(monkeypatch):
-    # Every point is "too slow", so none gets a percentage. A NaN would be
-    # written to the database as a number; None is written as NULL.
-    monkeypatch.setattr(lap_progress_constants, "MIN_SPEED_MPS", 1000.0)
+def test_tunables_come_from_the_run_context():
+    # Every point is "too slow", so none gets a percentage.
     positions, laps, _ = drive(VARIED_LAPS[:4])
-    progress, _, _ = run_step(positions, laps)
+    progress, _ = run_step(positions, laps, lap_progress_min_speed_mps=1000.0)
 
-    assert progress["lap_percent"].map(lambda v: v is None).all()
+    assert progress["lap_percent"].isna().all()
 
 
-def test_rerun_clears_both_tables_before_writing():
+def test_rerun_clears_column_before_update():
     positions, laps, _ = drive(VARIED_LAPS[:4])
-    _, _, writer = run_step(positions, laps)
+    _, writer = run_step(positions, laps)
 
-    deletes = [c.args for c in writer.delete_for_run.call_args_list]
-    assert deletes == [("lap_progress", "run-1"), (IDEAL_LAP_TABLE, "run-1")]
     names = [c[0] for c in writer.method_calls]
-    assert names.index("append") > max(
-        i for i, n in enumerate(names) if n == "delete_for_run"
+    assert names == ["set_null_for_run", "update_for_run"]
+    writer.set_null_for_run.assert_called_once_with(
+        "estimated_car_state", "lap_percent", "run-1"
     )
+    assert writer.update_for_run.call_args.args[:2] == ("estimated_car_state", "run-1")
 
 
-def test_one_lap_run_still_gets_percentages():
-    # Lap detection found no crossing: the whole run, three loops, is lap 1.
-    positions, laps, u = drive([{**VARIED_LAPS[1], "loops": 3}], end_u=3.0)
-    progress, ideal, _ = run_step(positions, laps)
+def test_too_few_laps_writes_nothing():
+    # With two laps, both are first or last laps, so no lap can be the ideal lap.
+    positions, laps, _ = drive(VARIED_LAPS[:2])
+    progress, writer = run_step(positions, laps)
 
-    assert len(ideal) == pytest.approx(PERIMETER_M, rel=0.05)
-    percent = progress["lap_percent"].astype(float).to_numpy()
-    assert np.isnan(percent).mean() < 0.01
-    # The same spot reads the same on every loop.
-    loop = np.cumsum(np.r_[0, np.diff(u) < -0.5])
-    at_quarter = [np.interp(0.25, u[loop == k], percent[loop == k]) for k in range(3)]
-    assert max(at_quarter) - min(at_quarter) < 1.0
+    # An empty frame, which `update_for_run` skips: every lap_percent stays NULL.
+    assert progress.empty
+    writer.set_null_for_run.assert_called_once()
 
 
 def test_empty_run_writes_nothing():
@@ -272,8 +279,8 @@ def test_empty_run_writes_nothing():
     writer = MagicMock()
     LapProgressStep(reader=reader, writer=writer).run(RunContext(run_id="run-1"))
 
-    assert writer.delete_for_run.call_count == 2
-    writer.append.assert_not_called()
+    writer.set_null_for_run.assert_called_once()
+    writer.update_for_run.assert_not_called()
 
 
 # Distances along a 100 m ideal lap -> percentages, all one lap unless noted.
@@ -296,3 +303,115 @@ def test_lap_percentages(s, expected):
     s = np.array(s)
     percent = lap_percentages(s, np.ones(len(s), dtype=np.int64), 100.0, 5.0)
     assert percent.tolist() == pytest.approx(expected, nan_ok=True)
+
+
+# ---- Bad matches ----------------------------------------------------------
+
+
+def jump_guard(s, time_s):
+    return drop_forward_jumps(
+        np.array(s, dtype=float),
+        np.array(time_s, dtype=float),
+        100.0,
+        max_speed_mps=10.0,
+        jump_margin_m=2.0,
+    )
+
+
+def test_drop_forward_jumps_rejects_a_point_too_far_ahead():
+    # 1 m per second; the 60 m point is far beyond 10 m/s * 1 s + 2 m.
+    s = jump_guard([10, 11, 60, 13, 14], [0, 1, 2, 3, 4])
+    assert s.tolist() == pytest.approx([10, 11, np.nan, 13, 14], nan_ok=True)
+
+
+def test_drop_forward_jumps_compares_to_the_furthest_point_not_the_last():
+    # The bad backward point (2 m) is kept, and the points after it aren't
+    # treated as jumps from it.
+    s = jump_guard([10, 11, 2, 13, 14], [0, 1, 2, 3, 4])
+    assert s.tolist() == pytest.approx([10, 11, 2, 13, 14])
+
+
+def test_drop_forward_jumps_allows_more_after_a_gap_and_across_the_gate():
+    # 40 m ahead is fine after 5 s (10 m/s * 5 s + 2 m). 98 -> 3 m is 5 m
+    # forward around the loop, not 95 m back.
+    s = jump_guard([10, np.nan, 50, 98, 3], [0, 2, 5, 10, 11])
+    assert s.tolist() == pytest.approx([10, np.nan, 50, 98, 3], nan_ok=True)
+
+
+def move_point(positions, index, to_u):
+    """Positions with point `index` moved onto the centerline at fraction `to_u`."""
+    x, y = stadium(np.array([to_u]))
+    lat, lon = to_lat_lon(x, y, ORIGIN_LAT, ORIGIN_LON)
+    moved = positions.copy()
+    moved.loc[index, ["lattitude", "longitude"]] = [lat[0], lon[0]]
+    return moved
+
+
+@pytest.mark.parametrize(
+    ("at_u", "to_u"),
+    [
+        (0.02, 0.12),  # ~70 m ahead on the same straight
+        (0.10, 0.00),  # ~70 m behind on the same straight
+    ],
+)
+def test_one_bad_point_mid_lap_leaves_the_rest_of_the_lap_rising(at_u, to_u):
+    positions, laps, u = drive(VARIED_LAPS)
+    lap3 = assign_lap_ids(positions["time"], laps) == 3
+    bad = int(np.flatnonzero(lap3 & (u >= at_u))[0])
+    clean, _ = run_step(positions, laps)
+    progress, _ = run_step(move_point(positions, bad, to_u), laps)
+
+    # The bad point's neighbors take their heading from it, so they may be
+    # rejected as heading the wrong way. Every other point is untouched.
+    near_bad = np.abs(np.arange(len(u)) - bad) <= 1
+    others = np.flatnonzero(lap3 & ~near_bad)
+    got = progress["lap_percent"].to_numpy()[others]
+    expected = clean["lap_percent"].to_numpy()[others]
+    assert got == pytest.approx(expected, abs=0.1)
+    assert (np.diff(got) >= 0).all()
+
+
+# ---- Matching between ideal lap points --------------------------------------------
+
+
+def match_all(x, y, ideal):
+    hx, hy = headings(x, y)
+    return match_to_ideal_lap(
+        x,
+        y,
+        hx,
+        hy,
+        np.ones(len(x), dtype=bool),
+        ideal,
+        max_offtrack_m=15.0,
+        min_heading_dot=0.5,
+        heading_weight_m=10.0,
+    )
+
+
+def test_matching_is_continuous_between_ideal_lap_points():
+    # Ideal lap points 2 m apart; positions every 0.1 m, 0.5 m off the line.
+    line_x, line_y = stadium(np.linspace(0, 1, 2000, endpoint=False))
+    ideal = resample(line_x, line_y, 2.0)
+    u = np.linspace(0.1, 0.15, 300)
+    x, y = stadium(u, 0.5)
+
+    s = match_all(x, y, ideal)
+
+    # On the straight, the distance follows the car, not the 2 m point spacing.
+    assert s == pytest.approx(u * PERIMETER_M, abs=0.05)
+
+
+@pytest.mark.parametrize("offset_m", [-4.0, 4.0])
+def test_matching_rises_steadily_through_bends_off_the_line(offset_m):
+    # Driving 4 m outside (and inside) the line all the way round, through both
+    # bends: the distance never holds still or steps back.
+    line_x, line_y = stadium(np.linspace(0, 1, 2000, endpoint=False))
+    ideal = resample(line_x, line_y, 1.0)
+    u = np.linspace(0.01, 0.99, 3000)
+    x, y = stadium(u, offset_m)
+
+    steps = np.diff(match_all(x, y, ideal))
+
+    assert (steps > 0).all()
+    assert steps.max() < 3 * steps.mean()

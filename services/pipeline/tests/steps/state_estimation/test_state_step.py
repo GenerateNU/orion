@@ -26,7 +26,9 @@ def test_transform_makes_estimated_car_state_rows():
 
     rows = StateStep(Mock(), Mock()).transform(ticks, RunContext(run_id="run"))
 
-    assert set(rows.columns) == {c.name for c in EstimatedCarState.__table__.columns}
+    # Every column but lap_percent, which the lap progress step fills in later.
+    columns = {c.name for c in EstimatedCarState.__table__.columns} - {"lap_percent"}
+    assert set(rows.columns) == columns
     assert list(rows["run_id"]) == ["run", "run"]
     # state x = [0, 1, ...]: 0 m east, 1 m north of the origin
     assert rows["longitude"].tolist() == [-71.0, -71.0]

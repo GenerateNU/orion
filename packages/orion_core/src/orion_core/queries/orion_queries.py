@@ -12,9 +12,7 @@ from sqlalchemy.sql.dml import ReturningDelete, ReturningInsert, ReturningUpdate
 from orion_core.models.orion import (
     CleanedData,
     EstimatedCarState,
-    IdealLapPoint,
     Lap,
-    LapProgress,
     PipelineRun,
     PipelineStatus,
     Run,
@@ -71,45 +69,27 @@ def select_estimated_positions_between(
     )
 
 
+def select_lap_percents_between(
+    run_id: str, start: datetime, end: datetime
+) -> Select[datetime, float | None]:
+    """`lap_percent` of each estimated position for one run in [start, end],
+    ordered by time. NULL where the lap progress step gave the point none."""
+    return (
+        select(EstimatedCarState.time, EstimatedCarState.lap_percent)
+        .where(
+            EstimatedCarState.run_id == run_id,
+            EstimatedCarState.time.between(start, end),
+        )
+        .order_by(EstimatedCarState.time)
+    )
+
+
 def select_laps(run_id: str) -> Select[int, datetime, datetime]:
     """One run's laps, in order."""
     return (
         select(Lap.lap_id, Lap.start_time, Lap.end_time)
         .where(Lap.run_id == run_id)
         .order_by(Lap.lap_id)
-    )
-
-
-def select_lap_progress(
-    run_id: str,
-    start: datetime | None = None,
-    end: datetime | None = None,
-    lap_id: int | None = None,
-) -> Select[datetime, int, float | None]:
-    """One run's lap percentages, ordered by time. Each filter is optional and
-    inclusive."""
-    stmt = (
-        select(LapProgress.time, LapProgress.lap_id, LapProgress.lap_percent)
-        .where(LapProgress.run_id == run_id)
-        .order_by(LapProgress.time)
-    )
-    if start is not None:
-        stmt = stmt.where(LapProgress.time >= start)
-    if end is not None:
-        stmt = stmt.where(LapProgress.time <= end)
-    if lap_id is not None:
-        stmt = stmt.where(LapProgress.lap_id == lap_id)
-    return stmt
-
-
-def select_ideal_lap(run_id: str) -> Select[float, float, float]:
-    """One run's ideal lap path, in order from the start/finish gate."""
-    return (
-        select(
-            IdealLapPoint.latitude, IdealLapPoint.longitude, IdealLapPoint.lap_percent
-        )
-        .where(IdealLapPoint.run_id == run_id)
-        .order_by(IdealLapPoint.seq)
     )
 
 

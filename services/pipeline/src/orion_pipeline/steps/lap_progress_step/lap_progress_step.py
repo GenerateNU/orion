@@ -1,5 +1,4 @@
 from collections.abc import Iterator
-from dataclasses import dataclass
 
 import numpy as np
 import pandas as pd
@@ -8,64 +7,50 @@ from orion_core.queries.orion_queries import select_estimated_positions, select_
 from orion_pipeline.clients.oriondb_client import OrionDBClient
 from orion_pipeline.runner.run_context import RunContext
 from orion_pipeline.steps.base_step import PipelineStep
-from orion_pipeline.steps.lap_progress_step import lap_progress_constants as tune
 from orion_pipeline.steps.lap_progress_step.ideal_lap import (
     assign_lap_ids,
-    build_ideal_lap,
-    gate_at,
+    choose_laps,
+    find_medoid,
+    lap_stats,
+    laps_from_ids,
 )
 from orion_pipeline.steps.lap_progress_step.lap_progress_utils import (
+    drop_forward_jumps,
     lap_percentages,
     match_to_ideal_lap,
-    to_lat_lon,
+    resample,
+    smooth_loop,
 )
-from orion_pipeline.steps.lap_step.lap_utils import (
-    Gate,
-    find_gate,
-    headings,
-    to_local_xy,
-)
+from orion_pipeline.steps.lap_step.lap_utils import headings, to_local_xy
 from orion_pipeline.steps.step_registry import register_step
-
-IDEAL_LAP_TABLE = "ideal_lap_points"
-
-
-@dataclass(frozen=True)
-class LapProgressOutput:
-    """Both tables the step writes, for one run."""
-
-    progress: pd.DataFrame
-    ideal_lap: pd.DataFrame
 
 
 @register_step
 class LapProgressStep(PipelineStep):
     """Gives every estimated position a percentage around the run's ideal lap.
 
-    DB TABLES: FROM Orion[estimated_car_state, laps]
-    -> TO Orion[lap_progress, ideal_lap_points]
+    DB TABLES: FROM Orion[estimated_car_state, laps] -> TO Orion[estimated_car_state]
 
-    Like the lap step, it reads the whole run at once: picking the ideal lap
-    needs every lap. See docs/ideal_lap.md.
+    Schema: FROM [time, lattitude, longitude], [lap_id, start_time, end_time]
+    -> TO [time, lap_percent]
+
+    Like the lap step, it reads the whole run at once: the ideal lap needs every
+    lap. See docs/lap_progress.md.
     """
 
     name = "lap_progress_step"
     depends_on = ("lap_step",)
     reads_from = "oriondb"
-    output_table = "lap_progress"
+    output_table = "estimated_car_state"
     # Required by PipelineStep, but unused: `extract` reads the run in one frame.
     pagination_key = ("time",)
 
     reader: OrionDBClient
 
     def extract(self, ctx: RunContext) -> Iterator[pd.DataFrame]:
-        """The run's positions as one frame, each with the lap it falls in: its
-        `lap_id`, `lap_start` and `lap_end`.
+        """The run's positions as one frame, each with the `lap_id` it falls in.
 
-        The ideal lap needs each lap's exact start and end times, so they're
-        added as columns. Every lap starts at one of the run's positions, so
-        every lap has at least one row. Yields nothing if the run has no
-        positions or no laps.
+        Yields nothing if the run has no positions or no laps.
         """
         positions = self.reader.read_frame(select_estimated_positions(ctx.run_id))
         if positions.empty:
@@ -73,71 +58,42 @@ class LapProgressStep(PipelineStep):
         laps = self.reader.read_frame(select_laps(ctx.run_id))
         if laps.empty:
             return
-        positions["lap_id"] = assign_lap_ids(positions["time"], laps)
-        lap_times = laps.rename(
-            columns={"start_time": "lap_start", "end_time": "lap_end"}
-        )
-        yield positions.merge(lap_times, on="lap_id", how="left")
+        yield positions.assign(lap_id=assign_lap_ids(positions["time"], laps))
 
     def transform(self, df: pd.DataFrame, ctx: RunContext) -> pd.DataFrame:
-        """The `lap_progress` rows only. `run` uses `transform_all` for both tables."""
-        return self.transform_all(df, ctx).progress
-
-    def transform_all(self, df: pd.DataFrame, ctx: RunContext) -> LapProgressOutput:
-        """Build the ideal lap, then match every position to it.
+        """Pick the ideal lap (the medoid of the chosen laps, lightly smoothed),
+        then match every position to it.
 
         Args:
-            df: The run's positions in time order, each with its `lap_id`,
-                `lap_start` and `lap_end` (see `extract`).
+            df: The run's positions in time order, each with its `lap_id`.
             ctx: The job being run.
 
         Returns:
-            Empty frames if the run has no ideal lap (see `build_ideal_lap`): no lap
-            or loop through the gate with full data.
+            `time` and `lap_percent` for every position, NaN where the car is off
+            track. Empty if no lap qualifies to be the ideal lap (see `choose_laps`).
         """
-        # The laps table again, one row per lap, from the columns `extract` added.
-        laps = (
-            df.groupby("lap_id", sort=True)[["lap_start", "lap_end"]]
-            .first()
-            .reset_index()
-            .rename(columns={"lap_start": "start_time", "lap_end": "end_time"})
-        )
         times = df["time"]
         lap_ids = df["lap_id"].to_numpy(dtype=np.int64)
         x, y = to_local_xy(df["lattitude"], df["longitude"])
         time_s = np.asarray((times - times.iloc[0]).dt.total_seconds(), np.float64)
-        positions = pd.DataFrame({"time": times, "x": x, "y": y})
 
-        def fallback_gate() -> Gate | None:
-            # Where the lap step's gate is, if any lap ends there (the start of
-            # lap 2). Otherwise found the way the lap step finds its gate. Either
-            # way wider, since lines spread out at the gate.
-            half_width_m = tune.MAX_OFFTRACK_M
-            if len(laps) >= 2:
-                start = int(np.argmax(lap_ids == laps["lap_id"].iloc[1]))
-                return gate_at(positions, start, half_width_m)
-            return find_gate(
-                x,
-                y,
-                time_s,
-                sample_every=ctx.lap_gate_search_sample_every,
-                hitbox_radius_m=ctx.lap_hitbox_radius_m,
-                min_revisit_time_s=ctx.lap_min_revisit_time_s,
-                min_revisit_distance_m=ctx.lap_min_revisit_distance_m,
-                half_width_m=half_width_m,
-            )
-
-        ideal = build_ideal_lap(
-            positions,
-            laps,
-            max_gap_s=tune.MAX_GAP_S,
-            max_length_ratio=tune.MAX_LENGTH_RATIO,
-            spacing_m=tune.PATH_SPACING_M,
-            fallback_gate=fallback_gate,
-            min_loop_time_s=ctx.lap_min_lap_time_s,
+        chosen = choose_laps(
+            lap_stats(times, laps_from_ids(times, lap_ids)),
+            max_gap_s=ctx.lap_progress_max_gap_s,
+            max_lap_time_ratio=ctx.lap_progress_max_lap_time_ratio,
         )
-        if ideal is None:
-            return LapProgressOutput(pd.DataFrame(), pd.DataFrame())
+        if not chosen:
+            return pd.DataFrame(columns=["time", "lap_percent"])
+
+        laps = [
+            resample(x[lap_ids == i], y[lap_ids == i], ctx.lap_progress_spacing_m)
+            for i in chosen
+        ]
+        ideal = smooth_loop(
+            laps[find_medoid(laps)],
+            spacing_m=ctx.lap_progress_spacing_m,
+            smoothing_m=ctx.lap_progress_smoothing_m,
+        )
 
         hx, hy = headings(x, y)
         speed = (
@@ -145,7 +101,7 @@ class LapProgressStep(PipelineStep):
             if len(x) > 1
             else np.zeros(len(x))
         )
-        on_track = (np.hypot(hx, hy) > 0) & (speed >= tune.MIN_SPEED_MPS)
+        on_track = (np.hypot(hx, hy) > 0) & (speed >= ctx.lap_progress_min_speed_mps)
 
         s = match_to_ideal_lap(
             x,
@@ -154,51 +110,28 @@ class LapProgressStep(PipelineStep):
             hy,
             on_track,
             ideal,
-            max_offtrack_m=tune.MAX_OFFTRACK_M,
-            min_heading_dot=float(np.cos(np.radians(tune.MAX_HEADING_DIFF_DEG))),
-            heading_weight_m=tune.HEADING_WEIGHT_M,
+            max_offtrack_m=ctx.lap_progress_max_offtrack_m,
+            min_heading_dot=float(
+                np.cos(np.radians(ctx.lap_progress_max_heading_diff_deg))
+            ),
+            heading_weight_m=ctx.lap_progress_heading_weight_m,
         )
-        percent = lap_percentages(s, lap_ids, ideal.length_m, tune.GATE_MARGIN_M)
-
-        progress = pd.DataFrame(
-            {
-                "run_id": ctx.run_id,
-                "time": times.to_numpy(),
-                "lap_id": lap_ids,
-                # Off-track points as None, so they're written as NULL, not NaN.
-                # dtype=object keeps them None: pandas turns a mixed list of
-                # numbers and None back into NaN.
-                "lap_percent": pd.Series(
-                    [None if np.isnan(p) else p for p in percent], dtype=object
-                ),
-            }
+        s = drop_forward_jumps(
+            s,
+            time_s,
+            ideal.length_m,
+            max_speed_mps=ctx.lap_progress_max_speed_mps,
+            jump_margin_m=ctx.lap_progress_jump_margin_m,
         )
-        lat, lon = to_lat_lon(
-            ideal.x,
-            ideal.y,
-            float(df["lattitude"].iloc[0]),
-            float(df["longitude"].iloc[0]),
+        percent = lap_percentages(
+            s, lap_ids, ideal.length_m, ctx.lap_progress_gate_margin_m
         )
-        ideal_lap = pd.DataFrame(
-            {
-                "run_id": ctx.run_id,
-                "seq": np.arange(len(ideal.x)),
-                "latitude": lat,
-                "longitude": lon,
-                "lap_percent": ideal.percent,
-            }
-        )
-        return LapProgressOutput(progress, ideal_lap)
+        return pd.DataFrame({"time": times.to_numpy(), "lap_percent": percent})
 
     def prepare(self, ctx: RunContext) -> None:
-        """Clear both output tables, so a re-run replaces the run's rows."""
-        self.writer.delete_for_run(self.output_table, ctx.run_id)
-        self.writer.delete_for_run(IDEAL_LAP_TABLE, ctx.run_id)
+        """Clear the run's `lap_percent`, so a re-run replaces the values."""
+        self.writer.set_null_for_run(self.output_table, "lap_percent", ctx.run_id)
 
-    def run(self, ctx: RunContext) -> None:
-        """Like `PipelineStep.run`, but writes both tables from one transform."""
-        self.prepare(ctx)
-        for page in self.extract(ctx):
-            output = self.transform_all(page, ctx)
-            self.writer.append(IDEAL_LAP_TABLE, output.ideal_lap)
-            self.writer.append(self.output_table, output.progress)
+    def write(self, df: pd.DataFrame, ctx: RunContext) -> None:
+        """Fill in `lap_percent` on the run's existing rows, matched by time."""
+        self.writer.update_for_run(self.output_table, ctx.run_id, df)

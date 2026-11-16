@@ -2,9 +2,14 @@ import { useId, useMemo, useState } from "react";
 import { useSensors } from "@hooks/useSensors";
 import { useDashboardActions, useVisibleWindow } from "@features/dashboard/state/useDashboard";
 import styles from "./SensorChartPanel.module.css";
-import SensorChart from "./SensorChart";
+import SensorChart, { type XAxis } from "./SensorChart";
 
 const MAX_NUM_CHARTS = 6;
+
+const X_AXES: [XAxis, string][] = [
+  ["time", "Time"],
+  ["lapPercent", "% of lap"],
+];
 
 type SensorChartsPanelProps = {
   defaultSensors?: readonly string[];
@@ -17,6 +22,7 @@ export default function SensorChartsPanel({
 }: SensorChartsPanelProps) {
   const [selected, setSelected] = useState<readonly string[]>(defaultSensors);
   const [adding, setAdding] = useState(false);
+  const [xAxis, setXAxis] = useState<XAxis>("time");
 
   const { sensors } = useSensors();
   const visibleWindow = useVisibleWindow();
@@ -33,14 +39,29 @@ export default function SensorChartsPanel({
   return (
     <section className={styles.panel}>
       <header className={styles.header}>
-        <button
-          type="button"
-          className={styles.reset}
-          onClick={() => resetWindow()}
-          disabled={visibleWindow === null}
-        >
-          Reset zoom
-        </button>
+        <div className={styles.toggle} role="group" aria-label="X axis">
+          {X_AXES.map(([value, label]) => (
+            <button
+              key={value}
+              type="button"
+              className={styles.toggleOption}
+              aria-pressed={xAxis === value}
+              onClick={() => setXAxis(value)}
+            >
+              {label}
+            </button>
+          ))}
+        </div>
+        {xAxis === "time" && (
+          <button
+            type="button"
+            className={styles.reset}
+            onClick={() => resetWindow()}
+            disabled={visibleWindow === null}
+          >
+            Reset zoom
+          </button>
+        )}
       </header>
 
       <div className={styles.grid}>
@@ -63,7 +84,7 @@ export default function SensorChartsPanel({
                 ×
               </button>
             </div>
-            <SensorChart name={name} unit={units.get(name) ?? ""} height={height} />
+            <SensorChart name={name} unit={units.get(name) ?? ""} height={height} xAxis={xAxis} />
           </div>
         ))}
 

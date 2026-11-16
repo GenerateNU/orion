@@ -6,7 +6,7 @@ from typing import Annotated
 from fastapi import APIRouter, Depends, Path, Query
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from orion_backend.core.database import get_penelope_db
+from orion_backend.core.database import get_orion_db, get_penelope_db
 from orion_backend.core.openapi import error_responses
 from orion_backend.schemas.sensor_schema import SensorDataResponse, SensorResponse
 from orion_backend.services.sensor_service import SensorService
@@ -14,8 +14,11 @@ from orion_backend.services.sensor_service import SensorService
 router = APIRouter(tags=["sensors"])
 
 
-def get_sensor_service(db: AsyncSession = Depends(get_penelope_db)) -> SensorService:
-    return SensorService(db)
+def get_sensor_service(
+    penelope_db: AsyncSession = Depends(get_penelope_db),
+    orion_db: AsyncSession = Depends(get_orion_db),
+) -> SensorService:
+    return SensorService(penelope_db, orion_db)
 
 
 @router.get(
@@ -34,6 +37,8 @@ async def list_sensors(
 @router.get(
     "/runs/{run_id}/sensors/data",
     response_model=SensorDataResponse,
+    # Leaves `lap_id` / `lap_percent` out entirely unless they were asked for.
+    response_model_exclude_unset=True,
     summary="Get raw sensor readings",
     responses=error_responses(422, 502, 503),
 )
@@ -48,13 +53,26 @@ async def get_sensor_data(
     ],
     start: Annotated[datetime, Query(description="Inclusive.")],
     end: Annotated[datetime, Query(description="Inclusive.")],
+    with_lap_percent: Annotated[
+        bool,
+        Query(
+            description=(
+                "Also give every reading its `lap_id` and `lap_percent` (from OrionDB, "
+                "once the pipeline has processed the run)."
+            ),
+        ),
+    ] = False,
     service: SensorService = Depends(get_sensor_service),
 ) -> SensorDataResponse:
     """Every reading of the requested sensors between `start` and `end`, as stored in
     Penelope, with no downsampling.
 
     The time bounds are required so a request can't pull a whole run. A sensor with no
-    rows in the range (or an unknown run) comes back as an empty series.
+    rows in the range (or an unknown run) comes back as an empty series. With
+    `with_lap_percent=true`, each series also has `lap_id` and `lap_percent`, lined up
+    with `time`; they're all null for a run the pipeline hasn't processed.
     """
     names = [name.strip() for name in sensors.split(",") if name.strip()]
-    return await service.get_sensor_data(run_id, names, start, end)
+    return await service.get_sensor_data(
+        run_id, names, start, end, with_lap_percent=with_lap_percent
+    )

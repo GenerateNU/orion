@@ -3,7 +3,6 @@
 from orion_core.models.orion.base import Base
 from orion_core.models.orion.cleaned_data_model import CleanedData
 from orion_core.models.orion.estimated_car_state_model import EstimatedCarState
-from orion_core.models.orion.lap_progress_model import IdealLapPoint, LapProgress
 from orion_core.models.orion.laps_model import Lap
 from orion_core.models.orion.pipeline_run_model import PipelineRun, PipelineStatus
 from orion_core.models.orion.run_model import Run
@@ -19,8 +18,6 @@ __all__ = [
     "CleanedData",
     "EstimatedCarState",
     "Lap",
-    "LapProgress",
-    "IdealLapPoint",
     "SensorSources",
     "Sensors",
     "UkfState",

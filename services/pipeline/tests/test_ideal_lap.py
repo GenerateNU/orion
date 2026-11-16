@@ -7,26 +7,30 @@ import pytest
 
 from orion_pipeline.steps.lap_progress_step.ideal_lap import (
     assign_lap_ids,
-    build_ideal_lap,
-    gate_at,
+    choose_laps,
+    find_medoid,
     lap_stats,
-    loops_through_gate,
-    pick_median_lap,
+    laps_from_ids,
+)
+from orion_pipeline.steps.lap_progress_step.lap_progress_utils import (
+    IdealLap,
+    mean_distance,
+    resample,
+    smooth_loop,
 )
 
 START = datetime(2026, 1, 1, 12, 0, 0)
 RADIUS_M = 50.0
 LOOP_M = 2 * np.pi * RADIUS_M
 DT_S = 0.1
-TUNABLES: dict[str, Any] = {"max_gap_s": 1.0, "max_length_ratio": 1.25}
 
 
 def drive(laps: list[dict[str, Any]]) -> tuple[pd.DataFrame, pd.DataFrame]:
     """A run around a 50 m circle, one dict per lap.
 
     Each dict has `secs` (lap time), and optionally `loops` (how many times
-    round the circle the lap goes, for merged laps, default 1), `radius` (to
-    change the line) and `gap` ((from_s, to_s) within the lap with no points).
+    round the circle the lap goes, for merged laps, default 1) and `gap`
+    ((from_s, to_s) within the lap with no points).
 
     Args:
         laps: One dict per lap, as above.
@@ -40,14 +44,13 @@ def drive(laps: list[dict[str, Any]]) -> tuple[pd.DataFrame, pd.DataFrame]:
         n = round(lap["secs"] / DT_S)
         frac = np.arange(n) / n
         theta = 2 * np.pi * lap.get("loops", 1) * frac
-        r = lap.get("radius", RADIUS_M)
         keep = np.ones(n, dtype=bool)
         if "gap" in lap:
             lo, hi = lap["gap"]
             keep = (frac * lap["secs"] < lo) | (frac * lap["secs"] >= hi)
         times.extend(t0 + frac[keep] * lap["secs"])
-        xs.extend(r * np.sin(theta[keep]))
-        ys.extend(r * (1 - np.cos(theta[keep])))
+        xs.extend(RADIUS_M * np.sin(theta[keep]))
+        ys.extend(RADIUS_M * (1 - np.cos(theta[keep])))
         starts.append(t0)
         t0 += lap["secs"]
         ends.append(t0)
@@ -65,121 +68,140 @@ def drive(laps: list[dict[str, Any]]) -> tuple[pd.DataFrame, pd.DataFrame]:
     return positions, lap_rows
 
 
-def ideal_lap_id(laps) -> int | None:
+def chosen(laps: list[dict[str, Any]], **tunables: float) -> list[int]:
     positions, lap_rows = drive(laps)
-    ideal = build_ideal_lap(positions, lap_rows, **TUNABLES, spacing_m=1.0)
-    return None if ideal is None else ideal.lap_id
+    return choose_laps(
+        lap_stats(positions["time"], lap_rows),
+        **{"max_gap_s": 1.0, "max_lap_time_ratio": 1.5, **tunables},
+    )
 
 
-def test_picks_the_median_lap_time():
-    laps = [{"secs": 20}, {"secs": 30}, {"secs": 34}, {"secs": 31}, {"secs": 50}]
-    # Inner laps 2-4 take 30, 34, 31 s: the median is lap 4 (31 s).
-    assert ideal_lap_id(laps) == 4
+def circle_lap(
+    radius_m: float = RADIUS_M, wobble_m: float = 0.0, phase: float = 0.0
+) -> IdealLap:
+    """A circle through the gate at (0, 0), heading +x, resampled 1 m apart.
+
+    With `wobble_m`, the line weaves that far either side, five times a lap,
+    starting at `phase`. The weave fades to nothing at the gate.
+    """
+    theta = np.linspace(0, 2 * np.pi, 2000, endpoint=False)
+    r = radius_m + wobble_m * np.sin(5 * theta + phase) * np.sin(theta / 2)
+    return resample(r * np.sin(theta), radius_m - r * np.cos(theta), 1.0)
 
 
-def test_even_count_takes_the_faster_middle_lap():
-    laps = [
-        {"secs": 20},
-        {"secs": 30},
-        {"secs": 36},
-        {"secs": 33},
-        {"secs": 40},
-        {"secs": 9},
+# ---- Which laps the ideal lap is picked from -----------------------------------------
+
+
+def test_choose_laps_skips_the_first_and_last_laps():
+    assert chosen([{"secs": 50}] * 5) == [2, 3, 4]
+
+
+def test_choose_laps_skips_a_lap_with_a_long_stop():
+    laps = [{"secs": 50}, {"secs": 50}, {"secs": 900}, {"secs": 52}, {"secs": 49}]
+    assert chosen([*laps, {"secs": 50}]) == [2, 4, 5]
+
+
+def test_choose_laps_skips_merged_laps():
+    # Lap 3 is two loops merged into one by a missed gate crossing.
+    laps = [{"secs": 50}, {"secs": 50}, {"secs": 100, "loops": 2}, {"secs": 51}]
+    assert chosen([*laps, {"secs": 49}, {"secs": 50}]) == [2, 4, 5]
+
+
+def test_choose_laps_skips_laps_with_holes_in_the_data():
+    laps: list[dict[str, Any]] = [
+        {"secs": 50},
+        {"secs": 50, "gap": (10, 15)},
+        {"secs": 50},
+        {"secs": 50},
     ]
-    # Inner laps 2-5 take 30, 36, 33, 40 s: the middle two are 33 and 36.
-    assert ideal_lap_id(laps) == 4
+    assert chosen(laps) == [3]
 
 
-def test_first_and_last_laps_never_count():
-    # The first and last laps are the median times, but they're excluded.
-    laps = [{"secs": 31}, {"secs": 25}, {"secs": 40}, {"secs": 31}]
-    assert ideal_lap_id(laps) == 2
+def test_choose_laps_respects_its_tunables():
+    laps = [{"secs": 50}, {"secs": 50}, {"secs": 70}, {"secs": 50}, {"secs": 50}]
+    assert chosen(laps) == [2, 3, 4]
+    assert chosen(laps, max_lap_time_ratio=1.2) == [2, 4]
 
 
-def test_merged_laps_are_skipped():
-    # Lap 3 is three loops merged into one (a missed gate crossing). Its 95 s
-    # would otherwise be the median of 30, 95, 95, 32.
-    laps = [
-        {"secs": 20},
-        {"secs": 30},
-        {"secs": 95, "loops": 3},
-        {"secs": 95, "loops": 3},
-        {"secs": 32},
-        {"secs": 20},
-    ]
-    assert ideal_lap_id(laps) == 2
+def test_too_few_laps_choose_nothing():
+    assert chosen([{"secs": 50}, {"secs": 50}]) == []
+    assert chosen([{"secs": 50}, {"secs": 50, "gap": (5, 20)}, {"secs": 50}]) == []
 
 
-def test_laps_with_holes_in_the_data_are_skipped():
-    laps = [
-        {"secs": 20},
-        {"secs": 31, "gap": (10, 15)},
-        {"secs": 31, "gap": (10, 15)},
-        {"secs": 30},
-        {"secs": 35},
-        {"secs": 20},
-    ]
-    assert ideal_lap_id(laps) == 4
-
-
-def test_missing_data_at_a_lap_edge_counts_as_a_hole():
+def test_lap_stats_counts_missing_data_at_a_lap_edge_as_a_hole():
     positions, lap_rows = drive(
         [{"secs": 20}, {"secs": 30, "gap": (0, 3)}, {"secs": 20}]
     )
-    stats = lap_stats(positions, lap_rows)
+    stats = lap_stats(positions["time"], lap_rows)
     assert stats["max_gap_s"].iloc[1] == pytest.approx(3.0, abs=0.01)
+    assert stats["duration_s"].tolist() == pytest.approx([20, 30, 20])
 
 
-def test_no_qualifying_lap_gives_none():
-    assert ideal_lap_id([{"secs": 30}, {"secs": 30}]) is None
-    assert (
-        ideal_lap_id([{"secs": 20}, {"secs": 30, "gap": (5, 20)}, {"secs": 20}]) is None
-    )
-    empty = pd.DataFrame(columns=["time", "x", "y"])
-    assert (
-        build_ideal_lap(empty, drive([{"secs": 30}])[1], **TUNABLES, spacing_m=1.0)
-        is None
-    )
+# ---- Picking the ideal lap ---------------------------------------------------
 
 
-def test_ideal_lap_is_evenly_spaced_from_the_gate():
-    positions, lap_rows = drive([{"secs": 20}, {"secs": 30}, {"secs": 30}])
-    ideal = build_ideal_lap(positions, lap_rows, **TUNABLES, spacing_m=2.0)
+def test_resample_is_evenly_spaced_from_the_first_point():
+    positions, _ = drive([{"secs": 30}])
+    path = resample(positions["x"].to_numpy(), positions["y"].to_numpy(), 2.0)
 
-    assert ideal is not None
-    assert ideal.length_m == pytest.approx(LOOP_M, rel=0.01)
-    steps = np.hypot(np.diff(ideal.x), np.diff(ideal.y))
+    assert path.length_m == pytest.approx(LOOP_M, rel=0.01)
+    steps = np.hypot(np.diff(path.x), np.diff(path.y))
     assert steps == pytest.approx(np.full(len(steps), 2.0), rel=0.01)
-    # Starts at the gate, the lap's first point, and percent rises from 0.
-    assert (ideal.x[0], ideal.y[0]) == pytest.approx((0.0, 0.0), abs=1e-9)
-    assert ideal.percent[0] == 0.0
-    assert ideal.percent[-1] < 100.0
-    assert np.all(np.diff(ideal.percent) > 0)
+    assert (path.x[0], path.y[0]) == pytest.approx((0.0, 0.0), abs=1e-9)
+    assert path.s[0] == 0.0
+    assert np.diff(path.s) == pytest.approx(np.full(len(steps), 2.0))
 
 
-def test_lap_stats_measures_each_lap():
-    positions, lap_rows = drive([{"secs": 20}, {"secs": 30, "loops": 2}, {"secs": 25}])
-    stats = lap_stats(positions, lap_rows)
-
-    assert stats["duration_s"].tolist() == pytest.approx([20, 30, 25])
-    assert stats["length_m"].tolist() == pytest.approx(
-        [LOOP_M, 2 * LOOP_M, LOOP_M], rel=0.01
+def test_smooth_loop_irons_out_jitter_without_moving_the_line():
+    circle = circle_lap()
+    rng = np.random.default_rng(0)
+    jittery = IdealLap(
+        circle.x + rng.normal(0, 0.3, len(circle.x)),
+        circle.y + rng.normal(0, 0.3, len(circle.y)),
+        circle.s,
+        circle.length_m,
     )
-    assert stats["max_gap_s"].tolist() == pytest.approx([DT_S] * 3, abs=1e-6)
+    smooth = smooth_loop(jittery, spacing_m=1.0, smoothing_m=0.25)
 
-
-def test_pick_median_lap_respects_its_tunables():
-    stats = pd.DataFrame(
-        {
-            "lap_id": [1, 2, 3, 4, 5],
-            "duration_s": [10.0, 30.0, 60.0, 61.0, 10.0],
-            "length_m": [300.0, 300.0, 600.0, 600.0, 300.0],
-            "max_gap_s": [0.0, 0.0, 2.0, 0.0, 0.0],
-        }
+    # Closer to the true line than the jittery points were, and evenly spaced
+    # from the gate around one loop. The jitter is a little more than the
+    # smoothing allows for, so a trace of it (about 1% length) is left.
+    assert mean_distance(circle, smooth.x, smooth.y) < mean_distance(
+        circle, jittery.x, jittery.y
     )
-    assert pick_median_lap(stats, **TUNABLES) == 2
-    assert pick_median_lap(stats, max_gap_s=1.0, max_length_ratio=2.0) == 2
-    assert pick_median_lap(stats, max_length_ratio=2.0, max_gap_s=5.0) == 3
+    jittery_length = resample(jittery.x, jittery.y, 1.0).length_m
+    assert smooth.length_m < jittery_length
+    assert smooth.length_m == pytest.approx(LOOP_M, rel=0.02)
+    assert (smooth.x[0], smooth.y[0]) == pytest.approx((0.0, 0.0), abs=1.0)
+    assert smooth.s[0] == 0.0
+    assert np.diff(smooth.s) == pytest.approx(np.ones(len(smooth.s) - 1))
+
+
+def test_medoid_is_a_typical_lap_not_the_odd_one():
+    typical = [circle_lap(wobble_m=w) for w in (0.0, 0.5, 1.0)]
+    odd = circle_lap(radius_m=RADIUS_M + 8.0)
+    assert find_medoid([odd, *typical]) != 0
+    assert find_medoid([*typical, odd]) != len(typical)
+
+
+def test_medoid_is_the_middle_line():
+    # Lines 2 m apart: the one in the middle is closest to the rest.
+    laps = [circle_lap(radius_m=RADIUS_M + d) for d in (-4.0, 2.0, 0.0, -2.0, 4.0)]
+    assert find_medoid(laps) == 2
+    assert find_medoid(laps[:1]) == 0
+
+
+def test_mean_distance_measures_to_the_nearest_point():
+    lap = circle_lap()
+    assert mean_distance(lap, lap.x, lap.y) == pytest.approx(0.0, abs=1e-9)
+    # Points 3 m outside the circle.
+    theta = np.linspace(0, 2 * np.pi, 50, endpoint=False)
+    r = RADIUS_M + 3.0
+    x, y = r * np.sin(theta), RADIUS_M - r * np.cos(theta)
+    assert mean_distance(lap, x, y) == pytest.approx(3.0, abs=0.05)
+
+
+# ---- Lap ids --------------------------------------------------------------------
 
 
 def test_assign_lap_ids_uses_half_open_laps():
@@ -190,95 +212,14 @@ def test_assign_lap_ids_uses_half_open_laps():
     assert assign_lap_ids(times, lap_rows).tolist() == [1, 1, 2, 2]
 
 
-# ---- Fallback: loops cut from the positions --------------------------------
+def test_laps_from_ids_rebuilds_lap_windows():
+    positions, lap_rows = drive([{"secs": 20}, {"secs": 30}, {"secs": 25}])
+    lap_ids = assign_lap_ids(positions["time"], lap_rows)
+    laps = laps_from_ids(positions["time"], lap_ids)
 
-
-def test_gate_at_faces_the_direction_of_travel():
-    positions, _ = drive([{"secs": 30}])
-    gate = gate_at(positions, 0, half_width_m=15.0)
-    # The circle starts at (0, 0) heading +x.
-    assert gate is not None
-    assert (gate.heading_x, gate.heading_y) == pytest.approx((1.0, 0.0), abs=0.02)
-    stopped = pd.DataFrame({"time": positions["time"][:3], "x": 0.0, "y": 0.0})
-    assert gate_at(stopped, 1, half_width_m=15.0) is None
-
-
-def test_loops_through_gate_cuts_one_loop_per_pass():
-    # One lap of three loops, gate 1 s in: passes at 1 s, ~33 s and ~64 s.
-    positions, _ = drive([{"secs": 95, "loops": 3}])
-    gate = gate_at(positions, 10, half_width_m=15.0)
-    assert gate is not None
-    loops = loops_through_gate(positions, gate, min_loop_time_s=10.0)
-
-    durations = (loops["end_time"] - loops["start_time"]).dt.total_seconds()
-    assert loops["lap_id"].tolist() == [1, 2]
-    assert durations.tolist() == pytest.approx([95 / 3, 95 / 3], abs=0.2)
-
-
-def test_loops_through_gate_ignores_quick_repasses():
-    # Passes at 1 s, ~33 s and ~64 s. With a 70 s minimum only the first counts,
-    # so there's no full loop.
-    positions, _ = drive([{"secs": 95, "loops": 3}])
-    gate = gate_at(positions, 10, half_width_m=15.0)
-    assert gate is not None
-    assert loops_through_gate(positions, gate, min_loop_time_s=70.0).empty
-
-
-def test_fallback_is_used_only_when_no_lap_qualifies():
-    calls = []
-
-    def fallback():
-        calls.append(1)
-        return None
-
-    positions, lap_rows = drive([{"secs": 20}, {"secs": 30}, {"secs": 30}])
-    build_ideal_lap(
-        positions, lap_rows, **TUNABLES, spacing_m=1.0, fallback_gate=fallback
-    )
-    assert calls == []
-
-    positions, lap_rows = drive([{"secs": 30}, {"secs": 30}])
-    assert (
-        build_ideal_lap(
-            positions, lap_rows, **TUNABLES, spacing_m=1.0, fallback_gate=fallback
-        )
-        is None
-    )
-    assert calls == [1]
-
-
-def test_fallback_cuts_the_median_loop():
-    # Five loops, each at its own speed and on its own line (radius). Every
-    # circle passes through (0, 0) heading +x, so the loops join up there.
-    loops = [
-        {"secs": 25, "radius": 50.0},  # before the first pass: not a full trip
-        {"secs": 36, "radius": 50.0},  # trip 1
-        {"secs": 30, "radius": 46.0},  # trip 2
-        {"secs": 40, "radius": 54.0},  # trip 3
-        {"secs": 25, "radius": 50.0},  # after the last pass: not a full trip
-    ]
-    positions, loop_rows = drive(loops)
-    # Lap detection missed every crossing: the whole run is one lap.
-    one_lap = pd.DataFrame(
-        {
-            "lap_id": [1],
-            "start_time": [loop_rows["start_time"].iloc[0]],
-            "end_time": [loop_rows["end_time"].iloc[-1]],
-        }
-    )
-    ideal = build_ideal_lap(
-        positions,
-        one_lap,
-        **TUNABLES,
-        spacing_m=1.0,
-        fallback_gate=lambda: gate_at(positions, 0, half_width_m=15.0),
-        min_loop_time_s=10.0,
-    )
-
-    # Trips take 36, 30 and 40 s: the median is trip 1 (36 s), on the 50 m line.
-    # Its length tells it apart from trip 2 (46 m line) and trip 3 (54 m line).
-    assert ideal is not None
-    assert ideal.lap_id == 1
-    assert ideal.length_m == pytest.approx(2 * np.pi * 50.0, rel=0.01)
-    assert ideal.length_m != pytest.approx(2 * np.pi * 46.0, rel=0.01)
-    assert ideal.length_m != pytest.approx(2 * np.pi * 54.0, rel=0.01)
+    assert laps["lap_id"].tolist() == [1, 2, 3]
+    # Each lap starts at its first point and ends where the next one starts.
+    assert laps["start_time"].tolist() == lap_rows["start_time"].tolist()
+    assert laps["end_time"].tolist()[:2] == lap_rows["start_time"].tolist()[1:]
+    # The last lap ends at the run's last point.
+    assert laps["end_time"].iloc[-1] == positions["time"].iloc[-1]

@@ -17,6 +17,10 @@ export const SensorSeriesSchema = z.object({
   time: EpochTimesSchema,
   // Penelope's `values[]` per reading, unnamed: TPU/GPS/Location is [lat, lon].
   values: z.array(z.array(z.number().nullable())),
+  // Only with `with_lap_percent`: each reading's lap, and how far round the run's
+  // ideal lap it was (0-100). Same length as `time`; null where unknown.
+  lap_id: z.array(z.number().nullable()).optional(),
+  lap_percent: z.array(z.number().nullable()).optional(),
 });
 
 // Mirrors SensorDataResponse: raw readings straight from Penelope, not downsampled.
@@ -35,4 +39,6 @@ export type SensorDataQuery = {
   sensors: string[];
   start: string;
   end: string;
+  // Also return `lap_id` and `lap_percent` per reading (from OrionDB).
+  with_lap_percent?: boolean;
 };
