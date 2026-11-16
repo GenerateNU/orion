@@ -2,10 +2,7 @@
    handles at the window's edges and the car at its centre. Colours come from the
    theme tokens in global.css, so it works in light and dark mode. */
 
-/* Fills its pane; the map shrinks to fit the height left over by the hint. */
 .container {
-  flex: 1;
-  min-height: 0;
   display: flex;
   flex-direction: column;
   gap: var(--space-3);
@@ -24,8 +21,6 @@
   /* Same gold as the sensor chart lines. */
   --track-start: #d4b06a;
 
-  flex: 1;
-  min-height: 0;
   width: 100%;
   display: block;
   user-select: none;
