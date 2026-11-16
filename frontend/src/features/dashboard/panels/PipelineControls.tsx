@@ -1,4 +1,3 @@
-import { useEffect, useId, useRef, useState } from "react";
 import Button from "@components/ui/Button";
 import Notice from "@components/ui/Notice";
 import type { StepState, StepStatus } from "@hooks/usePipelineSteps";
@@ -22,71 +21,25 @@ const STATUS_LABEL: Record<StepStatus, string> = {
   skipped: "Skipped",
 };
 
-type PipelineMenuProps = {
+type PipelineButtonsProps = {
   // A job for this run is queued or running, so nothing new can be queued.
   disabled: boolean;
   onRunStep: (step: PipelineStep) => void;
   onRunAll: () => void;
 };
 
-// "Run pipeline" button with a dropdown: each step, then Run all. Closes on a
-// choice, Escape, or a click outside.
-export function PipelineMenu({ disabled, onRunStep, onRunAll }: PipelineMenuProps) {
-  const [open, setOpen] = useState(false);
-  const rootRef = useRef<HTMLDivElement>(null);
-  const menuId = useId();
-
-  useEffect(() => {
-    if (!open) return;
-    const onPointerDown = (e: PointerEvent) => {
-      if (!rootRef.current?.contains(e.target as Node)) setOpen(false);
-    };
-    const onKeyDown = (e: KeyboardEvent) => {
-      if (e.key === "Escape") setOpen(false);
-    };
-    document.addEventListener("pointerdown", onPointerDown);
-    document.addEventListener("keydown", onKeyDown);
-    return () => {
-      document.removeEventListener("pointerdown", onPointerDown);
-      document.removeEventListener("keydown", onKeyDown);
-    };
-  }, [open]);
-
-  const choose = (action: () => void) => {
-    setOpen(false);
-    action();
-  };
-
+// A button per step, then Run all. All disabled while a job for the run is active.
+export function PipelineButtons({ disabled, onRunStep, onRunAll }: PipelineButtonsProps) {
   return (
-    <div ref={rootRef} className={styles.menuRoot}>
-      <Button
-        variant="secondary"
-        disabled={disabled}
-        aria-expanded={open && !disabled}
-        aria-controls={menuId}
-        onClick={() => setOpen((current) => !current)}
-      >
-        {disabled ? "Pipeline running…" : "Run pipeline"}
-        <span aria-hidden="true">▾</span>
+    <div className={styles.buttons} role="group" aria-label="Run pipeline">
+      {PIPELINE_STEPS.map((step) => (
+        <Button key={step} variant="secondary" disabled={disabled} onClick={() => onRunStep(step)}>
+          {STEP_LABEL[step]}
+        </Button>
+      ))}
+      <Button disabled={disabled} onClick={onRunAll}>
+        Run all
       </Button>
-      {open && !disabled && (
-        <div id={menuId} className={styles.menu}>
-          {PIPELINE_STEPS.map((step) => (
-            <button
-              key={step}
-              type="button"
-              className={styles.item}
-              onClick={() => choose(() => onRunStep(step))}
-            >
-              {STEP_LABEL[step]}
-            </button>
-          ))}
-          <hr className={styles.divider} />
-          <button type="button" className={styles.item} onClick={() => choose(onRunAll)}>
-            Run all
-          </button>
-        </div>
-      )}
     </div>
   );
 }

@@ -14,7 +14,7 @@ import { useLastRunStore } from "@features/dashboard/state/lastRunStore";
 import { useDashboardRun } from "@features/dashboard/state/useDashboard";
 import styles from "./DashboardView.module.css";
 import { TrackMap } from "@features/dashboard/panels/TrackMap";
-import { PipelineMenu, PipelineStepList } from "@features/dashboard/panels/PipelineControls";
+import { PipelineButtons, PipelineStepList } from "@features/dashboard/panels/PipelineControls";
 import { usePipelineSteps } from "@hooks/usePipelineSteps";
 import SensorChartsPanel from "@components/charts/SensorChartPanel";
 
@@ -95,7 +95,7 @@ function RunDashboard() {
             <h2 id="track-map-heading" className={styles.panelHeading}>
               Track position
             </h2>
-            <PipelineMenu
+            <PipelineButtons
               disabled={pipeline.isBusy}
               onRunStep={pipeline.runStep}
               onRunAll={pipeline.runAll}

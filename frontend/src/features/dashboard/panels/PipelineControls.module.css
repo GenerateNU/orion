@@ -1,44 +1,10 @@
-/* Pipeline re-run controls in the track map panel: a dropdown button in the panel
+/* Pipeline re-run controls in the track map panel: a button per step in the panel
    header, and a status row per step. */
 
-.menuRoot {
-  position: relative;
-}
-
-.menu {
-  position: absolute;
-  top: calc(100% + var(--space-1));
-  right: 0;
-  z-index: 10;
+.buttons {
   display: flex;
-  flex-direction: column;
-  min-width: 160px;
-  padding: var(--space-1);
-  background: var(--bg-surface);
-  border: 1px solid var(--border-default);
-  border-radius: var(--radius-md);
-  box-shadow: 0 6px 20px rgb(0 0 0 / 0.15);
-}
-
-.item {
-  padding: 6px 10px;
-  font-size: 13px;
-  text-align: left;
-  color: var(--text-primary);
-  background: none;
-  border: 0;
-  border-radius: var(--radius-sm);
-  cursor: pointer;
-}
-
-.item:hover {
-  background: var(--bg-raised);
-}
-
-.divider {
-  margin: var(--space-1) 0;
-  border: 0;
-  border-top: 1px solid var(--border-default);
+  flex-wrap: wrap;
+  gap: var(--space-1);
 }
 
 .status {
