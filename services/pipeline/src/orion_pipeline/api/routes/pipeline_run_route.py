@@ -7,7 +7,9 @@ from orion_core.schemas.pipeline_run_schema import (
     PipelineRunCreate,
     PipelineRunResponse,
 )
+from orion_pipeline import steps  # noqa: F401  (importing registers every step)
 from orion_pipeline.jobs.job_queue import JobAlreadyActiveError, JobQueue
+from orion_pipeline.steps.step_registry import STEPS
 
 router = APIRouter(prefix="/runs", tags=["runs"])
 
@@ -23,9 +25,15 @@ def _queue(request: Request) -> JobQueue:
     "", response_model=PipelineRunResponse, status_code=status.HTTP_202_ACCEPTED
 )
 def create_run(body: PipelineRunCreate, request: Request) -> PipelineRunResponse:
-    """Queue a job for the worker. 409 if the run already has an active job."""
+    """Queue a job for the worker. 400 if `step` isn't a pipeline step, 409 if the
+    run already has an active job."""
+    if body.step is not None and body.step not in STEPS:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Unknown step '{body.step}'. Steps: {', '.join(STEPS)}",
+        )
     try:
-        job = _queue(request).enqueue(body.run_id)
+        job = _queue(request).enqueue(body.run_id, body.step)
     except JobAlreadyActiveError as exc:
         raise HTTPException(status_code=409, detail=str(exc)) from exc
     return PipelineRunResponse.model_validate(job)

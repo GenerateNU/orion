@@ -27,15 +27,16 @@ class JobQueue:
     def __init__(self, engine: Engine):
         self.engine = engine
 
-    def enqueue(self, run_id: str) -> PipelineRun:
-        """Queue a job for `run_id`. Raises JobAlreadyActiveError if one is already
-        queued or running, so the same run is never processed twice at once."""
+    def enqueue(self, run_id: str, step: str | None = None) -> PipelineRun:
+        """Queue a job for `run_id`: just `step`, or the whole pipeline if None.
+        Raises JobAlreadyActiveError if the run already has a queued or running
+        job, so the same run is never processed twice at once."""
         with Session(self.engine, expire_on_commit=False) as session, session.begin():
             active = session.scalar(select_active_pipeline_run(run_id))
             if active is not None:
                 raise JobAlreadyActiveError(active)
             session.execute(insert(Run).values(run_id=run_id).on_conflict_do_nothing())
-            job = PipelineRun(run_id=run_id)
+            job = PipelineRun(run_id=run_id, step=step)
             session.add(job)
         return job
 
