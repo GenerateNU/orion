@@ -22,6 +22,13 @@
   border-radius: var(--radius-lg);
 }
 
+.panelHeader {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-2);
+}
+
 .panelHeading {
   font-size: 14px;
   font-weight: 600;

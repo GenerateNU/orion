@@ -14,6 +14,8 @@ import { useLastRunStore } from "@features/dashboard/state/lastRunStore";
 import { useDashboardRun } from "@features/dashboard/state/useDashboard";
 import styles from "./DashboardView.module.css";
 import { TrackMap } from "@features/dashboard/panels/TrackMap";
+import { PipelineMenu, PipelineStepList } from "@features/dashboard/panels/PipelineControls";
+import { usePipelineSteps } from "@hooks/usePipelineSteps";
 import SensorChartsPanel from "@components/charts/SensorChartPanel";
 
 const dashboardRoute = getRouteApi("/runs/$runId/dashboard");
@@ -33,6 +35,8 @@ export default function DashboardView() {
 // state/useDashboard.ts and data through data/useDashboardData.ts.
 function RunDashboard() {
   const { runId, run, runIsLoading, runError } = useDashboardRun();
+  // Called here, not in the panel, so the menu and the step list share Run all's state.
+  const pipeline = usePipelineSteps(runId);
 
   const setLastRunId = useLastRunStore((state) => state.setLastRunId);
   useEffect(() => {
@@ -87,9 +91,17 @@ function RunDashboard() {
 
       <div className={styles.layout}>
         <section className={styles.panel} aria-labelledby="track-map-heading">
-          <h2 id="track-map-heading" className={styles.panelHeading}>
-            Track position
-          </h2>
+          <div className={styles.panelHeader}>
+            <h2 id="track-map-heading" className={styles.panelHeading}>
+              Track position
+            </h2>
+            <PipelineMenu
+              disabled={pipeline.isBusy}
+              onRunStep={pipeline.runStep}
+              onRunAll={pipeline.runAll}
+            />
+          </div>
+          <PipelineStepList steps={pipeline.steps} error={pipeline.error} />
           <TrackMap />
         </section>
         <section className={styles.panel} aria-labelledby="sensor-charts-heading">

@@ -11,6 +11,8 @@ export const PipelineRunResponseSchema = z.object({
   // Pipeline job id, not the Penelope run id.
   id: z.number().int(),
   run_id: z.string(),
+  // The one step this job runs; null for the whole pipeline.
+  step: z.string().nullable(),
   status: PipelineStatusSchema,
   error: z.string().nullable(),
   queued_at: DateTimeSchema,
@@ -18,8 +20,16 @@ export const PipelineRunResponseSchema = z.object({
 
 export type PipelineRunResponse = z.infer<typeof PipelineRunResponseSchema>;
 
+// The pipeline's steps, in the order they run. Mirrors the step names registered
+// in orion_pipeline/steps.
+export const PIPELINE_STEPS = ["clean_step", "state_step", "lap_step"] as const;
+
+export type PipelineStep = (typeof PIPELINE_STEPS)[number];
+
 export type PipelineRunCreate = {
   run_id: string;
+  // Run only this step; omit to run the whole pipeline.
+  step?: PipelineStep;
 };
 
 export type PipelineRunFilters = {
