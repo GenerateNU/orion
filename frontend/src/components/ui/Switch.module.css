@@ -3,7 +3,7 @@
    from the spacing tokens in global.css: a 16px-high track, 28px wide, with a
    thumb inset 2px. */
 
-.toggle {
+.switch {
   --switch-height: var(--space-3);
   --switch-inset: calc(var(--space-1) / 2);
   --switch-thumb: calc(var(--switch-height) - 2 * var(--switch-inset));
@@ -13,7 +13,6 @@
   display: inline-flex;
   align-items: center;
   gap: var(--space-2);
-  /* Same size as the track map's hint text. */
   font-size: 12px;
   color: var(--text-muted);
   cursor: pointer;
@@ -61,4 +60,13 @@
 .input:focus-visible + .track {
   outline: 2px solid var(--focus-ring);
   outline-offset: 2px;
+}
+
+.disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.disabled .input {
+  cursor: not-allowed;
 }
