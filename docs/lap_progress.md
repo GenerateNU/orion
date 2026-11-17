@@ -33,8 +33,12 @@ The ideal lap is picked from complete, normal laps only. A lap is left out if it
 | A lap with a hole in its data over 1 s | Its path has a gap in it. |
 | A lap over 1.5 × the median lap time | Long stops, or two laps merged by a missed crossing. |
 
-A run with fewer than 3 laps has no lap left, so it gets no percentages (every
-`lap_percent` stays NULL).
+A run with 1 or 2 laps has no lap left, so it gets no percentages (every
+`lap_percent` stays NULL). With 3 laps, only the middle one can be chosen, so it
+alone is the ruler. There is no fallback on purpose: the ruler must be one complete
+loop from the line back to the line, and a run's first and last laps aren't. If a
+run that drove many laps shows only 1 or 2, lap detection missed crossings (see
+docs/lap_detection.md).
 
 ## 2. Pick the ideal lap
 
@@ -42,6 +46,11 @@ The ideal lap is the ruler every lap is measured with. It is the **medoid**: the
 chosen lap whose line the other laps are closest to, on average. Each lap is redrawn
 with a point every 1 m from the start/finish line, then for each lap we measure how
 far the other laps' points are from it. The lap with the smallest average wins.
+
+Why redraw: raw points come every 10 ms, so they bunch up where the car is slow and
+pile up where it stops. A point every 1 m makes every meter of track, and every lap,
+count equally, and gives the ruler evenly spaced marks with a clear direction at
+each one.
 
 Then it is **lightly smoothed** (a closed spline that may move it about 0.25 m), which
 irons out GPS jitter and small hooks without moving the line.
@@ -101,15 +110,24 @@ rows (back to NULL), and this step fills them in again in the same job.
 
 ## 5. Backend
 
+The percentages are stored on positions (OrionDB), but graphs need them on sensor
+readings (Penelope), which have their own timestamps. The backend only matches the
+two by time; it computes and stores nothing.
+
 `GET /runs/{run_id}/sensors/data?...&with_lap_percent=true` adds two lists to every
 sensor series, one entry per reading:
 
 - `lap_percent`: the `lap_percent` of the nearest point in `estimated_car_state`
-  within 50 ms of the reading (after the GPS time offset), or null.
+  (by time, after the GPS time offset). Null if no point is within 50 ms. The
+  nearest point is used even if its own value is NULL, so the reading is null too.
 - `lap_id`: the lap whose `[start_time, end_time)` contains the reading (the last
-  lap includes its end), or null.
+  lap includes its end), or null. Positions don't store a lap, so it comes from
+  `laps` by time, like everywhere else.
 
-Without the flag the response is exactly as before.
+Without the flag the response is exactly as before. The steps: read the readings
+from Penelope (as before), read `time, lap_percent` for the window and the run's
+`laps` from OrionDB, then match (`attach_lap_progress` in `sensor_service.py`, using
+pandas `merge_asof`).
 
 ## Settings
 
