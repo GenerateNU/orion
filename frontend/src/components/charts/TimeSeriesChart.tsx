@@ -25,7 +25,6 @@ export type TimeSeriesChartProps = {
   ref?: Ref<TimeSeriesChartHandle>;
   series: ChartSeries[];
   height?: number;
-  yLabel?: string;
   visibleWindow?: TimeWindow | null;
   // A span drawn shaded behind the line, e.g. the hovered lap.
   shadeWindow?: TimeWindow | null;
@@ -77,7 +76,6 @@ export const TimeSeriesChart = ({
   ref,
   series,
   height = 600,
-  yLabel = "",
   visibleWindow = null,
   shadeWindow = null,
   onCommitWindow,
@@ -139,9 +137,7 @@ export const TimeSeriesChart = ({
           ticks: { stroke: (chart) => cssStyle(chart, "--border-default") },
         },
         {
-          // No label, no space reserved for one: callers can show the unit themselves.
-          label: yLabel || undefined,
-          labelGap: 8,
+          // No label, no space reserved for one: callers show the unit themselves.
           size: 48,
           values: (_chart, ticks, _axisIdx, _space, increment) => formatTicks(ticks, increment),
           stroke: (chart) => cssStyle(chart, "--text-muted"),
@@ -199,7 +195,7 @@ export const TimeSeriesChart = ({
         ],
       },
     }),
-    [height, yLabel, series],
+    [height, series],
   );
 
   useEffect(() => {

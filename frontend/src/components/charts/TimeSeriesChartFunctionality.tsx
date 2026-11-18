@@ -12,7 +12,7 @@ import {
   useVisibleWindow,
 } from "@features/dashboard/state/useDashboard";
 
-type DashboardTimeSeriesChartProps = Pick<TimeSeriesChartProps, "series" | "height" | "yLabel">;
+type DashboardTimeSeriesChartProps = Pick<TimeSeriesChartProps, "series" | "height">;
 
 // A TimeSeriesChart linked to the rest of the dashboard: the committed window is its
 // X range, hover anywhere (charts, track map) moves its cursor, and the hovered lap

@@ -26,7 +26,7 @@ export const clampHalf = (track: Track, halfM: number, maxHalfM = Infinity) =>
 // Half a typical lap's road, so the window is never longer than one lap. The
 // median, so a lap with a pit stop or a detour in it doesn't raise the cap.
 // Infinity (no cap beyond the run) when the run has no laps.
-export const lapHalfM = (track: Track, laps: readonly Lap[] | undefined) => {
+const lapHalfM = (track: Track, laps: readonly Lap[] | undefined) => {
   const lengths = (laps ?? [])
     .map((lap) => distanceAt(track, lap.window[1]) - distanceAt(track, lap.window[0]))
     .sort((a, b) => a - b);

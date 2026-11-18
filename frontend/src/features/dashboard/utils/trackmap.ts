@@ -10,7 +10,6 @@
  * The cached `time` array is read in place, never copied or mutated.
  */
 
-import type { Lap } from "@features/dashboard/utils/laps";
 import type { RunTime } from "@features/dashboard/utils/time";
 
 export type Point = { x: number; y: number };
@@ -390,38 +389,4 @@ export function nearestSample(
     }
   }
   return best < 0 ? null : { time: time[best] - startMs, dist: bestDist };
-}
-
-// How far from the START mark (SVG units, across the road) a crossing still
-// counts, and the least driving between two crossings for them to be laps
-// rather than GPS jitter around the line.
-const START_LINE_REACH = 4;
-const MIN_LAP_M = 200;
-
-/**
- * Laps from the track alone: one each time the car crosses the START line (the
- * run's first fix, as drawn) heading the way it started. The stretch after the
- * last crossing isn't a lap. A stand-in until the backend serves laps (/metrics).
- */
-export function startLineLaps(track: Track): Lap[] {
-  const { time, xs, ys, dist, startMs } = track;
-  const start = anchorAt(track, track.firstTime);
-  const dir = directionAt(track, start.index);
-  const along = (i: number) => (xs[i] - start.x) * dir.x + (ys[i] - start.y) * dir.y;
-  const across = (i: number) => Math.abs((xs[i] - start.x) * dir.y - (ys[i] - start.y) * dir.x);
-
-  const crossings: RunTime[] = [track.firstTime];
-  let lastM = dist[start.index];
-  for (let i = start.index + 1; i < time.length; i++) {
-    const h = i - 1;
-    if (!valid(track, h) || !valid(track, i) || time[i] - time[h] > GAP_MS) continue;
-    const a = along(h);
-    const b = along(i);
-    // Forwards over the line, near the mark, a lap's driving after the last one.
-    if (!(a < 0 && b >= 0) || Math.min(across(h), across(i)) > START_LINE_REACH) continue;
-    if (dist[i] - lastM < MIN_LAP_M) continue;
-    crossings.push(time[h] + (time[i] - time[h]) * (-a / (b - a)) - startMs);
-    lastM = dist[i];
-  }
-  return crossings.slice(1).map((end, k) => ({ id: k + 1, window: [crossings[k], end] as const }));
 }

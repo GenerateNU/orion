@@ -9,7 +9,6 @@ import { useStateEstimation } from "@hooks/useStateEstimation";
 import { useCommittedWindow, useDashboardRun } from "@features/dashboard/state/useDashboard";
 import { lapsFromMetrics, type Lap } from "@features/dashboard/utils/laps";
 import { snapWindow, toIsoRange, type TimeWindow } from "@features/dashboard/utils/time";
-import { makeTrack, startLineLaps } from "@features/dashboard/utils/trackmap";
 
 // The data panels draw, for the opened run. Each hook wraps an API hook from
 // hooks/ (one per backend route): windows go out as ISO ranges, and panels asking
@@ -58,34 +57,8 @@ export const useLaps = () => {
     select,
     enabled: !!timeline,
   });
-  // Until the backend serves laps (/metrics is still planned), find them from the
-  // START line on the track. Backend laps win once they exist.
-  const { positions } = useRunPositions("overview");
-  const fromTrack = useMemo(() => (positions ? lapsFromTrack(positions) : undefined), [positions]);
-  const laps = metrics && metrics.length > 0 ? metrics : fromTrack;
-  return {
-    laps,
-    lapsIsLoading: !laps && (metricsIsLoading || !positions),
-    lapsError: laps ? null : metricsError,
-  };
+  return { laps: metrics, lapsIsLoading: metricsIsLoading, lapsError: metricsError };
 };
-
-// START-line laps, worked out once per positions response: the map and every
-// chart ask, and the cached time array is a stable key.
-const startLineLapsCache = new WeakMap<Float64Array, Lap[]>();
-
-function lapsFromTrack(positions: RunPositions): Lap[] {
-  let laps = startLineLapsCache.get(positions.time);
-  if (!laps) {
-    const track =
-      positions.time.length > 0
-        ? makeTrack(positions.positions, positions.time, positions.startMs)
-        : null;
-    laps = track ? startLineLaps(track) : [];
-    startLineLapsCache.set(positions.time, laps);
-  }
-  return laps;
-}
 
 export type RunPositions = {
   // The run's start in epoch ms: RunTime = time[i] - startMs.

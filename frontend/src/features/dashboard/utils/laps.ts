@@ -23,10 +23,6 @@ export function lapsFromMetrics(metrics: MetricsResponse, timeline: RunTimeline)
 export const lapContaining = (laps: readonly Lap[], time: RunTime): Lap | undefined =>
   laps.find((lap) => time >= lap.window[0] && time <= lap.window[1]);
 
-// The id of the lap being driven at `time`, or null outside every lap.
-export const lapAt = (laps: readonly Lap[], time: RunTime): number | null =>
-  lapContaining(laps, time)?.id ?? null;
-
 // The window spanning the given laps, or null when none of them are known.
 export function lapsToWindow(laps: readonly Lap[], lapIds: readonly number[]): TimeWindow | null {
   const selected = laps.filter((lap) => lapIds.includes(lap.id));

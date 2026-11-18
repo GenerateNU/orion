@@ -4,8 +4,7 @@ import { createJSONStorage, persist } from "zustand/middleware";
 // The right pane's graph setup: tabs of graphs, each tab with its own layout. UI
 // config, not selection, so it lives here rather than in the URL (only the active
 // tab is also in ?view=). One store for the whole app, so every run shows the same
-// setup. Persisted to localStorage; kept plain JSON with a schema version so it
-// can move to the backend later.
+// setup. Persisted to localStorage.
 
 export type GraphLayout = 1 | 2;
 // One channel plotted over time; `channel` is a Penelope `dataTypeName`.
@@ -31,12 +30,10 @@ type GraphViewsState = {
   groupBySensor: () => void;
 };
 
-export const GRAPH_VIEWS_VERSION = 1;
-
 // Not crypto.randomUUID: it's missing outside secure contexts (the dev server on a LAN IP).
 const newId = () => Math.random().toString(36).slice(2, 10);
 
-export const DEFAULT_TAB_NAME = "Overview";
+const DEFAULT_TAB_NAME = "Overview";
 
 const newTab = (name: string, graphs: Graph[] = []): GraphTab => ({
   id: newId(),
@@ -49,7 +46,7 @@ const copyGraph = (graph: Graph): Graph => ({ ...graph, id: newId() });
 
 // The sensor a channel belongs to: its name without the last segment
 // ("TPU/GPS/Location" → "TPU/GPS").
-export const sensorOf = (channel: string) =>
+const sensorOf = (channel: string) =>
   channel.includes("/") ? channel.slice(0, channel.lastIndexOf("/")) : channel;
 
 const mapGraphs = (tabs: GraphTab[], update: (graphs: Graph[], tab: GraphTab) => Graph[]) =>
@@ -150,8 +147,6 @@ export const useGraphViews = create<GraphViewsState>()(
     }),
     {
       name: "orion-graph-views",
-      version: GRAPH_VIEWS_VERSION,
-      // The global, not window.localStorage, so it also works where there's no window (tests).
       storage: createJSONStorage(() => localStorage),
       partialize: ({ tabs, activeTabId }) => ({ tabs, activeTabId }),
     },

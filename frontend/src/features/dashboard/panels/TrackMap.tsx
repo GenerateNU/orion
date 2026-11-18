@@ -8,7 +8,7 @@ import {
   useDashboardActions,
   useHoverTimeSubscription,
 } from "@features/dashboard/state/useDashboard";
-import { lapAt, lapContaining } from "@features/dashboard/utils/laps";
+import { lapContaining } from "@features/dashboard/utils/laps";
 import type { RunTime, TimeWindow } from "@features/dashboard/utils/time";
 import {
   anchorAt,
@@ -152,7 +152,7 @@ export function TrackMap() {
   const showHover = useCallback(
     (time: RunTime | null) => {
       setHoverTime(time);
-      setHoverLap(time === null || !laps ? null : lapAt(laps, time));
+      setHoverLap(time === null || !laps ? null : (lapContaining(laps, time)?.id ?? null));
     },
     [setHoverTime, setHoverLap, laps],
   );
