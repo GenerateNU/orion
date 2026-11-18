@@ -26,7 +26,7 @@ export default defineConfig(({ mode }) => {
     test: { setupFiles: ["./src/test/setup.ts"] },
     server: {
       host: true,
-      port: 5173,
+      port: 3000,
       proxy: {
         "/api": { target: apiTarget, changeOrigin: true },
       },

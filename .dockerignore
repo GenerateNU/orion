@@ -3,7 +3,7 @@
 **/.pytest_cache
 **/.ruff_cache
 **/node_modules
-frontend
+frontend/dist
 backend
 .git
 .env
