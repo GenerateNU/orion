@@ -2,6 +2,8 @@
    DataTable component once a second table needs it. */
 
 .container {
+  /* .main is fixed-height; without this the clipped container would shrink. */
+  flex-shrink: 0;
   overflow: hidden;
   background: var(--bg-surface);
   border: 1px solid var(--border-default);

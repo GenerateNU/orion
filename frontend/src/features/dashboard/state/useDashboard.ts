@@ -131,6 +131,7 @@ export const useDashboardActions = () => {
             t: windowForLaps(laps, prev.t),
           };
         },
+        resetScroll: false,
       });
     };
 
@@ -144,6 +145,7 @@ export const useDashboardActions = () => {
       navigate({
         search: (prev: DashboardSearch): DashboardSearch => ({ ...prev, t: t ?? undefined }),
         replace: true,
+        resetScroll: false,
       });
     };
 

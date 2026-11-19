@@ -45,6 +45,8 @@ const routeTree = rootRoute.addChildren([indexRoute, runsRoute, dashboardRoute])
 
 export const router = createRouter({
   routeTree,
+  // Pages scroll inside <main>, not the window, so reset that on navigation.
+  scrollToTopSelectors: ["main"],
   // Search values stay strings in the URL (each route's validateSearch parses
   // them) and lists are written comma-separated: ?laps=3,7 rather than JSON.
   parseSearch: parseSearchWith((value) => value),
