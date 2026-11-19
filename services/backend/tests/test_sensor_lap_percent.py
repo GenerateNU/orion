@@ -8,6 +8,7 @@ import pytest
 from fastapi.testclient import TestClient
 
 from orion_backend.core.database import get_orion_db, get_penelope_db
+from orion_backend.core.exceptions import InvalidParameterError
 from orion_backend.main import app
 from orion_backend.repositories.lap_repository import LapRepository
 from orion_backend.repositories.sensor_repository import SensorRepository
@@ -149,48 +150,46 @@ def fake_dbs(monkeypatch):
     return calls
 
 
-def get_data(**kwargs):
+def get_lap(lap_id=1, **kwargs):
     service = SensorService(MagicMock(), MagicMock())
     return asyncio.run(
-        service.get_sensor_data("run", [GPS, OTHER], START, END, **kwargs)
+        service.get_sensor_data(
+            "run",
+            [GPS, OTHER],
+            lap_id=lap_id,
+            start_percent=20.0,
+            end_percent=40.0,
+            **kwargs,
+        )
     )
 
 
-def test_service_attaches_lap_progress_on_corrected_times(fake_dbs):
-    response = get_data(with_lap_percent=True)
+def test_service_by_lap_percent_attaches_lap_progress_on_corrected_times(fake_dbs):
+    response = get_lap()
 
+    assert fake_dbs[0] == ("lap_percent_times", "run", 1, 20.0, 40.0)
+    # OrionDB's naive UTC times come back timezone-aware, for Penelope.
+    assert (response.start, response.end) == (START, END)
     # The GPS reading is shifted to START + OFFSET, so it matches that position.
     assert response.series[GPS].lap_percent == [25.0]
     assert response.series[OTHER].lap_percent == [5.0]
     assert response.series[GPS].lap_id == response.series[OTHER].lap_id == [1]
     # OrionDB is asked for the window in naive UTC, widened by the tolerance.
-    assert fake_dbs[0] == ("lap_percents", "run", T0 - TOLERANCE, T0 + ms(60_050))
-    assert fake_dbs[1] == ("laps", "run")
+    assert fake_dbs[1] == ("lap_percents", "run", T0 - TOLERANCE, T0 + ms(60_050))
+    assert fake_dbs[2] == ("laps", "run")
 
 
-def test_service_without_the_flag_skips_oriondb(fake_dbs):
-    response = get_data()
+def test_service_by_time_skips_oriondb(fake_dbs):
+    service = SensorService(MagicMock(), MagicMock())
+    response = asyncio.run(service.get_sensor_data("run", [GPS, OTHER], START, END))
 
     assert fake_dbs == []
     assert response.series[GPS].lap_percent is None
-    assert set(response.series[GPS].model_dump(exclude_unset=True)) == {
-        "time",
-        "values",
-    }
 
 
-def test_service_by_lap_percent_reads_that_window(fake_dbs):
-    service = SensorService(MagicMock(), MagicMock())
-    response = asyncio.run(
-        service.get_sensor_data(
-            "run", [GPS, OTHER], lap_id=1, start_percent=20.0, end_percent=40.0
-        )
-    )
-
-    assert fake_dbs[0] == ("lap_percent_times", "run", 1, 20.0, 40.0)
-    # OrionDB's naive UTC times come back timezone-aware, for Penelope.
-    assert (response.start, response.end) == (START, END)
-    assert response.series[GPS].values == [[1.0, 2.0]]
+def test_service_by_lap_percent_needs_the_gps_offset(fake_dbs):
+    with pytest.raises(InvalidParameterError):
+        get_lap(gps_offset_on=False)
 
 
 @pytest.fixture
@@ -210,7 +209,7 @@ def get(client, **params):
     return client.get("/api/v1/runs/run/sensors/data", params={**query, **params})
 
 
-def test_route_without_the_flag_returns_the_old_response(client):
+def test_time_route_returns_the_old_response(client):
     response = get(client)
 
     assert response.status_code == 200
@@ -221,79 +220,60 @@ def test_route_without_the_flag_returns_the_old_response(client):
         OTHER: {"time", "values"},
     }
     assert body["series"][GPS]["values"] == [[1.0, 2.0]]
-    assert get(client, with_lap_percent="false").json() == body
-
-
-def test_route_with_the_flag_adds_lap_id_and_lap_percent(client):
-    response = get(client, with_lap_percent="true")
-
-    assert response.status_code == 200
-    gps = response.json()["series"][GPS]
-    assert gps["lap_id"] == [1]
-    assert gps["lap_percent"] == [25.0]
-    assert len(gps["lap_id"]) == len(gps["lap_percent"]) == len(gps["time"])
 
 
 def by_percent(client, **params):
     query = {
         "sensors": f"{GPS},{OTHER}",
-        "lap_id": 1,
+        "lap_ids": [1, 1],
         "start_percent": 20,
         "end_percent": 40,
     }
-    return client.get("/api/v1/runs/run/sensors/data", params={**query, **params})
+    return client.get("/api/v1/runs/run/laps/sensors/data", params={**query, **params})
 
 
-def test_route_by_lap_percent(client):
+def test_lap_route_returns_one_response_per_lap(client):
     response = by_percent(client)
 
     assert response.status_code == 200
-    assert response.json()["series"][GPS]["values"] == [[1.0, 2.0]]
+    body = response.json()
+    assert len(body) == 2
+    gps = body[0]["series"][GPS]
+    assert gps["values"] == [[1.0, 2.0]]
+    assert gps["lap_id"] == [1]
+    assert gps["lap_percent"] == [25.0]
 
 
 @pytest.mark.parametrize(
     "params",
     [
-        {"start_percent": None},  # part of the lap percent set
-        {"start": START.isoformat(), "end": END.isoformat()},  # both sets
+        {"lap_ids": None},  # no laps
+        {"lap_ids": "x"},  # not a lap id
         {"start_percent": 50},  # start above end
     ],
 )
-def test_route_by_lap_percent_rejects_bad_sets(client, params):
-    query = {
-        "sensors": f"{GPS},{OTHER}",
-        "lap_id": 1,
-        "start_percent": 20,
-        "end_percent": 40,
-    }
+def test_lap_route_rejects_bad_parameters(client, params):
+    query = {"sensors": GPS, "lap_ids": 1, "start_percent": 20, "end_percent": 40}
     query = {k: v for k, v in {**query, **params}.items() if v is not None}
-    response = client.get("/api/v1/runs/run/sensors/data", params=query)
+    response = client.get("/api/v1/runs/run/laps/sensors/data", params=query)
     assert response.status_code == 422
 
 
-def test_route_with_no_window_is_422(client):
+def test_time_route_with_no_window_is_422(client):
     response = client.get("/api/v1/runs/run/sensors/data", params={"sensors": GPS})
     assert response.status_code == 422
 
 
-def test_route_by_lap_percent_with_no_match_is_404(client):
-    assert by_percent(client, lap_id=2).status_code == 404
+def test_lap_route_with_no_match_is_404(client):
+    assert by_percent(client, lap_ids=[1, 2]).status_code == 404
 
 
-def test_route_still_503s_without_penelope(fake_dbs):
+def test_lap_route_still_503s_without_penelope(fake_dbs):
     app.dependency_overrides[get_orion_db] = lambda: MagicMock()
     app.state.sessionmakers = {}
     try:
-        response = get(TestClient(app), with_lap_percent="true")
+        response = by_percent(TestClient(app))
     finally:
         app.dependency_overrides.clear()
         del app.state.sessionmakers
     assert response.status_code == 503
-
-
-def test_new_fields_and_flag_show_in_the_openapi_docs(client):
-    spec = client.get("/openapi.json").json()
-    series = spec["components"]["schemas"]["SensorSeries"]["properties"]
-    assert {"lap_id", "lap_percent"} <= set(series)
-    params = spec["paths"]["/api/v1/runs/{run_id}/sensors/data"]["get"]["parameters"]
-    assert "with_lap_percent" in {p["name"] for p in params}

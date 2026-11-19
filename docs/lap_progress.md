@@ -18,7 +18,7 @@ lap_progress_step   1. pick the good laps
    ▼
 estimated_car_state.lap_percent   (0-100, or NULL)
    │
-backend             GET /runs/{id}/sensors/data?with_lap_percent=true
+backend             GET /runs/{id}/laps/sensors/data?lap_ids=3&lap_ids=5
                     gives every sensor reading its lap_id and lap_percent
 ```
 
@@ -114,8 +114,11 @@ The percentages are stored on positions (OrionDB), but graphs need them on senso
 readings (Penelope), which have their own timestamps. The backend only matches the
 two by time; it computes and stores nothing.
 
-`GET /runs/{run_id}/sensors/data?...&with_lap_percent=true` adds two lists to every
-sensor series, one entry per reading:
+`GET /runs/{run_id}/laps/sensors/data?sensors=...&lap_ids=3&lap_ids=5&start_percent=40&end_percent=80`
+returns one response per lap (the percents default to the whole lap). Each lap's
+window is the first and last time its `lap_percent` was in the range; the readings
+in it are read from Penelope as usual, and every sensor series gets two lists, one
+entry per reading:
 
 - `lap_percent`: the `lap_percent` of the nearest point in `estimated_car_state`
   (by time, after the GPS time offset). Null if no point is within 50 ms. The
@@ -124,10 +127,9 @@ sensor series, one entry per reading:
   lap includes its end), or null. Positions don't store a lap, so it comes from
   `laps` by time, like everywhere else.
 
-Without the flag the response is exactly as before. The steps: read the readings
-from Penelope (as before), read `time, lap_percent` for the window and the run's
-`laps` from OrionDB, then match (`attach_lap_progress` in `sensor_service.py`, using
-pandas `merge_asof`).
+The time-based `GET /runs/{run_id}/sensors/data` is unchanged and has no lap
+fields. Matching is `attach_lap_progress` in `sensor_service.py` (pandas
+`merge_asof`). A lap with no `lap_percent` in the range is a 404.
 
 ## Settings
 

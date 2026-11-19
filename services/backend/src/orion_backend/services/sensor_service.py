@@ -36,7 +36,6 @@ class SensorService:
         start: datetime | None = None,
         end: datetime | None = None,
         gps_offset_on: bool = True,
-        with_lap_percent: bool = False,
         lap_id: int | None = None,
         start_percent: float | None = None,
         end_percent: float | None = None,
@@ -45,13 +44,13 @@ class SensorService:
 
         Give either `start` and `end`, or `lap_id`, `start_percent` and
         `end_percent`. With the second, the window is the first and last time that
-        lap's `lap_percent` is in `[start_percent, end_percent]`.
+        lap's `lap_percent` is in `[start_percent, end_percent]`, and each series
+        also gets `lap_id` and `lap_percent` (see `attach_lap_progress`).
 
         With `gps_offset_on`, `gps_time_offset_s` is added to the times of lagged
         sensors (see `sensor_catalog`), and the window applies to the shifted times.
-        With `with_lap_percent`, each series also gets `lap_id` and `lap_percent`
-        (see `attach_lap_progress`), matched on those shifted times. A sensor with no
-        rows in the range (or an unknown run) comes back empty.
+        Lap percent queries need it on, since positions are on shifted times. A
+        sensor with no rows in the range (or an unknown run) comes back empty.
         """
         sensors = list(dict.fromkeys(sensors))
         if not sensors:
@@ -63,6 +62,8 @@ class SensorService:
                 raise InvalidParameterError(both)
             if start is not None or end is not None:
                 raise InvalidParameterError(both)
+            if not gps_offset_on:
+                raise InvalidParameterError("lap percent queries need `gps_offset_on`")
             start, end = await self.find_lap_percent_times(
                 run_id, lap_id, start_percent, end_percent
             )
@@ -85,7 +86,7 @@ class SensorService:
             series[reading["raw_tag"]].time.append(time)
             series[reading["raw_tag"]].values.append(reading["values"])
 
-        if with_lap_percent:
+        if lap_id is not None:
             # Positions just outside the window can still be a reading's nearest.
             positions = await self.laps.list_lap_percents(
                 run_id, to_utc(start) - self.tolerance, to_utc(end) + self.tolerance
@@ -116,7 +117,7 @@ class SensorService:
             run_id, lap_id, start_percent, end_percent
         )
         if start is None or end is None:
-            raise NotFoundError("lap", f"{run_id}/{lap_id}")
+            raise NotFoundError("lap_percent", f"{run_id}/{lap_id}")
         # OrionDB stores naive UTC; Penelope compares timezone-aware times.
         return start.replace(tzinfo=UTC), end.replace(tzinfo=UTC)
 

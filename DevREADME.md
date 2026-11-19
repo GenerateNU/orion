@@ -134,7 +134,8 @@ Penelope return 503, and the run list just omits Penelope's run times.
 | `GET /runs`, `GET/DELETE /runs/{run_id}` | OrionDB  |
 | `GET /penelope/runs`                | Penelope, each run flagged `processed` |
 | `GET /sensors`                      | Penelope      |
-| `GET /runs/{run_id}/sensors/data`   | Penelope (`with_lap_percent=true` adds `lap_id` / `lap_percent` from OrionDB) |
+| `GET /runs/{run_id}/sensors/data`   | Penelope      |
+| `GET /runs/{run_id}/laps/sensors/data` | Penelope, windowed and tagged with `lap_id` / `lap_percent` from OrionDB |
 | `GET /runs/{run_id}/state`          | OrionDB `estimated_car_state` |
 | `POST/GET /pipeline/runs`, `GET /pipeline/runs/{id}` | forwarded to the pipeline API |
 

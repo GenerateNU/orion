@@ -51,41 +51,56 @@ async def get_sensor_data(
             examples=["TPU/GPS/Location,BMS/Pack/SoC"],
         ),
     ],
-    start: Annotated[datetime | None, Query(description="Inclusive.")] = None,
-    end: Annotated[datetime | None, Query(description="Inclusive.")] = None,
-    lap_id: Annotated[int | None, Query(description="Lap id.")] = None,
-    start_percent: Annotated[float | None, Query(description="Inclusive.")] = None,
-    end_percent: Annotated[float | None, Query(description="Inclusive.")] = None,
-    with_lap_percent: Annotated[
-        bool,
-        Query(
-            description=(
-                "Also give every reading its `lap_id` and `lap_percent` (from OrionDB, "
-                "once the pipeline has processed the run)."
-            ),
-        ),
-    ] = False,
+    start: Annotated[datetime, Query(description="Inclusive.")],
+    end: Annotated[datetime, Query(description="Inclusive.")],
     service: SensorService = Depends(get_sensor_service),
 ) -> SensorDataResponse:
     """Every reading of the requested sensors between `start` and `end`, as stored in
     Penelope, with no downsampling.
 
-    Give either `start` and `end`, or `lap_id`, `start_percent` and `end_percent`
-    (e.g. lap 4 from 20% to 40%), which the backend turns into the times that lap
-    was in that range. A window is required so a request can't pull a whole run. A
-    sensor with no rows in the range (or an unknown run) comes back as an empty
-    series; a lap with no positions in the percent range is a 404. With
-    `with_lap_percent=true`, each series also has `lap_id` and `lap_percent`, lined up
-    with `time`; they're all null for a run the pipeline hasn't processed.
+    The time bounds are required so a request can't pull a whole run. A sensor with no
+    rows in the range (or an unknown run) comes back as an empty series.
     """
     names = [name.strip() for name in sensors.split(",") if name.strip()]
-    return await service.get_sensor_data(
-        run_id,
-        names,
-        start,
-        end,
-        with_lap_percent=with_lap_percent,
-        lap_id=lap_id,
-        start_percent=start_percent,
-        end_percent=end_percent,
-    )
+    return await service.get_sensor_data(run_id, names, start, end)
+
+
+@router.get(
+    "/runs/{run_id}/laps/sensors/data",
+    response_model=list[SensorDataResponse],
+    summary="Get sensor readings by lap percent",
+    responses=error_responses(404, 422, 502, 503),
+)
+async def get_lap_sensor_data(
+    run_id: Annotated[str, Path(description="Penelope run id.")],
+    sensors: Annotated[
+        str,
+        Query(
+            description="Comma-separated Penelope `dataTypeName`s.",
+            examples=["TPU/GPS/GroundSpeed,BMS/Pack/SoC"],
+        ),
+    ],
+    lap_ids: Annotated[list[int], Query(description="Repeat for each lap.")],
+    start_percent: Annotated[float, Query(description="Inclusive.")] = 0,
+    end_percent: Annotated[float, Query(description="Inclusive.")] = 100,
+    service: SensorService = Depends(get_sensor_service),
+) -> list[SensorDataResponse]:
+    """For each lap in `lap_ids` (e.g. `?lap_ids=3&lap_ids=5`), every reading of the
+    requested sensors while that lap was between `start_percent` and `end_percent`
+    (the whole lap by default). One response per lap, in the order given, with
+    `lap_id` and `lap_percent` lined up with each series' `time`.
+
+    A lap with no positions in the percent range is a 404 (e.g. the pipeline hasn't
+    processed the run, or it has fewer than 3 laps).
+    """
+    names = [name.strip() for name in sensors.split(",") if name.strip()]
+    return [
+        await service.get_sensor_data(
+            run_id,
+            names,
+            lap_id=lap_id,
+            start_percent=start_percent,
+            end_percent=end_percent,
+        )
+        for lap_id in lap_ids
+    ]
