@@ -5,7 +5,7 @@ from collections.abc import Iterable
 from datetime import datetime
 from typing import Any
 
-from sqlalchemy import Select, delete, exists, select, update
+from sqlalchemy import Select, delete, exists, func, select, update
 from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.sql.dml import ReturningDelete, ReturningInsert, ReturningUpdate
 
@@ -81,6 +81,28 @@ def select_lap_percents_between(
             EstimatedCarState.time.between(start, end),
         )
         .order_by(EstimatedCarState.time)
+    )
+
+
+def select_times_by_lap_percent(
+    run_id: str, lap_id: int, start_percent: float, end_percent: float
+) -> Select[datetime | None, datetime | None]:
+    """First and last time in one lap of one run with `lap_percent` in
+    [start_percent, end_percent]. Both NULL if no position matches. A lap covers
+    [start_time, end_time) of its `laps` row."""
+    return (
+        select(
+            func.min(EstimatedCarState.time).label("start_time"),
+            func.max(EstimatedCarState.time).label("end_time"),
+        )
+        .join(Lap, Lap.run_id == EstimatedCarState.run_id)
+        .where(
+            EstimatedCarState.run_id == run_id,
+            Lap.lap_id == lap_id,
+            EstimatedCarState.time >= Lap.start_time,
+            EstimatedCarState.time < Lap.end_time,
+            EstimatedCarState.lap_percent.between(start_percent, end_percent),
+        )
     )
 
 

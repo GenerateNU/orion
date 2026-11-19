@@ -4,7 +4,7 @@ import numpy as np
 import pandas as pd
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from orion_backend.core.exceptions import InvalidParameterError
+from orion_backend.core.exceptions import InvalidParameterError, NotFoundError
 from orion_backend.repositories.lap_repository import LapRepository
 from orion_backend.repositories.sensor_repository import SensorRepository
 from orion_backend.schemas.sensor_schema import (
@@ -33,12 +33,19 @@ class SensorService:
         self,
         run_id: str,
         sensors: list[str],
-        start: datetime,
-        end: datetime,
+        start: datetime | None = None,
+        end: datetime | None = None,
         gps_offset_on: bool = True,
         with_lap_percent: bool = False,
+        lap_id: int | None = None,
+        start_percent: float | None = None,
+        end_percent: float | None = None,
     ) -> SensorDataResponse:
         """Every reading of `sensors` in `[start, end]`, one series per sensor.
+
+        Give either `start` and `end`, or `lap_id`, `start_percent` and
+        `end_percent`. With the second, the window is the first and last time that
+        lap's `lap_percent` is in `[start_percent, end_percent]`.
 
         With `gps_offset_on`, `gps_time_offset_s` is added to the times of lagged
         sensors (see `sensor_catalog`), and the window applies to the shifted times.
@@ -49,6 +56,18 @@ class SensorService:
         sensors = list(dict.fromkeys(sensors))
         if not sensors:
             raise InvalidParameterError("`sensors` must name at least one sensor")
+
+        both = "give either `start` and `end`, or `lap_id`, `start_percent` and `end_percent`"
+        if lap_id is not None or start_percent is not None or end_percent is not None:
+            if lap_id is None or start_percent is None or end_percent is None:
+                raise InvalidParameterError(both)
+            if start is not None or end is not None:
+                raise InvalidParameterError(both)
+            start, end = await self.find_lap_percent_times(
+                run_id, lap_id, start_percent, end_percent
+            )
+        elif start is None or end is None:
+            raise InvalidParameterError(both)
         if start > end:
             raise InvalidParameterError("`start` must be at or before `end`")
 
@@ -80,6 +99,26 @@ class SensorService:
                 )
 
         return SensorDataResponse(run_id=run_id, start=start, end=end, series=series)
+
+    async def find_lap_percent_times(
+        self, run_id: str, lap_id: int, start_percent: float, end_percent: float
+    ) -> tuple[datetime, datetime]:
+        """The first and last time `lap_id`'s `lap_percent` is in
+        `[start_percent, end_percent]`, as UTC.
+
+        Raises NotFoundError if no position in the lap matches.
+        """
+        if start_percent > end_percent:
+            raise InvalidParameterError(
+                "`start_percent` must be at or below `end_percent`"
+            )
+        start, end = await self.laps.find_lap_percent_times(
+            run_id, lap_id, start_percent, end_percent
+        )
+        if start is None or end is None:
+            raise NotFoundError("lap", f"{run_id}/{lap_id}")
+        # OrionDB stores naive UTC; Penelope compares timezone-aware times.
+        return start.replace(tzinfo=UTC), end.replace(tzinfo=UTC)
 
 
 def to_utc(time: datetime) -> datetime:

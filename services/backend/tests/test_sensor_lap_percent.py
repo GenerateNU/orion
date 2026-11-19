@@ -137,9 +137,15 @@ def fake_dbs(monkeypatch):
         calls.append(("laps", *args))
         return list(LAPS.itertuples(index=False, name=None))
 
+    async def find_lap_percent_times(self, *args):
+        calls.append(("lap_percent_times", *args))
+        # Only lap 1 has positions in the range, from T0 to T0 + 1 minute.
+        return (T0, T0 + timedelta(minutes=1)) if args[1] == 1 else (None, None)
+
     monkeypatch.setattr(SensorRepository, "list_readings", list_readings)
     monkeypatch.setattr(LapRepository, "list_lap_percents", list_lap_percents)
     monkeypatch.setattr(LapRepository, "list_laps", list_laps)
+    monkeypatch.setattr(LapRepository, "find_lap_percent_times", find_lap_percent_times)
     return calls
 
 
@@ -171,6 +177,20 @@ def test_service_without_the_flag_skips_oriondb(fake_dbs):
         "time",
         "values",
     }
+
+
+def test_service_by_lap_percent_reads_that_window(fake_dbs):
+    service = SensorService(MagicMock(), MagicMock())
+    response = asyncio.run(
+        service.get_sensor_data(
+            "run", [GPS, OTHER], lap_id=1, start_percent=20.0, end_percent=40.0
+        )
+    )
+
+    assert fake_dbs[0] == ("lap_percent_times", "run", 1, 20.0, 40.0)
+    # OrionDB's naive UTC times come back timezone-aware, for Penelope.
+    assert (response.start, response.end) == (START, END)
+    assert response.series[GPS].values == [[1.0, 2.0]]
 
 
 @pytest.fixture
@@ -212,6 +232,52 @@ def test_route_with_the_flag_adds_lap_id_and_lap_percent(client):
     assert gps["lap_id"] == [1]
     assert gps["lap_percent"] == [25.0]
     assert len(gps["lap_id"]) == len(gps["lap_percent"]) == len(gps["time"])
+
+
+def by_percent(client, **params):
+    query = {
+        "sensors": f"{GPS},{OTHER}",
+        "lap_id": 1,
+        "start_percent": 20,
+        "end_percent": 40,
+    }
+    return client.get("/api/v1/runs/run/sensors/data", params={**query, **params})
+
+
+def test_route_by_lap_percent(client):
+    response = by_percent(client)
+
+    assert response.status_code == 200
+    assert response.json()["series"][GPS]["values"] == [[1.0, 2.0]]
+
+
+@pytest.mark.parametrize(
+    "params",
+    [
+        {"start_percent": None},  # part of the lap percent set
+        {"start": START.isoformat(), "end": END.isoformat()},  # both sets
+        {"start_percent": 50},  # start above end
+    ],
+)
+def test_route_by_lap_percent_rejects_bad_sets(client, params):
+    query = {
+        "sensors": f"{GPS},{OTHER}",
+        "lap_id": 1,
+        "start_percent": 20,
+        "end_percent": 40,
+    }
+    query = {k: v for k, v in {**query, **params}.items() if v is not None}
+    response = client.get("/api/v1/runs/run/sensors/data", params=query)
+    assert response.status_code == 422
+
+
+def test_route_with_no_window_is_422(client):
+    response = client.get("/api/v1/runs/run/sensors/data", params={"sensors": GPS})
+    assert response.status_code == 422
+
+
+def test_route_by_lap_percent_with_no_match_is_404(client):
+    assert by_percent(client, lap_id=2).status_code == 404
 
 
 def test_route_still_503s_without_penelope(fake_dbs):

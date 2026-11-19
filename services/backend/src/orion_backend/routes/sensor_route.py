@@ -40,7 +40,7 @@ async def list_sensors(
     # Leaves `lap_id` / `lap_percent` out entirely unless they were asked for.
     response_model_exclude_unset=True,
     summary="Get raw sensor readings",
-    responses=error_responses(422, 502, 503),
+    responses=error_responses(404, 422, 502, 503),
 )
 async def get_sensor_data(
     run_id: Annotated[str, Path(description="Penelope run id.")],
@@ -51,8 +51,11 @@ async def get_sensor_data(
             examples=["TPU/GPS/Location,BMS/Pack/SoC"],
         ),
     ],
-    start: Annotated[datetime, Query(description="Inclusive.")],
-    end: Annotated[datetime, Query(description="Inclusive.")],
+    start: Annotated[datetime | None, Query(description="Inclusive.")] = None,
+    end: Annotated[datetime | None, Query(description="Inclusive.")] = None,
+    lap_id: Annotated[int | None, Query(description="Lap id.")] = None,
+    start_percent: Annotated[float | None, Query(description="Inclusive.")] = None,
+    end_percent: Annotated[float | None, Query(description="Inclusive.")] = None,
     with_lap_percent: Annotated[
         bool,
         Query(
@@ -67,12 +70,22 @@ async def get_sensor_data(
     """Every reading of the requested sensors between `start` and `end`, as stored in
     Penelope, with no downsampling.
 
-    The time bounds are required so a request can't pull a whole run. A sensor with no
-    rows in the range (or an unknown run) comes back as an empty series. With
+    Give either `start` and `end`, or `lap_id`, `start_percent` and `end_percent`
+    (e.g. lap 4 from 20% to 40%), which the backend turns into the times that lap
+    was in that range. A window is required so a request can't pull a whole run. A
+    sensor with no rows in the range (or an unknown run) comes back as an empty
+    series; a lap with no positions in the percent range is a 404. With
     `with_lap_percent=true`, each series also has `lap_id` and `lap_percent`, lined up
     with `time`; they're all null for a run the pipeline hasn't processed.
     """
     names = [name.strip() for name in sensors.split(",") if name.strip()]
     return await service.get_sensor_data(
-        run_id, names, start, end, with_lap_percent=with_lap_percent
+        run_id,
+        names,
+        start,
+        end,
+        with_lap_percent=with_lap_percent,
+        lap_id=lap_id,
+        start_percent=start_percent,
+        end_percent=end_percent,
     )
