@@ -16,7 +16,7 @@ lap_progress_step   1. pick the good laps
    │                2. pick the ideal lap from them
    │                3. measure every point along the ideal lap
    ▼
-estimated_car_state.lap_percent   (0-100, or NULL)
+lap_progress        run_id, time, lap_id, lap_percent (0-100, or NULL)
    │
 backend             GET /runs/{id}/laps/sensors/data?lap_ids=3&lap_ids=5
                     gives every sensor reading its lap_id and lap_percent
@@ -33,8 +33,8 @@ The ideal lap is picked from complete, normal laps only. A lap is left out if it
 | A lap with a hole in its data over 1 s | Its path has a gap in it. |
 | A lap over 1.5 × the median lap time | Long stops, or two laps merged by a missed crossing. |
 
-A run with 1 or 2 laps has no lap left, so it gets no percentages (every
-`lap_percent` stays NULL). With 3 laps, only the middle one can be chosen, so it
+A run with 1 or 2 laps has no lap left, so it gets no percentages (no
+`lap_progress` rows). With 3 laps, only the middle one can be chosen, so it
 alone is the ruler. There is no fallback on purpose: the ruler must be one complete
 loop from the line back to the line, and a run's first and last laps aren't. If a
 run that drove many laps shows only 1 or 2, lap detection missed crossings (see
@@ -99,14 +99,16 @@ A point gets **NULL** (no percentage) when it is:
 
 ## 4. Where it is stored
 
-One nullable column, `estimated_car_state.lap_percent`. No extra tables: a point's
-lap always comes from the `laps` table by time, and the ideal lap is rebuilt each
-run and thrown away.
+The step's own table, `lap_progress`: one row per point of `estimated_car_state`
+(same `run_id` and `time`), with the `lap_id` the point falls in and its
+`lap_percent` (NULL where the point gets none). Off-track points keep their row so
+the backend's nearest-point matching (below) sees them as NULL. The ideal lap is
+rebuilt each run and thrown away.
 
-The step follows the normal step flow: `prepare` sets the run's column back to NULL,
-`transform` computes `(time, lap_percent)`, and `write` fills it in with one bulk
-update. So a re-run replaces the values. When `state_step` re-runs it rewrites the
-rows (back to NULL), and this step fills them in again in the same job.
+The step uses the default step flow: `prepare` deletes the run's rows, `transform`
+computes `(run_id, time, lap_id, lap_percent)`, and `write` appends them. So a
+re-run replaces the values, and `estimated_car_state` is only ever written by
+`state_step`.
 
 ## 5. Backend
 
@@ -120,12 +122,12 @@ window is the first and last time its `lap_percent` was in the range; the readin
 in it are read from Penelope as usual, and every sensor series gets two lists, one
 entry per reading:
 
-- `lap_percent`: the `lap_percent` of the nearest point in `estimated_car_state`
+- `lap_percent`: the `lap_percent` of the nearest point in `lap_progress`
   (by time, after the GPS time offset). Null if no point is within 50 ms. The
   nearest point is used even if its own value is NULL, so the reading is null too.
 - `lap_id`: the lap whose `[start_time, end_time)` contains the reading (the last
-  lap includes its end), or null. Positions don't store a lap, so it comes from
-  `laps` by time, like everywhere else.
+  lap includes its end), or null. It comes from `laps` by time, so readings get a
+  lap even where the step wrote no `lap_progress` rows.
 
 The time-based `GET /runs/{run_id}/sensors/data` is unchanged and has no lap
 fields. Matching is `attach_lap_progress` in `sensor_service.py` (pandas
@@ -179,6 +181,6 @@ uv run python services/pipeline/scripts/ideal_lap_viewer.py <run id>
 | Where | What |
 | --- | --- |
 | `services/pipeline/src/orion_pipeline/steps/lap_progress_step/` | The step (`lap_progress_step.py`), lap choice and medoid (`ideal_lap.py`), matching and percentages (`lap_progress_utils.py`) |
-| `services/pipeline/src/orion_pipeline/clients/oriondb_client.py` | `set_null_for_run` and `update_for_run` (the bulk update) |
+| `packages/orion_core/src/orion_core/models/orion/lap_progress_model.py` | The `lap_progress` table |
 | `services/backend/src/orion_backend/services/sensor_service.py` | `attach_lap_progress` |
 | `services/pipeline/tests/test_ideal_lap.py`, `test_lap_progress_step.py`, `test_oriondb_client.py`, `services/backend/tests/test_sensor_lap_percent.py` | Tests |

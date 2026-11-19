@@ -87,8 +87,9 @@ Run `make help` for the full list of shortcuts (`make up`, `make logs`, `make mi
 | `sensors`             | Our clean sensor names and units                                      |
 | `sensor_sources`      | Maps each Penelope `raw_tag` (`dataTypeName`) to a sensor             |
 | `cleaned_data`        | Output of the clean step: `run_id, time, sensor, values`              |
-| `estimated_car_state` | Output of state estimation: `run_id, time, lattitude, longitude`, plus `lap_percent` from the lap progress step |
+| `estimated_car_state` | Output of state estimation: `run_id, time, lattitude, longitude`      |
 | `laps`                | Output of the lap step: `run_id, lap_id, start_time, end_time`        |
+| `lap_progress`        | Output of the lap progress step: `run_id, time, lap_id, lap_percent`  |
 
 Naming: **`run_id`** (a string) identifies a run everywhere. **`raw_tag`** is Penelope's
 name for a sensor, and **`sensor`** is our cleaned name for it.
@@ -181,7 +182,7 @@ step reads that table back, so any step can be re-run on its own.
 | `clean_step` | Penelope `data`        | `cleaned_data`        | Done: maps `raw_tag` → sensor via `sensor_sources`, applies GPS time offset |
 | `state_step` | `cleaned_data`         | `estimated_car_state` | Done: UKF + smoother position estimates |
 | `lap_step`   | `estimated_car_state`  | `laps`                | Done: see [docs/lap_detection.md](docs/lap_detection.md) |
-| `lap_progress_step` | `estimated_car_state`, `laps` | `estimated_car_state.lap_percent` | Done: see [docs/lap_progress.md](docs/lap_progress.md) |
+| `lap_progress_step` | `estimated_car_state`, `laps` | `lap_progress` | Done: see [docs/lap_progress.md](docs/lap_progress.md) |
 
 To add a step, create `steps/<name>_step/<name>_step.py`, set `name`, `depends_on`,
 `reads_from`, `output_table` and `pagination_key`, decorate the class with

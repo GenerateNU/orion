@@ -13,6 +13,7 @@ from orion_core.models.orion import (
     CleanedData,
     EstimatedCarState,
     Lap,
+    LapProgress,
     PipelineRun,
     PipelineStatus,
     Run,
@@ -75,12 +76,12 @@ def select_lap_percents_between(
     """`lap_percent` of each estimated position for one run in [start, end],
     ordered by time. NULL where the lap progress step gave the point none."""
     return (
-        select(EstimatedCarState.time, EstimatedCarState.lap_percent)
+        select(LapProgress.time, LapProgress.lap_percent)
         .where(
-            EstimatedCarState.run_id == run_id,
-            EstimatedCarState.time.between(start, end),
+            LapProgress.run_id == run_id,
+            LapProgress.time.between(start, end),
         )
-        .order_by(EstimatedCarState.time)
+        .order_by(LapProgress.time)
     )
 
 
@@ -88,21 +89,14 @@ def select_times_by_lap_percent(
     run_id: str, lap_id: int, start_percent: float, end_percent: float
 ) -> Select[datetime | None, datetime | None]:
     """First and last time in one lap of one run with `lap_percent` in
-    [start_percent, end_percent]. Both NULL if no position matches. A lap covers
-    [start_time, end_time) of its `laps` row."""
-    return (
-        select(
-            func.min(EstimatedCarState.time).label("start_time"),
-            func.max(EstimatedCarState.time).label("end_time"),
-        )
-        .join(Lap, Lap.run_id == EstimatedCarState.run_id)
-        .where(
-            EstimatedCarState.run_id == run_id,
-            Lap.lap_id == lap_id,
-            EstimatedCarState.time >= Lap.start_time,
-            EstimatedCarState.time < Lap.end_time,
-            EstimatedCarState.lap_percent.between(start_percent, end_percent),
-        )
+    [start_percent, end_percent]. Both NULL if no position matches."""
+    return select(
+        func.min(LapProgress.time).label("start_time"),
+        func.max(LapProgress.time).label("end_time"),
+    ).where(
+        LapProgress.run_id == run_id,
+        LapProgress.lap_id == lap_id,
+        LapProgress.lap_percent.between(start_percent, end_percent),
     )
 
 

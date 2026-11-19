@@ -12,8 +12,7 @@ from orion_core.queries.orion_queries import (
 
 
 class LapRepository:
-    """Reads OrionDB `laps` and `estimated_car_state.lap_percent` through the shared
-    query builders."""
+    """Reads OrionDB `laps` and `lap_progress` through the shared query builders."""
 
     def __init__(self, db: AsyncSession):
         self.db = db

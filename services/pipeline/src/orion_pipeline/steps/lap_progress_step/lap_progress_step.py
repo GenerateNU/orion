@@ -29,10 +29,10 @@ from orion_pipeline.steps.step_registry import register_step
 class LapProgressStep(PipelineStep):
     """Gives every estimated position a percentage around the run's ideal lap.
 
-    DB TABLES: FROM Orion[estimated_car_state, laps] -> TO Orion[estimated_car_state]
+    DB TABLES: FROM Orion[estimated_car_state, laps] -> TO Orion[lap_progress]
 
     Schema: FROM [time, lattitude, longitude], [lap_id, start_time, end_time]
-    -> TO [time, lap_percent]
+    -> TO [run_id, time, lap_id, lap_percent]
 
     Like the lap step, it reads the whole run at once: the ideal lap needs every
     lap. See docs/lap_progress.md.
@@ -41,7 +41,7 @@ class LapProgressStep(PipelineStep):
     name = "lap_progress_step"
     depends_on = ("lap_step",)
     reads_from = "oriondb"
-    output_table = "estimated_car_state"
+    output_table = "lap_progress"
     # Required by PipelineStep, but unused: `extract` reads the run in one frame.
     pagination_key = ("time",)
 
@@ -69,8 +69,9 @@ class LapProgressStep(PipelineStep):
             ctx: The job being run.
 
         Returns:
-            `time` and `lap_percent` for every position, NaN where the car is off
-            track. Empty if no lap qualifies to be the ideal lap (see `choose_laps`).
+            `lap_progress` rows (`run_id`, `time`, `lap_id`, `lap_percent`) for
+            every position, `lap_percent` NaN where the car is off track. Empty if
+            no lap qualifies to be the ideal lap (see `choose_laps`).
         """
         times = df["time"]
         lap_ids = df["lap_id"].to_numpy(dtype=np.int64)
@@ -83,7 +84,7 @@ class LapProgressStep(PipelineStep):
             max_lap_time_ratio=ctx.lap_progress_max_lap_time_ratio,
         )
         if not chosen:
-            return pd.DataFrame(columns=["time", "lap_percent"])
+            return pd.DataFrame(columns=["run_id", "time", "lap_id", "lap_percent"])
 
         laps = [
             resample(x[lap_ids == i], y[lap_ids == i], ctx.lap_progress_spacing_m)
@@ -126,12 +127,11 @@ class LapProgressStep(PipelineStep):
         percent = lap_percentages(
             s, lap_ids, ideal.length_m, ctx.lap_progress_gate_margin_m
         )
-        return pd.DataFrame({"time": times.to_numpy(), "lap_percent": percent})
-
-    def prepare(self, ctx: RunContext) -> None:
-        """Clear the run's `lap_percent`, so a re-run replaces the values."""
-        self.writer.set_null_for_run(self.output_table, "lap_percent", ctx.run_id)
-
-    def write(self, df: pd.DataFrame, ctx: RunContext) -> None:
-        """Fill in `lap_percent` on the run's existing rows, matched by time."""
-        self.writer.update_for_run(self.output_table, ctx.run_id, df)
+        return pd.DataFrame(
+            {
+                "run_id": ctx.run_id,
+                "time": times.to_numpy(),
+                "lap_id": lap_ids,
+                "lap_percent": percent,
+            }
+        )

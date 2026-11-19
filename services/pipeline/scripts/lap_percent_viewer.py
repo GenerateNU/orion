@@ -7,8 +7,8 @@ same percentage on the ideal lap. If the percentages line up, the dots sit
 together, across the track from the star. The title gives how far each lap's
 dot is from the star.
 
-Reads `lap_percent` from `estimated_car_state`, so run the pipeline (or the lap
-progress step) for the run first.
+Reads `lap_progress`, so run the pipeline (or the lap progress step) for the
+run first.
 
 Run from the repo root, with a full run id or a unique prefix. The database is
 ORION_DATABASE_URL (from the environment or .env), or the local orion-db
@@ -33,8 +33,7 @@ from matplotlib.widgets import Slider
 from numpy.typing import NDArray
 from sqlalchemy import select
 
-from orion_core.models.orion import EstimatedCarState, Lap
-from orion_core.queries.orion_queries import select_laps
+from orion_core.models.orion import EstimatedCarState, Lap, LapProgress
 from orion_core.settings import SettingsError, get_settings
 
 # The local orion-db container from docker compose (see .env.example), used
@@ -53,7 +52,6 @@ from orion_core.db.engines import make_sync_engine  # noqa: E402
 from orion_pipeline.clients.oriondb_client import OrionDBClient  # noqa: E402
 from orion_pipeline.runner.run_context import RunContext  # noqa: E402
 from orion_pipeline.steps.lap_progress_step.ideal_lap import (  # noqa: E402
-    assign_lap_ids,
     choose_laps,
     find_medoid,
     lap_stats,
@@ -159,12 +157,18 @@ def main() -> None:
             EstimatedCarState.time,
             EstimatedCarState.lattitude,
             EstimatedCarState.longitude,
-            EstimatedCarState.lap_percent,
+            LapProgress.lap_id,
+            LapProgress.lap_percent,
+        )
+        .join(
+            LapProgress,
+            (LapProgress.run_id == EstimatedCarState.run_id)
+            & (LapProgress.time == EstimatedCarState.time),
         )
         .where(EstimatedCarState.run_id == run_id)
         .order_by(EstimatedCarState.time)
     )
-    lap_ids = assign_lap_ids(points["time"], client.read_frame(select_laps(run_id)))
+    lap_ids = points["lap_id"].to_numpy(dtype=np.int64)
     x, y = to_local_xy(points["lattitude"], points["longitude"])
     percent = points["lap_percent"].to_numpy(dtype=np.float64)
 

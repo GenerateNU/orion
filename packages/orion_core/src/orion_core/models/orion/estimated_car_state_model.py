@@ -15,6 +15,3 @@ class EstimatedCarState(Base):
     time: Mapped[datetime] = mapped_column(DateTime, primary_key=True)
     lattitude: Mapped[float] = mapped_column(FLOAT)
     longitude: Mapped[float] = mapped_column(FLOAT)
-    # 0-100 around the run's ideal lap, NULL off track. Written by lap_progress_step.
-    # See docs/lap_progress.md.
-    lap_percent: Mapped[float | None] = mapped_column(FLOAT, nullable=True)

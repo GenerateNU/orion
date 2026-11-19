@@ -127,18 +127,17 @@ def track_frame(x: np.ndarray, y: np.ndarray) -> pd.DataFrame:
 def run_step(positions: pd.DataFrame, laps: pd.DataFrame, **ctx_overrides):
     """Run the step without a database.
 
-    Returns (the frame written with `update_for_run`, plus each point's lap_id
-    for the assertions, or None if nothing was written; the writer mock).
+    Returns (the frame written with `append`, or None if nothing was written;
+    the writer mock).
     """
     reader = MagicMock()
     reader.read_frame.side_effect = [positions, laps]
     writer = MagicMock()
     ctx = RunContext(run_id="run-1", **ctx_overrides)
     LapProgressStep(reader=reader, writer=writer).run(ctx)
-    if not writer.update_for_run.called:
+    if not writer.append.called:
         return None, writer
-    progress = writer.update_for_run.call_args.args[2]
-    return progress.assign(lap_id=assign_lap_ids(progress["time"], laps)), writer
+    return writer.append.call_args.args[1], writer
 
 
 VARIED_LAPS = [
@@ -163,7 +162,11 @@ def test_same_place_gets_same_percentage_across_speeds_and_lines():
     positions, laps, u = drive(VARIED_LAPS)
     progress, _ = run_step(positions, laps)
 
-    assert list(progress.columns[:2]) == ["time", "lap_percent"]
+    assert list(progress.columns) == ["run_id", "time", "lap_id", "lap_percent"]
+    assert (progress["run_id"] == "run-1").all()
+    assert (
+        progress["lap_id"].tolist() == assign_lap_ids(positions["time"], laps).tolist()
+    )
     assert progress["lap_percent"].notna().all()
     grid = np.linspace(0.02, 0.98, 49)
     per_lap = np.array([percent_at(progress, u, lap, grid) for lap in laps["lap_id"]])
@@ -249,16 +252,14 @@ def test_tunables_come_from_the_run_context():
     assert progress["lap_percent"].isna().all()
 
 
-def test_rerun_clears_column_before_update():
+def test_rerun_replaces_the_runs_rows():
     positions, laps, _ = drive(VARIED_LAPS[:4])
     _, writer = run_step(positions, laps)
 
     names = [c[0] for c in writer.method_calls]
-    assert names == ["set_null_for_run", "update_for_run"]
-    writer.set_null_for_run.assert_called_once_with(
-        "estimated_car_state", "lap_percent", "run-1"
-    )
-    assert writer.update_for_run.call_args.args[:2] == ("estimated_car_state", "run-1")
+    assert names == ["delete_for_run", "append"]
+    writer.delete_for_run.assert_called_once_with("lap_progress", "run-1")
+    assert writer.append.call_args.args[0] == "lap_progress"
 
 
 def test_too_few_laps_writes_nothing():
@@ -266,9 +267,9 @@ def test_too_few_laps_writes_nothing():
     positions, laps, _ = drive(VARIED_LAPS[:2])
     progress, writer = run_step(positions, laps)
 
-    # An empty frame, which `update_for_run` skips: every lap_percent stays NULL.
+    # An empty frame, which `append` skips: the run has no lap_progress rows.
     assert progress.empty
-    writer.set_null_for_run.assert_called_once()
+    writer.delete_for_run.assert_called_once()
 
 
 def test_empty_run_writes_nothing():
@@ -279,8 +280,8 @@ def test_empty_run_writes_nothing():
     writer = MagicMock()
     LapProgressStep(reader=reader, writer=writer).run(RunContext(run_id="run-1"))
 
-    writer.set_null_for_run.assert_called_once()
-    writer.update_for_run.assert_not_called()
+    writer.delete_for_run.assert_called_once()
+    writer.append.assert_not_called()
 
 
 # Distances along a 100 m ideal lap -> percentages, all one lap unless noted.
