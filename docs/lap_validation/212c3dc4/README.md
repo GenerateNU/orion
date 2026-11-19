@@ -10,17 +10,14 @@
 
 ## After: 30 m gate
 
-![Path with the 30 m gate](after_30m_gate.png)
-
 The gate isn't at the run's first point. The car starts off the loop at (0, 0)
 and joins it, so the first revisit, and therefore the gate, is on the loop at
-about (9, −3) m. That is correct. The pass 2.4 s into the run (the orange circle)
-is the car joining the loop. It falls under the 10 s minimum lap time, so it is
-dropped, as it should be. Every other pass is counted, and the re-run matches
-the stored `laps` table.
+about (9, −3) m. That is correct. The pass 2.4 s into the run is the car joining
+the loop. It falls under the 10 s minimum lap time, so it is dropped, as it
+should be. Every other pass is counted, and the re-run matches the stored `laps`
+table.
 
-There is no screenshot of the 10 m gate for this run. The "10 m gate" column
-below was reconstructed by recounting crossings with a 5 m half-width on the same
+The "10 m gate" column below was reconstructed by recounting crossings with a 5 m half-width on the same
 positions and the same gate.
 
 ## True vs detected laps

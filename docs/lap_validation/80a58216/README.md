@@ -10,8 +10,6 @@
 
 ## Before: 10 m gate
 
-![Path with the original 10 m gate](before_10m_gate.png)
-
 The gate was placed correctly, at the run's first point on the start/finish
 straight, but it was only 10 m long. The car's line through the start/finish
 spread across about 20 m of track from lap to lap, roughly 5 m west to 15 m east
@@ -19,8 +17,6 @@ of the gate center. Most passes went beside the gate, so only 3 of 8 crossings
 were counted and neighboring laps were merged.
 
 ## After: 30 m gate
-
-![Path with the 30 m gate](after_30m_gate.png)
 
 With the wider gate, every pass is counted. The re-run gate's boundaries match
 the stored `laps` table exactly.
@@ -58,4 +54,4 @@ No extra laps were detected, and the gate was in the right place.
   | 12.5 m – 30 m | 8 |
 
 - **Lap 6** (77 s) is about 30 s slower than the other full laps. Its boundaries
-  were checked in the viewer, so it is a slow lap, not a merged one.
+  were checked on the path, so it is a slow lap, not a merged one.
