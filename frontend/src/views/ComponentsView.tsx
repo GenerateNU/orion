@@ -3,6 +3,7 @@ import {
   Calendar,
   Copy,
   Download,
+  Link,
   MoreHorizontal,
   Pencil,
   Plus,
@@ -10,7 +11,9 @@ import {
   Route,
   Trash2,
 } from "lucide-react";
+import Breadcrumb, { BreadcrumbCurrent, BreadcrumbLink } from "@components/layout/Breadcrumb";
 import PageHeader from "@components/layout/PageHeader";
+import TopBar, { TopBarLink, TopBarNav } from "@components/layout/TopBar";
 import StatusBadge from "@components/runs/StatusBadge";
 import Avatar from "@components/ui/Avatar";
 import Button from "@components/ui/Button";
@@ -45,6 +48,44 @@ export default function ComponentsView() {
   return (
     <>
       <PageHeader title="Components" description="components/ui next to the Orion Figma library." />
+
+      <Section title="Top Bar">
+        <div className={styles.stack}>
+          <TopBar
+            actions={
+              <>
+                <Search
+                  aria-label="Search signals"
+                  placeholder="Search 340 signals…"
+                  shortcut
+                  className={styles.topBarSearch}
+                />
+                <Avatar initials="CW" name="Casey Wu" />
+              </>
+            }
+          >
+            <TopBarNav>
+              <TopBarLink to="/runs">Runs</TopBarLink>
+              <TopBarLink to="/components">Components</TopBarLink>
+            </TopBarNav>
+          </TopBar>
+          <TopBar
+            actions={
+              <>
+                <Button variant="secondary" size="sm">
+                  <Link /> Share
+                </Button>
+                <Avatar initials="CW" name="Casey Wu" />
+              </>
+            }
+          >
+            <Breadcrumb>
+              <BreadcrumbLink to="/runs">Runs</BreadcrumbLink>
+              <BreadcrumbCurrent>Shakedown - Endurance sim</BreadcrumbCurrent>
+            </Breadcrumb>
+          </TopBar>
+        </div>
+      </Section>
 
       <Section title="Button">
         {(["md", "sm"] as const).map((size) =>
@@ -123,7 +164,7 @@ export default function ComponentsView() {
 
       <Section title="Search, Checkbox, Toggle">
         <div className={styles.row}>
-          <Search aria-label="Search signals" placeholder="Search 340 signals…" shortcut />
+          <Search aria-label="Search signals" placeholder="Search 340 signals…" />
           <Checkbox aria-label="Off" />
           <Checkbox aria-label="On" defaultChecked />
           <Checkbox aria-label="Mixed" indeterminate />
