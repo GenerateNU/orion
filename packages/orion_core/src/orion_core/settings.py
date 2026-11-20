@@ -34,7 +34,7 @@ class Settings(BaseSettings):
     # Searching for the gate only looks at every Nth point. 1 uses every point.
     lap_gate_search_sample_every: int = 5
     # The gate reaches this far on each side of its center, in meters.
-    lap_gate_half_width_m: float = 5.0
+    lap_gate_half_width_m: float = 15.0
     # Minimum time between two counted gate crossings, in seconds.
     lap_min_lap_time_s: float = 10.0
 
