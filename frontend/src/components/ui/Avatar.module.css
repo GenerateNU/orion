@@ -1,0 +1,15 @@
+.avatar {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  width: 28px;
+  height: 28px;
+  font: var(--type-label-m);
+  letter-spacing: var(--tracking-label);
+  text-transform: uppercase;
+  color: var(--text-accent);
+  background: var(--accent-gold-subtle);
+  border: 1px solid var(--border-accent);
+  border-radius: var(--radius-pill);
+}

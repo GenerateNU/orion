@@ -1,16 +1,55 @@
+/* Padding is Figma's minus the 1px border. */
 .notice {
-  padding: var(--space-2) var(--space-3);
-  font-size: 13px;
-  border-radius: var(--radius-sm);
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-2-5);
+  padding: calc(var(--space-2-5) - 1px) calc(var(--space-3) - 1px);
+  color: var(--notice-color);
+  background: var(--notice-subtle);
+  border: 1px solid var(--notice-color);
+  border-radius: var(--radius-md);
 }
 
 /* Tones: class names match NoticeProps["tone"]. */
-.warning {
-  color: var(--status-queued);
-  background: var(--status-queued-tint);
+.error {
+  --notice-color: var(--status-error);
+  --notice-subtle: var(--status-error-subtle);
 }
 
-.error {
-  color: var(--status-failed);
-  background: var(--status-failed-tint);
+.warning {
+  --notice-color: var(--status-warning);
+  --notice-subtle: var(--status-warning-subtle);
+}
+
+.info {
+  --notice-color: var(--status-info);
+  --notice-subtle: var(--status-info-subtle);
+}
+
+.icon {
+  width: 20px;
+  height: 20px;
+}
+
+.text {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-0-5);
+  min-width: 0;
+}
+
+.title {
+  font: var(--type-heading-h4);
+  color: var(--text-primary);
+}
+
+/* Children without a title: a single line of body text. */
+.message {
+  font: var(--type-body-m);
+  color: var(--text-primary);
+}
+
+.description {
+  font: var(--type-body-s);
+  color: var(--text-secondary);
 }

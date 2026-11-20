@@ -1,0 +1,9 @@
+.tooltip {
+  padding: var(--space-1) var(--space-2);
+  font: var(--type-body-s-medium);
+  color: var(--text-inverse);
+  background: var(--bg-inverse);
+  border-radius: var(--radius-sm);
+  box-shadow: var(--shadow-popover);
+  z-index: 100;
+}

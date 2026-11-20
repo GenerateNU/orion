@@ -1,0 +1,36 @@
+.control {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-0-5);
+  padding: var(--space-0-5);
+  background: var(--bg-surface);
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-md);
+}
+
+.segment {
+  display: inline-flex;
+  align-items: center;
+  min-height: 28px;
+  padding: var(--space-1) var(--space-2-5);
+  font: var(--type-body-s-medium);
+  color: var(--text-muted);
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.segment:hover {
+  color: var(--text-primary);
+}
+
+.segment:has(:checked) {
+  color: var(--text-primary);
+  background: var(--bg-active);
+  box-shadow: var(--shadow-card);
+}
+
+/* The radio is visually hidden, so its focus ring goes on the segment. */
+.segment:has(:focus-visible) {
+  outline: 3px solid color-mix(in srgb, var(--focus-ring) 60%, transparent);
+}

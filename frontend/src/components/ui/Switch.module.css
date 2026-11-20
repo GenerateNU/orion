@@ -50,7 +50,7 @@
 }
 
 .input:checked + .track {
-  background: var(--status-processing);
+  background: var(--status-info);
 }
 
 .input:checked + .track .thumb {

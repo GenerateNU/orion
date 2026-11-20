@@ -17,6 +17,7 @@ import App from "./App";
 //   /                        → redirect to /runs
 //   /runs                    → RunsView
 //   /runs/$runId/dashboard   → DashboardView, selection in ?t=&laps= (utils/search.ts)
+//   /components              → ComponentsView, dev builds only (components/ui gallery)
 
 const rootRoute = createRootRoute({ component: App });
 
@@ -41,7 +42,18 @@ const dashboardRoute = createRoute({
   component: lazyRouteComponent(() => import("@features/dashboard/DashboardView")),
 });
 
-const routeTree = rootRoute.addChildren([indexRoute, runsRoute, dashboardRoute]);
+const componentsRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: "/components",
+  component: lazyRouteComponent(() => import("@views/ComponentsView")),
+});
+
+const routeTree = rootRoute.addChildren([
+  indexRoute,
+  runsRoute,
+  dashboardRoute,
+  ...(import.meta.env.DEV ? [componentsRoute] : []),
+]);
 
 export const router = createRouter({
   routeTree,

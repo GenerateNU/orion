@@ -1,6 +1,8 @@
 import { useId, useState } from "react";
+import { MoreHorizontal } from "lucide-react";
 import EmptyState from "@components/ui/EmptyState";
-import Menu from "@components/ui/Menu";
+import IconButton from "@components/ui/IconButton";
+import Menu, { MenuItem, MenuSeparator } from "@components/ui/Menu";
 import { useSensors } from "@hooks/useSensors";
 import {
   useGraphViews,
@@ -127,26 +129,28 @@ export default function SensorChartsPanel({ height = 260 }: { height?: number })
             <option value={2}>2 columns</option>
           </select>
           <Menu
-            label="Tab options"
-            items={[
-              { label: "Rename tab", onSelect: () => setRenamingId(active.id) },
-              {
-                label: "Duplicate tab",
-                onSelect: () => thenFollow(() => views.duplicateTab(active.id)),
-              },
-              {
-                label: "Group by sensor",
-                onSelect: () => thenFollow(views.groupBySensor),
-                disabled: !tabs.some((tab) => tab.graphs.length > 0),
-              },
-              {
-                label: "Delete tab",
-                onSelect: () => closeTab(active.id),
-                danger: true,
-                separated: true,
-              },
-            ]}
-          />
+            trigger={
+              <IconButton label="Tab options">
+                <MoreHorizontal />
+              </IconButton>
+            }
+            onCloseAutoFocus={(e) => e.preventDefault()}
+          >
+            <MenuItem onSelect={() => setRenamingId(active.id)}>Rename tab</MenuItem>
+            <MenuItem onSelect={() => thenFollow(() => views.duplicateTab(active.id))}>
+              Duplicate tab
+            </MenuItem>
+            <MenuItem
+              onSelect={() => thenFollow(views.groupBySensor)}
+              disabled={!tabs.some((tab) => tab.graphs.length > 0)}
+            >
+              Group by sensor
+            </MenuItem>
+            <MenuSeparator />
+            <MenuItem danger onSelect={() => closeTab(active.id)}>
+              Delete tab
+            </MenuItem>
+          </Menu>
         </div>
       </header>
 
@@ -242,23 +246,26 @@ function GraphCard({ graph, unit, missing, options, otherTabs, height }: GraphCa
           </button>
         )}
         <Menu
-          label={`Options for ${graph.channel}`}
-          items={[
-            { label: "Change channel", onSelect: () => setEditing(true) },
-            { label: "Duplicate graph", onSelect: () => actions.duplicateGraph(graph.id) },
-            ...otherTabs.map((tab, index) => ({
-              label: `Move to ${tab.name}`,
-              onSelect: () => actions.moveGraph(graph.id, tab.id),
-              separated: index === 0,
-            })),
-            {
-              label: "Remove graph",
-              onSelect: () => actions.removeGraph(graph.id),
-              danger: true,
-              separated: true,
-            },
-          ]}
-        />
+          trigger={
+            <IconButton label={`Options for ${graph.channel}`}>
+              <MoreHorizontal />
+            </IconButton>
+          }
+          onCloseAutoFocus={(e) => e.preventDefault()}
+        >
+          <MenuItem onSelect={() => setEditing(true)}>Change channel</MenuItem>
+          <MenuItem onSelect={() => actions.duplicateGraph(graph.id)}>Duplicate graph</MenuItem>
+          {otherTabs.length > 0 && <MenuSeparator />}
+          {otherTabs.map((tab) => (
+            <MenuItem key={tab.id} onSelect={() => actions.moveGraph(graph.id, tab.id)}>
+              Move to {tab.name}
+            </MenuItem>
+          ))}
+          <MenuSeparator />
+          <MenuItem danger onSelect={() => actions.removeGraph(graph.id)}>
+            Remove graph
+          </MenuItem>
+        </Menu>
       </header>
       {missing ? (
         <EmptyState message={`Channel "${graph.channel}" isn't available. Pick another.`} />

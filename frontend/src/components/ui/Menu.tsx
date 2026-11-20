@@ -1,74 +1,53 @@
-import { useEffect, useRef, useState } from "react";
+import type { ComponentPropsWithoutRef, ReactElement, ReactNode } from "react";
+import { DropdownMenu } from "radix-ui";
 import { cx } from "@utils/classNames";
 import styles from "./Menu.module.css";
 
-export type MenuItem = {
-  label: string;
-  onSelect: () => void;
-  disabled?: boolean;
-  // Destructive (delete, remove): drawn in red.
-  danger?: boolean;
-  // Starts a new group: a line is drawn above it.
-  separated?: boolean;
+type MenuProps = {
+  // The button that opens the menu, e.g. <IconButton label="Run actions"><MoreHorizontal /></IconButton>.
+  trigger: ReactElement;
+  children: ReactNode;
+  align?: "start" | "center" | "end";
+  // preventDefault() here when an item moves focus elsewhere (e.g. opens an input).
+  onCloseAutoFocus?: (event: Event) => void;
 };
 
-// A "⋯" button that opens a list of actions. Closes on a pick, a click outside, or Esc.
-export default function Menu({ label, items }: { label: string; items: MenuItem[] }) {
-  const [open, setOpen] = useState(false);
-  const ref = useRef<HTMLDivElement>(null);
-
-  useEffect(() => {
-    if (!open) return;
-    const onPointerDown = (e: PointerEvent) => {
-      if (!ref.current?.contains(e.target as Node)) setOpen(false);
-    };
-    const onKeyDown = (e: KeyboardEvent) => {
-      if (e.key === "Escape") setOpen(false);
-    };
-    document.addEventListener("pointerdown", onPointerDown);
-    document.addEventListener("keydown", onKeyDown);
-    return () => {
-      document.removeEventListener("pointerdown", onPointerDown);
-      document.removeEventListener("keydown", onKeyDown);
-    };
-  }, [open]);
-
+// Figma "Menu": a dropdown of MenuItems, with MenuSeparator between groups.
+export default function Menu({ trigger, children, align = "end", onCloseAutoFocus }: MenuProps) {
   return (
-    <div ref={ref} className={styles.menu}>
-      <button
-        type="button"
-        className={styles.trigger}
-        aria-label={label}
-        title={label}
-        aria-haspopup="menu"
-        aria-expanded={open}
-        onClick={() => setOpen((value) => !value)}
-      >
-        ⋯
-      </button>
-      {open && (
-        <div role="menu" className={styles.list}>
-          {items.map((item) => (
-            <button
-              key={item.label}
-              type="button"
-              role="menuitem"
-              className={cx(
-                styles.item,
-                item.danger && styles.danger,
-                item.separated && styles.separated,
-              )}
-              disabled={item.disabled}
-              onClick={() => {
-                setOpen(false);
-                item.onSelect();
-              }}
-            >
-              {item.label}
-            </button>
-          ))}
-        </div>
-      )}
-    </div>
+    <DropdownMenu.Root>
+      <DropdownMenu.Trigger asChild>{trigger}</DropdownMenu.Trigger>
+      <DropdownMenu.Portal>
+        <DropdownMenu.Content
+          className={styles.menu}
+          align={align}
+          sideOffset={4}
+          onCloseAutoFocus={onCloseAutoFocus}
+        >
+          {children}
+        </DropdownMenu.Content>
+      </DropdownMenu.Portal>
+    </DropdownMenu.Root>
   );
+}
+
+type MenuItemProps = ComponentPropsWithoutRef<typeof DropdownMenu.Item> & {
+  // A lucide icon before the label.
+  icon?: ReactNode;
+  // Figma State=Danger: destructive actions such as delete.
+  danger?: boolean;
+};
+
+// Figma "Menu Item": State (Default | Hover | Danger). onSelect runs the action.
+export function MenuItem({ icon, danger = false, className, children, ...props }: MenuItemProps) {
+  return (
+    <DropdownMenu.Item className={cx(styles.item, danger && styles.danger, className)} {...props}>
+      {icon}
+      {children}
+    </DropdownMenu.Item>
+  );
+}
+
+export function MenuSeparator() {
+  return <DropdownMenu.Separator className={styles.separator} />;
 }
