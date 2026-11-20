@@ -6,20 +6,22 @@ from typing import Annotated
 from fastapi import APIRouter, Depends, Path, Query
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from orion_backend.core.database import get_penelope_db
+from orion_backend.core.database import get_orion_db, get_penelope_db
 from orion_backend.core.openapi import error_responses
 from orion_backend.schemas.derived_metric_schema import DerivedMetricResponse
 from orion_backend.schemas.sensor_schema import SensorDataResponse
 from orion_backend.services.derived_metric_service import DerivedMetricService
+from orion_backend.services.run_service import RunService
 from orion_backend.services.sensor_service import SensorService
 
 router = APIRouter(tags=["derived-metrics"])
 
 
 def get_derived_metric_service(
-    db: AsyncSession = Depends(get_penelope_db),
+    penelope_db: AsyncSession = Depends(get_penelope_db),
+    orion_db: AsyncSession = Depends(get_orion_db),
 ) -> DerivedMetricService:
-    return DerivedMetricService(SensorService(db))
+    return DerivedMetricService(SensorService(penelope_db), RunService(orion_db))
 
 
 @router.get(
@@ -48,7 +50,11 @@ async def get_derived_metric_data(
     end: Annotated[datetime, Query(description="Inclusive.")],
     service: DerivedMetricService = Depends(get_derived_metric_service),
 ) -> SensorDataResponse:
-    """The metric computed from its input sensors between `start` and `end`, as one
-    series keyed by `name`.
+    """The metric computed from its input sensors over the whole run, then cut to
+    `start`..`end`, as one series keyed by `name`. Every window of a run therefore
+    shows the same values, including running totals.
+
+    404 if the metric or the run is unknown. A run the pipeline hasn't given time
+    bounds yet comes back as an empty series.
     """
     return await service.get_metric_data(run_id, name, start, end)
