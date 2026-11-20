@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef } from "react";
+import { useCallback, useEffect, useMemo, useRef } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { getRouteApi } from "@tanstack/react-router";
 import { useStore } from "zustand";
@@ -74,6 +74,28 @@ export const useHoverTimeSubscription = (onChange: (time: RunTime | null) => voi
   );
 };
 
+// For the GPS switch itself. The map layer it controls uses
+// useShowGpsSubscription instead, so toggling never re-renders the map.
+export const useShowGps = (): boolean => useStore(useDashboardStoreApi(), (state) => state.showGps);
+
+// Calls `onChange` when the GPS switch is toggled, without re-rendering. Read
+// the current value with the returned getter (e.g. for the first render).
+export const useShowGpsSubscription = (onChange: (show: boolean) => void) => {
+  const store = useDashboardStoreApi();
+  const onChangeRef = useRef(onChange);
+  useEffect(() => {
+    onChangeRef.current = onChange;
+  });
+  useEffect(
+    () =>
+      store.subscribe((state, previous) => {
+        if (state.showGps !== previous.showGps) onChangeRef.current(state.showGps);
+      }),
+    [store],
+  );
+  return useCallback(() => store.getState().showGps, [store]);
+};
+
 // Stable callbacks that change the shared state. They read run and lap data from
 // the query cache when called, so using them doesn't subscribe a panel to it.
 export const useDashboardActions = () => {
@@ -141,6 +163,7 @@ export const useDashboardActions = () => {
       resetWindow: () => setWindow(null),
       setHoverTime: (time: RunTime | null) => store.getState().setHoverTime(time),
       setHoverLap: (lap: number | null) => store.getState().setHoverLap(lap),
+      setShowGps: (show: boolean) => store.getState().setShowGps(show),
     };
   }, [runId, navigate, store, queryClient]);
 };
