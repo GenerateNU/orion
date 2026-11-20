@@ -9,7 +9,7 @@ import {
   useHoverTimeSubscription,
 } from "@features/dashboard/state/useDashboard";
 import { lapContaining } from "@features/dashboard/utils/laps";
-import type { RunTime, TimeWindow } from "@features/dashboard/utils/time";
+import type { RunTime } from "@features/dashboard/utils/time";
 import {
   anchorAt,
   distanceAt,
@@ -52,16 +52,9 @@ type Drag = {
   side: -1 | 1;
   // The selection before the drag, restored on Esc.
   before: TrackSelection;
-  // The lap the car was on when the drag started: nothing dragged leaves it, so
-  // the car and the handles stop at START. Absent outside every lap.
-  lap?: TimeWindow;
 };
 
 const clamp = (v: number, lo: number, hi: number) => Math.min(Math.max(v, lo), hi);
-
-// A time held inside the drag's lap, if it has one.
-const withinLap = (time: RunTime, lap: TimeWindow | undefined) =>
-  lap ? clamp(time, lap[0], lap[1]) : time;
 
 // The pointer in SVG units: track points are in viewBox units, not screen pixels.
 function toSvgPoint(svg: SVGSVGElement, e: ReactPointerEvent) {
@@ -96,8 +89,8 @@ export function TrackMap() {
         : null,
     [positions],
   );
-  const { selection, selectionRef, update, commit, applied, maxHalfM } = useTrackSelection(track);
-  // The window stays inside one lap; hovering a lap shades it on the graphs.
+  const { selection, selectionRef, update, commit, applied } = useTrackSelection(track);
+  // Hovering a lap on the track shades it on the graphs.
   const { laps } = useLaps();
 
   // Static layers, once per track.
@@ -113,7 +106,7 @@ export function TrackMap() {
   // The selection's layers, on every drag move.
   const shape = useMemo(() => {
     if (!track || !selection) return null;
-    const [from, to] = selectionWindow(track, selection, laps);
+    const [from, to] = selectionWindow(track, selection);
     const ends = [anchorAt(track, from), anchorAt(track, to)] as const;
     const car = anchorAt(track, selection.center);
     // At most half the way to the nearer handle, so a press between them goes to
@@ -132,7 +125,7 @@ export function TrackMap() {
         tickAt(track, ends[1], HANDLE_HALF_LENGTH),
       ] as const,
     };
-  }, [track, selection, laps]);
+  }, [track, selection]);
 
   // Hover from other panels (charts) shows as a faint ghost marker. Moved
   // directly, not through React state, so the map doesn't re-render per frame.
@@ -206,8 +199,7 @@ export function TrackMap() {
       if (!p) return;
 
       const role = (e.target as Element).closest("[data-handle]")?.getAttribute("data-handle");
-      const lapOf = (time: RunTime) => (laps ? lapContaining(laps, time)?.window : undefined);
-      const start = { pointerId: e.pointerId, before: current, lap: lapOf(current.center) };
+      const start = { pointerId: e.pointerId, before: current };
       let drag: Drag;
       if (role === "car") {
         drag = { ...start, mode: "car", side: 1 };
@@ -217,11 +209,10 @@ export function TrackMap() {
         // A press on the road moves the car there; a press on empty space does
         // nothing. Only passes under the pointer count, and of those the one
         // nearest in time to the car wins, so any pass of the road can be picked
-        // (an out-lap or the pit lane too, however long ago it was driven). This
-        // is how the window moves to another lap.
+        // (an out-lap or the pit lane too, however long ago it was driven).
         const hit = nearestSample(track, p.x, p.y, current.center, ROAD_HIT_PX * p.unitsPerPx);
         if (!hit) return;
-        drag = { ...start, mode: "car", side: 1, lap: lapOf(hit.time) };
+        drag = { ...start, mode: "car", side: 1 };
         update({ ...current, center: hit.time });
       }
 
@@ -236,7 +227,7 @@ export function TrackMap() {
       setDragMode(drag.mode);
       showHover(null);
     },
-    [track, laps, selectionRef, update, showHover],
+    [track, selectionRef, update, showHover],
   );
 
   const handlePointerMove = useCallback(
@@ -262,25 +253,21 @@ export function TrackMap() {
       if (!p) return;
 
       if (drag.mode === "car") {
-        // The car follows the pointer but stops at START, staying on its lap.
         const hit = nearestSample(track, p.x, p.y, current.center);
-        const center = hit && withinLap(hit.time, drag.lap);
-        if (center != null && center !== current.center) update({ ...current, center });
+        if (hit && hit.time !== current.center) update({ ...current, center: hit.time });
         return;
       }
-      // Edge: the held edge follows the pointer, stopping at START; the other
-      // mirrors it around the car by the same distance of road.
-      const edge = selectionWindow(track, current, laps)[drag.side < 0 ? 0 : 1];
+      // Edge: the held edge follows the pointer; the other mirrors it around the
+      // car by the same distance of road.
+      const edge = selectionWindow(track, current)[drag.side < 0 ? 0 : 1];
       const hit = nearestSample(track, p.x, p.y, edge);
       if (!hit) return;
-      const held = withinLap(hit.time, drag.lap);
-      const offset = distanceAt(track, held) - distanceAt(track, current.center);
+      const offset = distanceAt(track, hit.time) - distanceAt(track, current.center);
       if (offset !== 0) drag.side = offset < 0 ? -1 : 1;
-      // Stops growing at one lap of road.
-      const halfM = clampHalf(track, Math.abs(offset), maxHalfM);
+      const halfM = clampHalf(track, Math.abs(offset));
       if (halfM !== current.halfM) update({ ...current, halfM });
     },
-    [track, laps, selectionRef, update, finishDrag, showHover, maxHalfM],
+    [track, selectionRef, update, finishDrag, showHover],
   );
 
   if (isLoading) return <LoadingState message="Loading track…" />;
