@@ -1,4 +1,4 @@
-import { useEffect, useImperativeHandle, useMemo, useRef, type Ref } from "react";
+import { useEffect, useMemo, useRef } from "react";
 import uPlot from "uplot";
 import "uplot/dist/uPlot.min.css";
 import type { RunTime, TimeWindow } from "@features/dashboard/utils/time";
@@ -15,14 +15,7 @@ export type ChartSeries = {
   values: number[];
 };
 
-// Moves the cursor to a time hovered elsewhere (another chart, the track map)
-// without re-rendering. Null hides it.
-export type TimeSeriesChartHandle = {
-  showHoverTime: (time: RunTime | null) => void;
-};
-
 export type TimeSeriesChartProps = {
-  ref?: Ref<TimeSeriesChartHandle>;
   series: ChartSeries[];
   height?: number;
   visibleWindow?: TimeWindow | null;
@@ -71,7 +64,6 @@ const applyWindow = (chart: uPlot, timeWindow: TimeWindow | null) => {
 };
 
 export const TimeSeriesChart = ({
-  ref,
   series,
   height = 600,
   visibleWindow = null,
@@ -83,22 +75,6 @@ export const TimeSeriesChart = ({
   const chartRef = useRef<uPlot | null>(null);
   const draggingRef = useRef(false);
   const windowRef = useRef(visibleWindow);
-
-  useImperativeHandle(
-    ref,
-    () => ({
-      showHoverTime: (time) => {
-        const chart = chartRef.current;
-        // The chart under the pointer already draws its own cursor.
-        if (!chart || chart.over.matches(":hover")) return;
-        const left = time === null ? -1 : chart.valToPos(time, "x");
-        const inside = left >= 0 && left <= chart.over.clientWidth;
-        // fireHook false: a cursor moved from outside isn't reported back as hover.
-        chart.setCursor({ left: inside ? left : -10, top: chart.cursor.top ?? 0 }, false);
-      },
-    }),
-    [],
-  );
 
   const callbacksRef = useRef<ChartCallbacks>({});
   useEffect(() => {
@@ -143,6 +119,7 @@ export const TimeSeriesChart = ({
       ],
       cursor: {
         y: false,
+        sync: { key: "dashboard-run" },
         drag: { x: true, y: false, setScale: false },
         bind: { dblclick: () => null },
       },

@@ -1,45 +1,9 @@
 .sidebar {
   flex-shrink: 0;
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-3);
   width: var(--sidebar-width);
-  padding: var(--space-4) var(--space-3);
+  padding: var(--space-5) var(--space-3) var(--space-4);
   background: var(--bg-surface);
   border-right: 1px solid var(--border-default);
-  transition: width 150ms ease;
-}
-
-/* Collapsed: a rail just wide enough for the toggle. */
-.collapsed {
-  width: 56px;
-  padding-inline: var(--space-2);
-}
-
-.collapsed .nav {
-  display: none;
-}
-
-.toggle {
-  align-self: flex-end;
-  display: grid;
-  place-items: center;
-  width: 32px;
-  height: 32px;
-  border: none;
-  border-radius: var(--radius-sm);
-  background: transparent;
-  color: var(--text-muted);
-  cursor: pointer;
-}
-
-.collapsed .toggle {
-  align-self: center;
-}
-
-.toggle:hover {
-  background: var(--bg-raised);
-  color: var(--text-primary);
 }
 
 .list {
@@ -51,22 +15,13 @@
   list-style: none;
 }
 
-/* Narrow screens: a top bar, always shown. Same breakpoint as App and NavItem. */
+/* Narrow screens: a top bar. Same breakpoint as App and NavItem. */
 @media (max-width: 768px) {
-  .sidebar,
-  .collapsed {
+  .sidebar {
     width: 100%;
     padding: var(--space-2) var(--space-3);
     border-right: 0;
     border-bottom: 1px solid var(--border-default);
-  }
-
-  .toggle {
-    display: none;
-  }
-
-  .collapsed .nav {
-    display: block;
   }
 
   .list {

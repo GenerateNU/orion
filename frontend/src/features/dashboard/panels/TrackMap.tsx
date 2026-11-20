@@ -4,10 +4,7 @@ import EmptyState from "@components/ui/EmptyState";
 import ErrorState from "@components/ui/ErrorState";
 import LoadingState from "@components/ui/LoadingState";
 import { useRunPositions } from "@features/dashboard/data/useDashboardData";
-import {
-  useDashboardActions,
-  useHoverTimeSubscription,
-} from "@features/dashboard/state/useDashboard";
+import { useHoverTimeSubscription } from "@features/dashboard/state/useDashboard";
 import {
   anchorAt,
   distanceAt,
@@ -141,9 +138,6 @@ export function TrackMap() {
     }
   });
 
-  // Hovering the road shows that moment on the charts.
-  const { setHoverTime: showHover } = useDashboardActions();
-
   const endDrag = useCallback(() => {
     dragRef.current = null;
     setDragMode(null);
@@ -219,9 +213,8 @@ export function TrackMap() {
       }
       dragRef.current = drag;
       setDragMode(drag.mode);
-      showHover(null);
     },
-    [track, selectionRef, update, showHover],
+    [track, selectionRef, update],
   );
 
   const handlePointerMove = useCallback(
@@ -229,14 +222,6 @@ export function TrackMap() {
       const drag = dragRef.current;
       const svg = svgRef.current;
       const current = selectionRef.current;
-      if (!drag && svg && track) {
-        // Not dragging: hover. Same hit rule as a click, so it follows the road.
-        const p = toSvgPoint(svg, e);
-        const hit =
-          p && nearestSample(track, p.x, p.y, current?.center, ROAD_HIT_PX * p.unitsPerPx);
-        showHover(hit ? hit.time : null);
-        return;
-      }
       if (!drag || !svg || !track || !current || e.pointerId !== drag.pointerId) return;
       // The button came up without a pointerup reaching us: treat it as release.
       if (e.buttons === 0) {
@@ -261,7 +246,7 @@ export function TrackMap() {
       const halfM = clampHalf(track, Math.abs(offset));
       if (halfM !== current.halfM) update({ ...current, halfM });
     },
-    [track, selectionRef, update, finishDrag, showHover],
+    [track, selectionRef, update, finishDrag],
   );
 
   if (isLoading) return <LoadingState message="Loading track…" />;
@@ -293,7 +278,6 @@ export function TrackMap() {
         onPointerUp={handlePointerUp}
         onPointerCancel={handlePointerCancel}
         onLostPointerCapture={handlePointerUp}
-        onPointerLeave={() => showHover(null)}
       />
 
       <p className={styles.hint}>
