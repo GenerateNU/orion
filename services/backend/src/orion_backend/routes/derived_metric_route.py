@@ -28,13 +28,11 @@ def get_derived_metric_service(
     "/derived-metrics",
     response_model=list[DerivedMetricResponse],
     summary="List derived metrics",
-    responses=error_responses(503),
 )
-async def list_derived_metrics(
-    service: DerivedMetricService = Depends(get_derived_metric_service),
-) -> list[DerivedMetricResponse]:
-    """Every registered derived metric, with its unit."""
-    return service.list_metrics()
+async def list_derived_metrics() -> list[DerivedMetricResponse]:
+    """Every registered derived metric, with its unit. Reads no database, so it
+    works even when Penelope isn't configured or reachable."""
+    return DerivedMetricService.list_metrics()
 
 
 @router.get(

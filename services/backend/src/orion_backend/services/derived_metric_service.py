@@ -18,7 +18,10 @@ class DerivedMetricService:
         self.sensor_service = sensor_service
         self.run_service = run_service
 
-    def list_metrics(self) -> list[DerivedMetricResponse]:
+    @staticmethod
+    def list_metrics() -> list[DerivedMetricResponse]:
+        """Every registered metric. Reads only the registry, so it needs no
+        database session."""
         return [
             DerivedMetricResponse(name=metric.name, unit=metric.unit)
             for metric in METRICS.values()

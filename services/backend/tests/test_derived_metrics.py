@@ -9,6 +9,7 @@ import pytest
 from orion_backend.core.exceptions import InvalidParameterError, NotFoundError
 from orion_backend.derived_metrics.base_metric import DerivedMetric
 from orion_backend.derived_metrics.metric_registry import METRICS, register_metric
+from orion_backend.routes.derived_metric_route import list_derived_metrics
 from orion_backend.schemas.derived_metric_schema import DerivedMetricResponse
 from orion_backend.schemas.sensor_schema import SensorDataResponse, SensorSeries
 from orion_backend.services.derived_metric_service import DerivedMetricService
@@ -96,8 +97,16 @@ def test_run_converts_inputs_and_drops_nan_outputs():
 
 def test_list_metrics_returns_each_registered_metric():
     assert (
-        DerivedMetricResponse(name="test/power", unit="W") in service().list_metrics()
+        DerivedMetricResponse(name="test/power", unit="W")
+        in DerivedMetricService.list_metrics()
     )
+
+
+def test_list_route_needs_no_database():
+    # Called with no arguments: no service and no session to provide, so it
+    # can't fail with 503 when Penelope isn't configured.
+    listed = asyncio.run(list_derived_metrics())
+    assert DerivedMetricResponse(name="test/power", unit="W") in listed
 
 
 def test_get_metric_data_returns_the_metric_keyed_by_name():
