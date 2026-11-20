@@ -1,4 +1,5 @@
 import asyncio
+import threading
 from datetime import UTC, datetime, timedelta
 from types import SimpleNamespace
 
@@ -128,6 +129,21 @@ def test_a_window_shows_the_same_values_as_the_whole_run():
     window = get("test/running_total", T2, T3).series["test/running_total"]
     assert whole.values == [[1.0], [3.0], [6.0], [10.0]]
     assert window == SensorSeries(time=[T2, T3], values=[[6.0], [10.0]])
+
+
+def test_the_metric_is_computed_off_the_event_loop_thread():
+    threads: list[threading.Thread] = []
+
+    class RecordsThread(Power):
+        name = "test/records_thread"
+
+        def compute(self, aligned: pd.DataFrame) -> pd.Series:
+            threads.append(threading.current_thread())
+            return super().compute(aligned)
+
+    register_metric(RecordsThread)
+    get("test/records_thread", T0, T3)
+    assert threads and threads[0] is not threading.main_thread()
 
 
 def test_a_naive_window_is_read_as_utc():

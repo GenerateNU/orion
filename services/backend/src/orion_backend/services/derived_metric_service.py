@@ -1,3 +1,4 @@
+import asyncio
 from bisect import bisect_left, bisect_right
 from datetime import UTC, datetime
 
@@ -46,7 +47,10 @@ class DerivedMetricService:
             raw = await self.sensor_service.get_sensor_data(
                 run_id, list(metric.inputs), run.start_time, run.end_time
             )
-            series = _window(metric.run(raw.series), start, end)
+            # pandas work is CPU-bound and synchronous; in a worker thread it
+            # doesn't hold up other requests on the event loop.
+            computed = await asyncio.to_thread(metric.run, raw.series)
+            series = _window(computed, start, end)
 
         return SensorDataResponse(
             run_id=run_id, start=start, end=end, series={name: series}

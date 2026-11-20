@@ -12,6 +12,9 @@ class DerivedMetric(ABC):
 
     Each input is a DataFrame indexed by time with one column per position in
     Penelope's `values[]` (e.g. 0 = lat, 1 = lon). NaN outputs are dropped.
+
+    One instance serves every request, and `run` executes in worker threads,
+    possibly several at once, so a metric must not keep state on `self`.
     """
 
     name: ClassVar[str]
