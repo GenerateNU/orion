@@ -1,0 +1,16 @@
+/* Padding is Figma's minus the 1px border. */
+.stepper {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1);
+  padding: calc(var(--space-1) - 1px);
+  background: var(--bg-surface);
+  border: 1px solid var(--border-accent);
+  border-radius: var(--radius-md);
+}
+
+.label {
+  font: var(--type-heading-h4);
+  white-space: nowrap;
+  color: var(--text-primary);
+}
