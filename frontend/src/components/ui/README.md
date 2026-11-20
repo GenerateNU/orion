@@ -41,3 +41,19 @@ Every component also accepts the props of the element it renders (`onClick`, `di
 
 Run-specific components built on these live next to their feature, e.g.
 `components/runs/StatusBadge` (Figma "Status Badge": `status`, `detail`).
+Page chrome lives in `components/layout`, e.g. `TopBar` (Figma "Top Bar"): children are a
+`TopBarNav` of `TopBarLink`s (Context=Library) or a `Breadcrumb` (Context=Run); `actions` go on
+the right (Search, Avatar, a Share Button…). The app shell still uses `Sidebar`.
+
+## Which button?
+
+| Use                          | When                                                                                    |
+| ---------------------------- | --------------------------------------------------------------------------------------- |
+| `Button variant="primary"`   | The one main action of the view ("New run", a modal's "Confirm"). At most one per view. |
+| `Button variant="secondary"` | Other actions next to it ("Share", "Export CSV", "Re-run").                             |
+| `Button variant="ghost"`     | Low-emphasis actions: "Cancel" in a modal, actions in dense toolbars.                   |
+| `Button variant="danger"`    | Destructive actions ("Delete run"); confirm in a Modal when it can't be undone.         |
+| `size="sm"`                  | Inside dense UI: the top bar, table rows, cards. Otherwise the default `md`.            |
+| `ButtonLink`                 | It opens another page (a link, not an action).                                          |
+| `IconButton`                 | Space is tight and the icon is obvious (⋯, ×). Always give a `label`.                   |
+| `MenuItem` in a `Menu`       | More than two or three secondary actions on one thing: put them behind ⋯.               |

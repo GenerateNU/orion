@@ -76,7 +76,7 @@
   --shadow-card: 0 1px 2px rgb(0 0 0 / 0.35);
   --shadow-popover: 0 8px 24px rgb(0 0 0 / 0.45);
   --shadow-modal: 0 24px 64px rgb(0 0 0 / 0.6);
-  --shadow-glow-brand: 0 0 8px rgb(200 16 46 / 0.5);
+  --shadow-glow-brand: 0 0 16px rgb(200 16 46 / 0.5);
   /* Behind modals; paired with Blur/Backdrop (16px) */
   --bg-scrim: rgb(11 11 12 / 0.6);
 
@@ -88,6 +88,8 @@
   --type-display-xl: 700 64px/64px var(--font-display);
   --type-display-l: 700 40px/44px var(--font-display);
   --type-display-m: 700 28px/32px var(--font-display);
+  /* The "ORION" wordmark in the Top Bar logo (not a Figma text style) */
+  --type-wordmark: 700 22px/24px var(--font-display);
   --type-heading-h1: 600 24px/32px var(--font-sans);
   --type-heading-h2: 600 20px/28px var(--font-sans);
   --type-heading-h3: 600 16px/24px var(--font-sans);
