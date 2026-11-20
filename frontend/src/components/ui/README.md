@@ -39,8 +39,24 @@ Every component also accepts the props of the element it renders (`onClick`, `di
 | `Pagination`                          | –                 | `page`, `pageCount`, `onPageChange`, `label`.                                                                                        |
 | `ProgressBar`                         | –                 | `label` (accessible name), `value` (0–1; leave out for indeterminate).                                                               |
 
+| `StatTile` | Stat Tile | `label`, `value`, `delta` (`{ text, better }`: green or red) or `note` (gold, e.g. "Session best"). |
+
 Run-specific components built on these live next to their feature, e.g.
-`components/runs/StatusBadge` (Figma "Status Badge": `status`, `detail`).
+`components/runs/StatusBadge` (Figma "Status Badge": `status`, `detail`). The rest of the
+Figma "Runs, Laps & Signals" and "Data Viz" pieces:
+
+- `components/runs/LapRow` (Lap Row): `lap`, `time`, `delta`, `series`, `selected`, `compared`,
+  `onSelect`, `onCompareChange`. Click the row to select; the checkbox compares.
+- `components/runs/LapStepper` (Lap Stepper): `label`, `onPrevious`, `onNext` (leave one out to
+  disable that arrow).
+- `components/charts/SeriesChip` (Series Chip): `series` (1–8, the `--data-series-N` color),
+  `label`, `onRemove` (shows ×).
+- `components/charts/SignalRow` (Signal Row): `name`, `unit`, plus Checkbox props.
+- `components/charts/ChartTooltip` (Chart Tooltip): `title`, `rows: {series, label, value}[]`.
+- `components/charts/PlotCard` (Plot Card): `title`, `unit`, `readout`, `actions`; child: the chart.
+
+Not built as components: Run Row (`components/runs/RunsTable` is the runs list), Plot Line
+(drawn by uPlot in `TimeSeriesChart`), Session Timeline and the Track Map pieces (chart/map work).
 Page chrome lives in `components/layout`, e.g. `TopBar` (Figma "Top Bar"): children are a
 `TopBarNav` of `TopBarLink`s (Context=Library) or a `Breadcrumb` (Context=Run); `actions` go on
 the right (Search, Avatar, a Share Button…). The app shell still uses `Sidebar`.

@@ -35,6 +35,11 @@
   width: 280px;
 }
 
+.plot {
+  flex: 1;
+  max-width: 640px;
+}
+
 .narrow {
   max-width: 400px;
 }

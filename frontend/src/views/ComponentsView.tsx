@@ -4,6 +4,7 @@ import {
   Copy,
   Download,
   Link,
+  Maximize2,
   MoreHorizontal,
   Pencil,
   Plus,
@@ -11,7 +12,16 @@ import {
   Route,
   Trash2,
 } from "lucide-react";
+import ChartTooltip from "@components/charts/ChartTooltip";
+import PlotCard from "@components/charts/PlotCard";
+import type { Series } from "@components/charts/series";
+import SeriesChip from "@components/charts/SeriesChip";
+import SignalRow from "@components/charts/SignalRow";
+import { TimeSeriesChart } from "@components/charts/TimeSeriesChart";
 import Breadcrumb, { BreadcrumbCurrent, BreadcrumbLink } from "@components/layout/Breadcrumb";
+import LapRow from "@components/runs/LapRow";
+import LapStepper from "@components/runs/LapStepper";
+import StatTile from "@components/ui/StatTile";
 import PageHeader from "@components/layout/PageHeader";
 import TopBar, { TopBarLink, TopBarNav } from "@components/layout/TopBar";
 import StatusBadge from "@components/runs/StatusBadge";
@@ -38,12 +48,30 @@ const TRACKS = [
   { value: "palmer", label: "Palmer Motorsports Park" },
   { value: "burlington", label: "Burlington test lot" },
 ];
+const LAPS = [
+  { lap: 1, time: "1:12.06", delta: "−0.42", series: 1 },
+  { lap: 2, time: "1:12.48", delta: "+0.42", series: 2 },
+  { lap: 3, time: "1:13.13", delta: "+1.07", series: 4 },
+] as const satisfies readonly { lap: number; time: string; delta: string; series: Series }[];
+const SIGNALS = [
+  { name: "Pack_Current", unit: "A" },
+  { name: "Speed", unit: "mph" },
+  { name: "Steering_Angle", unit: "°" },
+];
+// A fake speed trace, 0–60 s, for the Plot Card demo.
+const DEMO_TIME = Array.from({ length: 240 }, (_, i) => i * 250);
+const DEMO_SPEED = DEMO_TIME.map((t) => 32 + 12 * Math.sin(t / 4000) + 4 * Math.sin(t / 900));
 
 // Dev-only gallery of components/ui, to compare against the Figma library.
 export default function ComponentsView() {
   const [axis, setAxis] = useState<"track" | "distance" | "time">("track");
   const [track, setTrack] = useState("palmer");
   const [on, setOn] = useState(true);
+  const [lapIndex, setLapIndex] = useState(1);
+  const [compared, setCompared] = useState<readonly number[]>([1]);
+  const [signals, setSignals] = useState<readonly string[]>(["Speed"]);
+  const toggle = <T,>(list: readonly T[], item: T, add: boolean) =>
+    add ? [...list, item] : list.filter((x) => x !== item);
 
   return (
     <>
@@ -280,6 +308,104 @@ export default function ComponentsView() {
           <Notice tone="info" title="GPS is shifted −3 s">
             Penelope GPS timestamps lag by a constant 3 s; Orion corrects this automatically.
           </Notice>
+        </div>
+      </Section>
+
+      <Section title="Plot Card, Chart Tooltip">
+        <div className={styles.row}>
+          <div className={styles.plot}>
+            <PlotCard
+              title="Speed"
+              unit="mph"
+              readout="33.6"
+              actions={
+                <>
+                  <IconButton label="Full screen">
+                    <Maximize2 />
+                  </IconButton>
+                  <IconButton label="Chart actions">
+                    <MoreHorizontal />
+                  </IconButton>
+                </>
+              }
+            >
+              <TimeSeriesChart
+                height={180}
+                series={[
+                  { id: "speed", label: "Speed", unit: "mph", time: DEMO_TIME, values: DEMO_SPEED },
+                ]}
+              />
+            </PlotCard>
+          </div>
+          <ChartTooltip
+            title="50.0%, t +00:36.240"
+            rows={[
+              { series: 1, label: "Lap 4", value: "33.6 mph" },
+              { series: 2, label: "Lap 7", value: "32.9 mph" },
+              { series: 3, label: "Lap 9", value: "34.1 mph" },
+            ]}
+          />
+        </div>
+      </Section>
+
+      <Section title="Stat Tile, Lap Stepper, Series Chip">
+        <div className={styles.row}>
+          <StatTile
+            label="Lap time"
+            value="1:12.48"
+            delta={{ text: "−0.42s vs best", better: true }}
+          />
+          <StatTile
+            label="Lap time"
+            value="1:12.48"
+            delta={{ text: "+1.07s vs best", better: false }}
+          />
+          <StatTile label="Lap time" value="1:12.48" note="Session best" />
+        </div>
+        <div className={styles.row}>
+          <LapStepper
+            label={`Lap ${LAPS[lapIndex].lap} of ${LAPS.length}`}
+            onPrevious={lapIndex > 0 ? () => setLapIndex(lapIndex - 1) : undefined}
+            onNext={lapIndex < LAPS.length - 1 ? () => setLapIndex(lapIndex + 1) : undefined}
+          />
+          <LapStepper label="3 laps, 4, 7, 9" onPrevious={() => {}} onNext={() => {}} />
+        </div>
+        <div className={styles.row}>
+          {([1, 2, 3, 4, 5, 6, 7, 8] as const).map((series) => (
+            <SeriesChip
+              key={series}
+              series={series}
+              label={`Lap ${series + 2}`}
+              onRemove={() => showToast("info", `Removed lap ${series + 2}`)}
+            />
+          ))}
+        </div>
+      </Section>
+
+      <Section title="Lap Row, Signal Row">
+        <div className={styles.grid}>
+          <div className={styles.stack}>
+            {LAPS.map((lap, index) => (
+              <LapRow
+                key={lap.lap}
+                {...lap}
+                selected={index === lapIndex}
+                compared={compared.includes(lap.lap)}
+                onSelect={() => setLapIndex(index)}
+                onCompareChange={(add) => setCompared(toggle(compared, lap.lap, add))}
+              />
+            ))}
+          </div>
+          <div className={styles.stack}>
+            {SIGNALS.map((signal) => (
+              <SignalRow
+                key={signal.name}
+                {...signal}
+                checked={signals.includes(signal.name)}
+                onChange={(event) => setSignals(toggle(signals, signal.name, event.target.checked))}
+              />
+            ))}
+          </div>
         </div>
       </Section>
 

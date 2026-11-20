@@ -1,0 +1,39 @@
+/* Padding is Figma's minus the 1px border. */
+.card {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  min-width: 0;
+  padding: calc(var(--space-2-5) - 1px) calc(var(--space-3) - 1px);
+  background: var(--bg-surface);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-lg);
+}
+
+.header {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+.title {
+  margin: 0;
+  font: var(--type-heading-h3);
+}
+
+.unit {
+  font: var(--type-body-s);
+  color: var(--text-muted);
+}
+
+.end {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  margin-left: auto;
+}
+
+.readout {
+  font: var(--type-data-readout-m);
+  color: var(--data-series-1);
+}
