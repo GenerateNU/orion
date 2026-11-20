@@ -131,7 +131,7 @@ export const TimeSeriesChart = ({
         {},
         ...series.map(({ label }) => ({
           label,
-          stroke: "#d4b06a",
+          stroke: (chart: uPlot) => cssStyle(chart, "--data-series-1"),
           width: 1.5,
         })),
       ],

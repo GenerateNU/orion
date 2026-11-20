@@ -3,8 +3,7 @@
   display: block;
   width: 100%;
   padding: 9px 12px;
-  font-size: 14px;
-  font-weight: 500;
+  font: var(--type-body-m-medium);
   text-align: left;
   white-space: nowrap;
   color: var(--text-muted);

@@ -36,28 +36,9 @@
   min-width: 0;
 }
 
-.remove {
-  padding: 0 var(--space-2);
-  border: none;
-  background: transparent;
-  color: var(--text-muted);
-  font-size: 1.25rem;
-  line-height: 1;
-  cursor: pointer;
-}
-
-.remove:hover {
-  color: var(--text-primary);
-}
-
 .picker {
   justify-self: start;
   min-width: 240px;
-  padding: var(--space-1) var(--space-2);
-  border: 1px solid var(--border-default);
-  border-radius: var(--radius-sm);
-  background: var(--bg-raised);
-  color: var(--text-primary);
 }
 
 .addSlot {
@@ -67,33 +48,4 @@
   padding: var(--space-3);
   border: 1px dashed var(--border-default);
   border-radius: var(--radius-md);
-}
-
-.add {
-  width: 40px;
-  height: 40px;
-  border: 1px solid var(--border-default);
-  border-radius: var(--radius-sm);
-  background: transparent;
-  color: var(--text-muted);
-  font-size: 1.25rem;
-  cursor: pointer;
-}
-
-.add:disabled {
-  cursor: default;
-}
-
-.reset {
-  padding: var(--space-1) var(--space-3);
-  border: 1px solid var(--border-default);
-  border-radius: var(--radius-sm);
-  background: var(--bg-raised);
-  color: var(--text-primary);
-  cursor: pointer;
-}
-
-.reset:disabled {
-  color: var(--text-muted);
-  cursor: default;
 }

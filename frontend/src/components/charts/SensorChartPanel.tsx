@@ -1,4 +1,8 @@
 import { useId, useMemo, useState } from "react";
+import { Plus, X } from "lucide-react";
+import Button from "@components/ui/Button";
+import IconButton from "@components/ui/IconButton";
+import Input from "@components/ui/Input";
 import { useSensors } from "@hooks/useSensors";
 import { useDashboardActions, useVisibleWindow } from "@features/dashboard/state/useDashboard";
 import styles from "./SensorChartPanel.module.css";
@@ -33,14 +37,14 @@ export default function SensorChartsPanel({
   return (
     <section className={styles.panel}>
       <header className={styles.header}>
-        <button
-          type="button"
-          className={styles.reset}
+        <Button
+          variant="secondary"
+          size="sm"
           onClick={() => resetWindow()}
           disabled={visibleWindow === null}
         >
           Reset zoom
-        </button>
+        </Button>
       </header>
 
       <div className={styles.grid}>
@@ -55,13 +59,12 @@ export default function SensorChartsPanel({
                   setSelected((prev) => prev.map((n, i) => (i === index ? next : n)))
                 }
               />
-              <button
-                type="button"
-                className={styles.remove}
+              <IconButton
+                label={`Remove ${name} chart`}
                 onClick={() => setSelected((prev) => prev.filter((n) => n !== name))}
               >
-                ×
-              </button>
+                <X />
+              </IconButton>
             </div>
             <SensorChart name={name} unit={units.get(name) ?? ""} height={height} />
           </div>
@@ -81,14 +84,14 @@ export default function SensorChartsPanel({
                 onCancel={() => setAdding(false)}
               />
             ) : (
-              <button
-                type="button"
-                className={styles.add}
+              <IconButton
+                variant="secondary"
+                label="Add a chart"
                 onClick={() => setAdding(true)}
                 disabled={!sensors}
               >
-                +
-              </button>
+                <Plus />
+              </IconButton>
             )}
           </div>
         )}
@@ -119,8 +122,9 @@ function SensorPicker({
 
   return (
     <>
-      <input
+      <Input
         className={styles.picker}
+        aria-label={label}
         list={listId}
         value={text}
         placeholder={value || label}

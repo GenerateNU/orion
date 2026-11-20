@@ -1,0 +1,44 @@
+.list {
+  display: flex;
+  gap: var(--space-3);
+}
+
+/* Label over a 2px indicator, red when active. */
+.tab {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--space-2);
+  padding: var(--space-2) 0 0;
+  font: var(--type-label-l);
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+  background: none;
+  border: none;
+  cursor: pointer;
+}
+
+.tab::after {
+  content: "";
+  align-self: stretch;
+  height: 2px;
+  background: transparent;
+}
+
+.tab:hover {
+  color: var(--text-primary);
+}
+
+.tab[data-state="active"] {
+  color: var(--text-primary);
+}
+
+.tab[data-state="active"]::after {
+  background: var(--accent-red);
+}
+
+.tab:disabled {
+  color: var(--text-disabled);
+  cursor: not-allowed;
+}

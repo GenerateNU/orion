@@ -1,14 +1,20 @@
 .badge {
   display: inline-flex;
   align-items: center;
-  gap: 6px;
-  padding: 4px 10px;
-  font-size: 12px;
-  font-weight: 500;
+  gap: var(--space-1);
+  padding: var(--space-1) var(--space-2);
+  font: var(--type-label-s);
+  letter-spacing: var(--tracking-label);
+  text-transform: uppercase;
   white-space: nowrap;
   border-radius: var(--radius-pill);
   color: var(--badge-color);
-  background: var(--badge-tint);
+  background: var(--badge-bg);
+}
+
+.badge svg {
+  width: 12px;
+  height: 12px;
 }
 
 .dot {
@@ -20,26 +26,42 @@
 }
 
 .loaded {
-  --badge-color: var(--status-loaded);
-  --badge-tint: var(--status-loaded-tint);
+  --badge-color: var(--status-success);
+  --badge-bg: var(--status-success-subtle);
 }
 
 .processing {
-  --badge-color: var(--status-processing);
-  --badge-tint: var(--status-processing-tint);
+  --badge-color: var(--status-info);
+  --badge-bg: var(--status-info-subtle);
+}
+
+.processing svg {
+  animation: spin 1s linear infinite;
 }
 
 .queued {
-  --badge-color: var(--status-queued);
-  --badge-tint: var(--status-queued-tint);
+  --badge-color: var(--text-secondary);
+  --badge-bg: var(--bg-active);
 }
 
 .notProcessed {
-  --badge-color: var(--status-idle);
-  --badge-tint: var(--status-idle-tint);
+  --badge-color: var(--text-muted);
+  --badge-bg: var(--bg-raised);
 }
 
 .failed {
-  --badge-color: var(--status-failed);
-  --badge-tint: var(--status-failed-tint);
+  --badge-color: var(--status-error);
+  --badge-bg: var(--status-error-subtle);
+}
+
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .processing svg {
+    animation: none;
+  }
 }

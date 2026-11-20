@@ -1,0 +1,58 @@
+.toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  font: var(--type-body-m);
+  color: var(--text-primary);
+  cursor: pointer;
+}
+
+.toggle:has(:disabled) {
+  color: var(--text-disabled);
+  cursor: not-allowed;
+}
+
+/* 36×20 track with a 16px knob, 2px inset. */
+.input {
+  appearance: none;
+  position: relative;
+  flex-shrink: 0;
+  width: 36px;
+  height: 20px;
+  margin: 0;
+  background: var(--border-default);
+  border-radius: var(--radius-pill);
+  cursor: inherit;
+  transition: background 150ms;
+}
+
+.input::before {
+  content: "";
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  width: 16px;
+  height: 16px;
+  background: var(--text-on-accent);
+  border-radius: 50%;
+  transition: transform 150ms;
+}
+
+.input:checked {
+  background: var(--accent-red);
+}
+
+.input:checked::before {
+  transform: translateX(16px);
+}
+
+.input:disabled {
+  opacity: 0.5;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .input,
+  .input::before {
+    transition: none;
+  }
+}

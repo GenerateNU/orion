@@ -1,0 +1,22 @@
+/* The bare <input> inside a Field box (Input, Search). */
+.input {
+  flex: 1;
+  min-width: 0;
+  padding: 0;
+  color: inherit;
+  background: none;
+  border: none;
+  outline: none;
+}
+
+.input::placeholder {
+  color: var(--text-muted);
+}
+
+.input:disabled {
+  cursor: not-allowed;
+}
+
+.timestamp {
+  font: var(--type-data-value);
+}

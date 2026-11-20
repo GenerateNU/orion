@@ -21,8 +21,7 @@
   --track-casing: color-mix(in srgb, var(--text-muted) 14%, transparent);
   --track-window: var(--accent-red);
   --track-handle: var(--text-primary);
-  /* Same gold as the sensor chart lines. */
-  --track-start: #d4b06a;
+  --track-start: var(--data-start-finish);
 
   flex: 1;
   min-height: 0;
@@ -161,9 +160,9 @@
 
 .carBody {
   fill: var(--track-window);
-  stroke: #fff;
+  stroke: var(--text-on-accent);
   stroke-width: 1.75;
-  filter: drop-shadow(0 1px 2px rgb(0 0 0 / 0.5));
+  filter: drop-shadow(var(--shadow-card));
 }
 
 /* Hover time from other panels (charts). */
@@ -192,6 +191,6 @@
 
 .hint {
   margin: 0;
-  font-size: 12px;
+  font: var(--type-body-s);
   color: var(--text-muted);
 }
