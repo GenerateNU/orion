@@ -1,0 +1,79 @@
+.menu {
+  position: relative;
+  flex: none;
+}
+
+.trigger {
+  display: grid;
+  place-items: center;
+  width: 28px;
+  height: 28px;
+  border: none;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--text-muted);
+  font-size: 16px;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.trigger:hover,
+.trigger[aria-expanded="true"] {
+  background: var(--bg-raised);
+  color: var(--text-primary);
+}
+
+.list {
+  position: absolute;
+  top: calc(100% + var(--space-1));
+  right: 0;
+  z-index: 10;
+  display: flex;
+  flex-direction: column;
+  min-width: 200px;
+  padding: var(--space-1);
+  background: var(--bg-raised);
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-md);
+  box-shadow: 0 8px 24px rgb(0 0 0 / 0.28);
+}
+
+.item {
+  padding: var(--space-2) var(--space-3);
+  border: none;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--text-primary);
+  font-size: 13px;
+  text-align: left;
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.item:hover:not(:disabled) {
+  background: color-mix(in srgb, var(--text-primary) 8%, transparent);
+}
+
+.item:disabled {
+  color: var(--text-muted);
+  cursor: default;
+}
+
+.danger {
+  color: var(--accent-red);
+}
+
+/* A line above the item, spanning the list's full width. */
+.separated {
+  position: relative;
+  margin-top: 9px;
+}
+
+.separated::before {
+  content: "";
+  position: absolute;
+  top: -5px;
+  right: calc(-1 * var(--space-1));
+  left: calc(-1 * var(--space-1));
+  border-top: 1px solid var(--border-default);
+}

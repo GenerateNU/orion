@@ -28,8 +28,20 @@
   gap: var(--space-2);
 }
 
+/* Doesn't scroll itself: the graph tabs stay at its top and the graphs scroll
+   inside it (SensorChartPanel). */
 .right {
-  overflow-y: auto;
+  overflow: hidden;
+}
+
+/* Named for screen readers; the graph tabs head the pane on screen. */
+.visuallyHidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
 }
 
 @media (max-width: 960px) {
