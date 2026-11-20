@@ -20,6 +20,14 @@
   border-radius: var(--radius-lg);
 }
 
+.panelHeader {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-2);
+}
+
 /* Doesn't scroll itself: the graph tabs stay at its top and the graphs scroll
    inside it (SensorChartPanel). */
 .right {

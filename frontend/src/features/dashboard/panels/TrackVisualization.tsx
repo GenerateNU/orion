@@ -1,5 +1,5 @@
 import { memo } from "react";
-import type { PointerEvent as ReactPointerEvent, RefObject } from "react";
+import type { PointerEvent as ReactPointerEvent, ReactNode, RefObject } from "react";
 import type { Point, Tick } from "@features/dashboard/utils/trackmap";
 import { cx } from "@utils/classNames";
 import styles from "./TrackMap.module.css";
@@ -20,6 +20,9 @@ export interface TrackVisualizationProps {
   window: string;
   // A line across the track where the run starts.
   start: Tick;
+  // Extra layers drawn over the road, under the window (e.g. GpsTraceLayer). Keep
+  // it stable (memoised) so it doesn't defeat this component's memo.
+  overlay?: ReactNode;
   // The car, pointing in its direction of travel (degrees, SVG rotation), and
   // the radius of its grab circle (SVG units): small enough not to cover the
   // handles, since the car is drawn above them.
@@ -66,6 +69,7 @@ export const TrackVisualization = memo(function TrackVisualization({
   gaps,
   window,
   start,
+  overlay,
   car,
   edges,
   pending,
@@ -97,6 +101,8 @@ export const TrackVisualization = memo(function TrackVisualization({
       <path className={styles.roadCasing} d={road} />
       <path className={styles.road} d={road} />
       <path className={styles.gap} d={gaps} />
+
+      {overlay}
 
       <g className={styles.start}>
         <line x1={start.x1} y1={start.y1} x2={start.x2} y2={start.y2} />

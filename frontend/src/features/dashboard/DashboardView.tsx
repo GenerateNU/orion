@@ -14,6 +14,7 @@ import DashboardStoreProvider from "@features/dashboard/state/DashboardStoreProv
 import { useLastRunStore } from "@features/dashboard/state/lastRunStore";
 import { useDashboardRun } from "@features/dashboard/state/useDashboard";
 import styles from "./DashboardView.module.css";
+import GpsToggle from "@features/dashboard/panels/GpsToggle";
 import { TrackMap } from "@features/dashboard/panels/TrackMap";
 import SensorChartsPanel from "@components/charts/SensorChartPanel";
 
@@ -88,9 +89,12 @@ function RunDashboard() {
 
       <div className={styles.layout}>
         <section className={styles.panel} aria-labelledby="track-map-heading">
-          <h2 id="track-map-heading" className={styles.panelHeading}>
-            Track position
-          </h2>
+          <div className={styles.panelHeader}>
+            <h2 id="track-map-heading" className={styles.panelHeading}>
+              Track position
+            </h2>
+            <GpsToggle />
+          </div>
           <TrackMap />
         </section>
         <section className={cx(styles.panel, styles.right)} aria-labelledby="sensor-charts-heading">
