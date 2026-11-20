@@ -3,13 +3,11 @@ import type { PointerEvent as ReactPointerEvent } from "react";
 import EmptyState from "@components/ui/EmptyState";
 import ErrorState from "@components/ui/ErrorState";
 import LoadingState from "@components/ui/LoadingState";
-import { useLaps, useRunPositions } from "@features/dashboard/data/useDashboardData";
+import { useRunPositions } from "@features/dashboard/data/useDashboardData";
 import {
   useDashboardActions,
   useHoverTimeSubscription,
 } from "@features/dashboard/state/useDashboard";
-import { lapContaining } from "@features/dashboard/utils/laps";
-import type { RunTime } from "@features/dashboard/utils/time";
 import {
   anchorAt,
   distanceAt,
@@ -91,8 +89,6 @@ export function TrackMap() {
     [positions],
   );
   const { selection, selectionRef, update, commit, applied } = useTrackSelection(track);
-  // Hovering a lap on the track shades it on the graphs.
-  const { laps } = useLaps();
 
   // Static layers, once per track.
   const base = useMemo(() => {
@@ -145,15 +141,8 @@ export function TrackMap() {
     }
   });
 
-  // Hovering the road shows that moment on the charts and shades its lap there.
-  const { setHoverTime, setHoverLap } = useDashboardActions();
-  const showHover = useCallback(
-    (time: RunTime | null) => {
-      setHoverTime(time);
-      setHoverLap(time === null || !laps ? null : (lapContaining(laps, time)?.id ?? null));
-    },
-    [setHoverTime, setHoverLap, laps],
-  );
+  // Hovering the road shows that moment on the charts.
+  const { setHoverTime: showHover } = useDashboardActions();
 
   const endDrag = useCallback(() => {
     dragRef.current = null;

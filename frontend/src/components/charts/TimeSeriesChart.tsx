@@ -26,8 +26,6 @@ export type TimeSeriesChartProps = {
   series: ChartSeries[];
   height?: number;
   visibleWindow?: TimeWindow | null;
-  // A span drawn shaded behind the line, e.g. the hovered lap.
-  shadeWindow?: TimeWindow | null;
   onCommitWindow?: (window: TimeWindow) => void;
   onResetWindow?: () => void;
   onHoverTime?: (time: RunTime | null) => void;
@@ -77,7 +75,6 @@ export const TimeSeriesChart = ({
   series,
   height = 600,
   visibleWindow = null,
-  shadeWindow = null,
   onCommitWindow,
   onResetWindow,
   onHoverTime,
@@ -86,7 +83,6 @@ export const TimeSeriesChart = ({
   const chartRef = useRef<uPlot | null>(null);
   const draggingRef = useRef(false);
   const windowRef = useRef(visibleWindow);
-  const shadeRef = useRef(shadeWindow);
 
   useImperativeHandle(
     ref,
@@ -159,22 +155,6 @@ export const TimeSeriesChart = ({
         })),
       ],
       hooks: {
-        // Runs before the grid and line are drawn, so the shading sits behind them.
-        drawClear: [
-          (chart) => {
-            const span = shadeRef.current;
-            if (!span) return;
-            const { ctx, bbox } = chart;
-            const clampX = (x: number) => Math.min(Math.max(x, bbox.left), bbox.left + bbox.width);
-            const x0 = clampX(chart.valToPos(span[0], "x", true));
-            const x1 = clampX(chart.valToPos(span[1], "x", true));
-            ctx.save();
-            ctx.globalAlpha = 0.12;
-            ctx.fillStyle = cssStyle(chart, "--text-primary");
-            ctx.fillRect(x0, bbox.top, x1 - x0, bbox.height);
-            ctx.restore();
-          },
-        ],
         setSelect: [
           (chart) => {
             if (draggingRef.current) {
@@ -245,11 +225,6 @@ export const TimeSeriesChart = ({
     const chart = chartRef.current;
     if (chart) applyWindow(chart, visibleWindow);
   }, [visibleWindow]);
-
-  useEffect(() => {
-    shadeRef.current = shadeWindow;
-    chartRef.current?.redraw(false);
-  }, [shadeWindow]);
 
   return <div ref={containerRef} className={styles.chart} />;
 };
