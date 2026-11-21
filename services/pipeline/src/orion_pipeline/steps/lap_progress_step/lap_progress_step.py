@@ -9,18 +9,17 @@ from orion_pipeline.runner.run_context import RunContext
 from orion_pipeline.steps.base_step import PipelineStep
 from orion_pipeline.steps.lap_progress_step.ideal_lap import (
     assign_lap_ids,
+    build_ideal_lap,
     choose_laps,
-    find_medoid,
     lap_durations,
 )
 from orion_pipeline.steps.lap_progress_step.lap_progress_utils import (
     drop_forward_jumps,
     lap_percentages,
     match_to_ideal_lap,
-    resample,
-    smooth_loop,
+    seconds_since_start,
 )
-from orion_pipeline.steps.lap_step.lap_utils import headings, to_local_xy
+from orion_pipeline.steps.lap_step.lap_utils import to_local_xy
 from orion_pipeline.steps.step_registry import register_step
 
 
@@ -75,8 +74,9 @@ class LapProgressStep(PipelineStep):
         times = df["time"]
         lap_ids = df["lap_id"].to_numpy(dtype=np.int64)
         x, y = to_local_xy(df["lattitude"], df["longitude"])
-        time_s = np.asarray((times - times.iloc[0]).dt.total_seconds(), np.float64)
+        time_s = seconds_since_start(times)
 
+        # Step 1: Pick the complete, normal laps the ideal lap can come from.
         chosen = choose_laps(
             lap_durations(times, lap_ids),
             max_lap_time_ratio=ctx.lap_progress_max_lap_time_ratio,
@@ -84,37 +84,29 @@ class LapProgressStep(PipelineStep):
         if not chosen:
             return pd.DataFrame(columns=["run_id", "time", "lap_id", "lap_percent"])
 
-        laps = [
-            resample(x[lap_ids == i], y[lap_ids == i], ctx.lap_progress_spacing_m)
-            for i in chosen
-        ]
-        ideal = smooth_loop(
-            laps[find_medoid(laps)],
+        # Step 2: Build the ideal lap from the most typical of them.
+        ideal = build_ideal_lap(
+            x,
+            y,
+            lap_ids,
+            chosen,
             spacing_m=ctx.lap_progress_spacing_m,
             smoothing_m=ctx.lap_progress_smoothing_m,
         )
 
-        hx, hy = headings(x, y)
-        speed = (
-            np.hypot(np.gradient(x), np.gradient(y)) / np.gradient(time_s)
-            if len(x) > 1
-            else np.zeros(len(x))
-        )
-        on_track = (np.hypot(hx, hy) > 0) & (speed >= ctx.lap_progress_min_speed_mps)
-
+        # Step 3: Find how far along the ideal lap each position is, in meters.
         s = match_to_ideal_lap(
             x,
             y,
-            hx,
-            hy,
-            on_track,
+            time_s,
             ideal,
+            min_speed_mps=ctx.lap_progress_min_speed_mps,
             max_offtrack_m=ctx.lap_progress_max_offtrack_m,
-            min_heading_dot=float(
-                np.cos(np.radians(ctx.lap_progress_max_heading_diff_deg))
-            ),
+            max_heading_diff_deg=ctx.lap_progress_max_heading_diff_deg,
             heading_weight_m=ctx.lap_progress_heading_weight_m,
         )
+
+        # Step 4: Drop matches further ahead than the car could have driven.
         s = drop_forward_jumps(
             s,
             time_s,
@@ -122,6 +114,8 @@ class LapProgressStep(PipelineStep):
             max_speed_mps=ctx.lap_progress_max_speed_mps,
             jump_margin_m=ctx.lap_progress_jump_margin_m,
         )
+
+        # Step 5: Turn meters along the ideal lap into 0-100% for each lap.
         percent = lap_percentages(
             s, lap_ids, ideal.length_m, ctx.lap_progress_gate_margin_m
         )

@@ -7,8 +7,11 @@ import pandas as pd
 from numpy.typing import NDArray
 
 from orion_pipeline.steps.lap_progress_step.lap_progress_utils import (
+    FloatArray,
     IdealLap,
     mean_distance,
+    resample,
+    smooth_loop,
 )
 
 
@@ -78,3 +81,19 @@ def find_medoid(laps: Sequence[IdealLap]) -> int:
         return mean_distance(laps[i], x, y)
 
     return min(range(len(laps)), key=spread)
+
+
+def build_ideal_lap(
+    x: FloatArray,
+    y: FloatArray,
+    lap_ids: NDArray[np.int64],
+    chosen: list[int],
+    *,
+    spacing_m: float,
+    smoothing_m: float,
+) -> IdealLap:
+    """The ideal lap: the medoid of the `chosen` laps, lightly smoothed."""
+    laps = [resample(x[lap_ids == i], y[lap_ids == i], spacing_m) for i in chosen]
+    return smooth_loop(
+        laps[find_medoid(laps)], spacing_m=spacing_m, smoothing_m=smoothing_m
+    )

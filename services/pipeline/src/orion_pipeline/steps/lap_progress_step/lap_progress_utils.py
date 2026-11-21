@@ -5,11 +5,12 @@ from dataclasses import dataclass
 from typing import Any, cast
 
 import numpy as np
+import pandas as pd
 from numpy.typing import NDArray
 from scipy.interpolate import splev, splprep
 from scipy.spatial import cKDTree
 
-from orion_pipeline.steps.lap_step.lap_utils import distance_driven
+from orion_pipeline.steps.lap_step.lap_utils import distance_driven, headings
 
 FloatArray = NDArray[np.float64]
 IntArray = NDArray[np.int64]
@@ -27,6 +28,11 @@ class IdealLap:
     y: FloatArray
     s: FloatArray
     length_m: float
+
+
+def seconds_since_start(times: pd.Series) -> FloatArray:
+    """Seconds from the first time to each time."""
+    return np.asarray((times - times.iloc[0]).dt.total_seconds(), np.float64)
 
 
 def resample(x: FloatArray, y: FloatArray, spacing_m: float) -> IdealLap:
@@ -67,13 +73,12 @@ def mean_distance(path: IdealLap, x: FloatArray, y: FloatArray) -> float:
 def match_to_ideal_lap(
     x: FloatArray,
     y: FloatArray,
-    hx: FloatArray,
-    hy: FloatArray,
-    on_track: NDArray[np.bool_],
+    time_s: FloatArray,
     ideal: IdealLap,
     *,
+    min_speed_mps: float,
     max_offtrack_m: float,
-    min_heading_dot: float,
+    max_heading_diff_deg: float,
     heading_weight_m: float,
 ) -> FloatArray:
     """Meters along the ideal lap to each point.
@@ -81,9 +86,18 @@ def match_to_ideal_lap(
     Finds each point's nearest ideal lap point, then places the point between
     it and a neighbor (see `_along`), so the distance changes smoothly instead
     of in steps of the ideal lap's spacing. "Nearest" counts direction too, so the far
-    side of a hairpin never wins. NaN for points not on track, too far away, or
-    heading the wrong way.
+    side of a hairpin never wins. NaN for points slower than `min_speed_mps`,
+    too far away, or heading the wrong way.
     """
+    hx, hy = headings(x, y)
+    speed = (
+        np.hypot(np.gradient(x), np.gradient(y)) / np.gradient(time_s)
+        if len(x) > 1
+        else np.zeros(len(x))
+    )
+    on_track = (np.hypot(hx, hy) > 0) & (speed >= min_speed_mps)
+    min_heading_dot = np.cos(np.radians(max_heading_diff_deg))
+
     # The ideal lap's direction at each point, from its neighbors around the loop.
     tx = np.roll(ideal.x, -1) - np.roll(ideal.x, 1)
     ty = np.roll(ideal.y, -1) - np.roll(ideal.y, 1)

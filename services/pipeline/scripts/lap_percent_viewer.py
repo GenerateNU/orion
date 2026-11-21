@@ -52,15 +52,13 @@ from orion_core.db.engines import make_sync_engine  # noqa: E402
 from orion_pipeline.clients.oriondb_client import OrionDBClient  # noqa: E402
 from orion_pipeline.runner.run_context import RunContext  # noqa: E402
 from orion_pipeline.steps.lap_progress_step.ideal_lap import (  # noqa: E402
+    build_ideal_lap,
     choose_laps,
-    find_medoid,
     lap_durations,
 )
 from orion_pipeline.steps.lap_progress_step.lap_progress_utils import (  # noqa: E402
     FloatArray,
     IdealLap,
-    resample,
-    smooth_loop,
 )
 from orion_pipeline.steps.lap_step.lap_utils import to_local_xy  # noqa: E402
 
@@ -126,12 +124,11 @@ def ideal_lap(
     )
     if not chosen:
         return None
-    laps = [
-        resample(x[lap_ids == i], y[lap_ids == i], ctx.lap_progress_spacing_m)
-        for i in chosen
-    ]
-    return smooth_loop(
-        laps[find_medoid(laps)],
+    return build_ideal_lap(
+        x,
+        y,
+        lap_ids,
+        chosen,
         spacing_m=ctx.lap_progress_spacing_m,
         smoothing_m=ctx.lap_progress_smoothing_m,
     )

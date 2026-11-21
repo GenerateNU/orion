@@ -16,7 +16,7 @@ from orion_pipeline.steps.lap_progress_step.lap_progress_utils import (
     resample,
 )
 from orion_pipeline.steps.lap_step.lap_constants import EARTH_RADIUS_M
-from orion_pipeline.steps.lap_step.lap_utils import headings, to_local_xy
+from orion_pipeline.steps.lap_step.lap_utils import to_local_xy
 
 ORIGIN_LAT, ORIGIN_LON = 42.34, -71.09
 START = datetime(2026, 1, 1, 12, 0, 0)
@@ -376,16 +376,14 @@ def test_one_bad_point_mid_lap_leaves_the_rest_of_the_lap_rising(at_u, to_u):
 
 
 def match_all(x, y, ideal):
-    hx, hy = headings(x, y)
     return match_to_ideal_lap(
         x,
         y,
-        hx,
-        hy,
-        np.ones(len(x), dtype=bool),
+        DT_S * np.arange(len(x), dtype=np.float64),
         ideal,
+        min_speed_mps=0.0,
         max_offtrack_m=15.0,
-        min_heading_dot=0.5,
+        max_heading_diff_deg=60.0,
         heading_weight_m=10.0,
     )
 

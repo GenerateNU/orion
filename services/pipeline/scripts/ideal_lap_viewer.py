@@ -72,7 +72,6 @@ from orion_pipeline.steps.lap_progress_step.lap_progress_utils import (  # noqa:
     smooth_loop,
 )
 from orion_pipeline.steps.lap_step.lap_utils import (  # noqa: E402
-    headings,
     to_local_xy,
 )
 
@@ -94,19 +93,16 @@ def find_run_id(client: OrionDBClient, prefix: str) -> str:
 
 
 def match(ruler: IdealLap, x: FloatArray, y: FloatArray, ctx: RunContext) -> FloatArray:
-    """Meters along `ruler` for each point, NaN where it doesn't match."""
-    hx, hy = headings(x, y)
+    """Meters along `ruler` for each point, NaN where it doesn't match. No speed
+    check, so the points need no times."""
     return match_to_ideal_lap(
         x,
         y,
-        hx,
-        hy,
-        np.hypot(hx, hy) > 0,
+        np.arange(len(x), dtype=np.float64),
         ruler,
+        min_speed_mps=0.0,
         max_offtrack_m=ctx.lap_progress_max_offtrack_m,
-        min_heading_dot=float(
-            np.cos(np.radians(ctx.lap_progress_max_heading_diff_deg))
-        ),
+        max_heading_diff_deg=ctx.lap_progress_max_heading_diff_deg,
         heading_weight_m=ctx.lap_progress_heading_weight_m,
     )
 
