@@ -15,31 +15,29 @@ Shared components built from the Figma
 Every component also accepts the props of the element it renders (`onClick`, `disabled`,
 `aria-*`…) unless noted.
 
-| Component                             | Figma             | Props                                                                                                                                |
-| ------------------------------------- | ----------------- | ------------------------------------------------------------------------------------------------------------------------------------ |
-| `Button`                              | Button            | `variant`: `primary` \| `secondary` \| `ghost` \| `danger`; `size`: `md` \| `sm`. Children: label, optionally a lucide icon first.   |
-| `ButtonLink`                          | Button            | Same as Button, plus router link props (`to`, `params`, `disabled`).                                                                 |
-| `IconButton`                          | Icon Button       | `label` (required: accessible name and tooltip); `variant`: `ghost` \| `secondary`; `pressed` for toggles. Child: a lucide icon.     |
-| `Input`                               | Input             | `label`, `helper`, `error` (replaces helper, marks invalid), `icon`, `variant`: `text` \| `timestamp` (mono font).                   |
-| `Select`                              | Select            | `options: {value, label}[]`, `value`, `onValueChange`, `label` or `aria-label`, `placeholder`, `disabled`. No other props.           |
-| `Search`                              | Search            | `aria-label` (required), `placeholder`, `shortcut` (⌘K/Ctrl+K focuses it; one per page).                                             |
-| `Checkbox`                            | Checkbox          | `label`, `indeterminate` (Figma "Mixed"), plus native checkbox props (`checked`, `onChange`…).                                       |
-| `Toggle`                              | Toggle            | `label`, plus native checkbox props; renders as a switch.                                                                            |
-| `SegmentedControl`                    | Segmented Control | `options: {value, label}[]`, `value`, `onChange`, `aria-label` (required). No other props.                                           |
-| `Tabs`, `TabList`, `Tab`, `TabPanel`  | Tab               | Radix Tabs: `Tabs` takes `value`/`defaultValue`/`onValueChange`; `Tab` and `TabPanel` take a matching `value`.                       |
-| `Avatar`                              | Avatar            | `initials`, `name` (accessible name and hover title). No other props.                                                                |
-| `Tooltip`                             | Tooltip           | `content`, `side`; child: one focusable element. Needs `TooltipProvider` (in `main.tsx`).                                            |
-| `Menu`, `MenuItem`, `MenuSeparator`   | Menu              | `Menu`: `trigger` (a button), `align`. `MenuItem`: `icon`, `danger`, `onSelect`, `disabled`.                                         |
-| `Modal`, `ModalClose`                 | Modal             | `title`, `children` (body), `footer`, and `open` + `onOpenChange` or `trigger`. Wrap a footer button in `ModalClose`.                |
-| `Toaster`, `showToast(type, message)` | Toast             | `Toaster` is rendered once in `main.tsx`; call `showToast("success" \| "error" \| "info", message)` from anywhere (`toastStore.ts`). |
-| `Notice`                              | Alert Banner      | `tone`: `error` \| `warning` \| `info`; `title`; children: the description.                                                          |
-| `EmptyState`                          | Empty State       | `message`, `title`, `icon`, `action` (e.g. a primary Button).                                                                        |
-| `LoadingState`                        | –                 | `message` (default "Loading…").                                                                                                      |
-| `ErrorState`                          | –                 | `error` (any thrown value; shown via `describeError`).                                                                               |
-| `Pagination`                          | –                 | `page`, `pageCount`, `onPageChange`, `label`.                                                                                        |
-| `ProgressBar`                         | –                 | `label` (accessible name), `value` (0–1; leave out for indeterminate).                                                               |
-
-| `StatTile` | Stat Tile | `label`, `value`, `delta` (`{ text, better }`: green or red) or `note` (gold, e.g. "Session best"). |
+| Component                             | Figma        | Props                                                                                                                                |
+| ------------------------------------- | ------------ | ------------------------------------------------------------------------------------------------------------------------------------ |
+| `Button`                              | Button       | `variant`: `primary` \| `secondary` \| `ghost` \| `danger`; `size`: `md` \| `sm`. Children: label, optionally a lucide icon first.   |
+| `ButtonLink`                          | Button       | Same as Button, plus router link props (`to`, `params`, `disabled`).                                                                 |
+| `IconButton`                          | Icon Button  | `label` (required: accessible name and tooltip); `variant`: `ghost` \| `secondary`; `pressed` for toggles. Child: a lucide icon.     |
+| `Input`                               | Input        | `label`, `helper`, `error` (replaces helper, marks invalid), `icon`, `variant`: `text` \| `timestamp` (mono font).                   |
+| `Select`                              | Select       | `options: {value, label}[]`, `value`, `onValueChange`, `label` or `aria-label`, `placeholder`, `disabled`. No other props.           |
+| `Search`                              | Search       | `aria-label` (required), plus native input props (`placeholder`, `value`, `onChange`…).                                              |
+| `Checkbox`                            | Checkbox     | `label`, `indeterminate` (Figma "Mixed"), plus native checkbox props (`checked`, `onChange`…).                                       |
+| `Toggle`                              | Toggle       | `label`, plus native checkbox props; renders as a switch. Use it for every on/off switch.                                            |
+| `Tabs`, `TabList`, `Tab`, `TabPanel`  | Tab          | Radix Tabs: `Tabs` takes `value`/`defaultValue`/`onValueChange`; `Tab` and `TabPanel` take a matching `value`.                       |
+| `Avatar`                              | Avatar       | `initials`, `name` (accessible name and hover title). No other props.                                                                |
+| `Tooltip`                             | Tooltip      | `content`, `side`; child: one focusable element. Needs `TooltipProvider` (in `main.tsx`).                                            |
+| `Menu`, `MenuItem`, `MenuSeparator`   | Menu         | `Menu`: `trigger` (a button), `align`. `MenuItem`: `icon`, `danger`, `onSelect`, `disabled`.                                         |
+| `Modal`, `ModalClose`                 | Modal        | `title`, `children` (body), `footer`, and `open` + `onOpenChange` or `trigger`. Wrap a footer button in `ModalClose`.                |
+| `Toaster`, `showToast(type, message)` | Toast        | `Toaster` is rendered once in `main.tsx`; call `showToast("success" \| "error" \| "info", message)` from anywhere (`toastStore.ts`). |
+| `Notice`                              | Alert Banner | `tone`: `error` \| `warning` \| `info`; `title`; children: the description.                                                          |
+| `EmptyState`                          | Empty State  | `message`, `title`, `icon`, `action`. With a `title` it's the Figma card (empty page); without, one line (inside a panel).           |
+| `LoadingState`                        | –            | `message` (default "Loading…").                                                                                                      |
+| `ErrorState`                          | –            | `error` (any thrown value; shown via `describeError`).                                                                               |
+| `Pagination`                          | –            | `page`, `pageCount`, `onPageChange`, `label`.                                                                                        |
+| `ProgressBar`                         | –            | `label` (accessible name), `value` (0–1; leave out for indeterminate).                                                               |
+| `StatTile`                            | Stat Tile    | `label`, `value`, `delta` (`{ text, better }`: green or red) or `note` (gold, e.g. "Session best").                                  |
 
 Run-specific components built on these live next to their feature, e.g.
 `components/runs/StatusBadge` (Figma "Status Badge": `status`, `detail`). The rest of the
@@ -53,10 +51,15 @@ Figma "Runs, Laps & Signals" and "Data Viz" pieces:
   `label`, `onRemove` (shows ×).
 - `components/charts/SignalRow` (Signal Row): `name`, `unit`, plus Checkbox props.
 - `components/charts/ChartTooltip` (Chart Tooltip): `title`, `rows: {series, label, value}[]`.
-- `components/charts/PlotCard` (Plot Card): `title`, `unit`, `readout`, `actions`; child: the chart.
+- `components/charts/PlotCard` (Plot Card): `title`, `unit`, `readout` (a string for Mode=Single, or
+  `{series, label, value}[]` for Mode=Compare), `actions`; child: the chart.
+- `components/charts/TimeSeriesChart` (Plot Line): `series` (each with `time`, `values` and a
+  `series` color slot), `height`, `xAxis="track"` for the lap's 0–100% axis, `onHoverTime` (the x
+  under the cursor). Charts with the same `xAxis` share one cursor. The dashboard still plots time
+  until it has per-sample track %. Memoize `series`: a new array rebuilds the chart.
 
-Not built as components: Run Row (`components/runs/RunsTable` is the runs list), Plot Line
-(drawn by uPlot in `TimeSeriesChart`), Session Timeline and the Track Map pieces (chart/map work).
+Not built as components: Run Row (`components/runs/RunsTable` is the runs list), Session
+Timeline and the Track Map pieces (chart/map work).
 Page chrome lives in `components/layout`, e.g. `TopBar` (Figma "Top Bar"): children are a
 `TopBarNav` of `TopBarLink`s (Context=Library) or a `Breadcrumb` (Context=Run); `actions` go on
 the right (Search, Avatar, a Share Button…). The app shell still uses `Sidebar`.

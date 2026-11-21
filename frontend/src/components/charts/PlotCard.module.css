@@ -37,3 +37,24 @@
   font: var(--type-data-readout-m);
   color: var(--data-series-1);
 }
+
+/* Compare mode: one lap's dot, label and value; the value's color is set inline. */
+.lap {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1);
+  font: var(--type-body-s-medium);
+  white-space: nowrap;
+  color: var(--text-secondary);
+}
+
+.swatch {
+  flex-shrink: 0;
+  width: 8px;
+  height: 8px;
+  border-radius: var(--radius-pill);
+}
+
+.lapValue {
+  font: var(--type-data-value);
+}

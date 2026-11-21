@@ -17,7 +17,7 @@ import PlotCard from "@components/charts/PlotCard";
 import type { Series } from "@components/charts/series";
 import SeriesChip from "@components/charts/SeriesChip";
 import SignalRow from "@components/charts/SignalRow";
-import { TimeSeriesChart } from "@components/charts/TimeSeriesChart";
+import { TimeSeriesChart, type ChartSeries } from "@components/charts/TimeSeriesChart";
 import Breadcrumb, { BreadcrumbCurrent, BreadcrumbLink } from "@components/layout/Breadcrumb";
 import LapRow from "@components/runs/LapRow";
 import LapStepper from "@components/runs/LapStepper";
@@ -35,12 +35,12 @@ import Menu, { MenuItem, MenuSeparator } from "@components/ui/Menu";
 import Modal, { ModalClose } from "@components/ui/Modal";
 import Notice from "@components/ui/Notice";
 import Search from "@components/ui/Search";
-import SegmentedControl from "@components/ui/SegmentedControl";
 import Select from "@components/ui/Select";
 import { Tab, TabList, TabPanel, Tabs } from "@components/ui/Tabs";
 import { showToast } from "@components/ui/toastStore";
 import Toggle from "@components/ui/Toggle";
 import Tooltip from "@components/ui/Tooltip";
+import { cx } from "@utils/classNames";
 import styles from "./ComponentsView.module.css";
 
 const VARIANTS = ["primary", "secondary", "ghost", "danger"] as const;
@@ -58,14 +58,43 @@ const SIGNALS = [
   { name: "Speed", unit: "mph" },
   { name: "Steering_Angle", unit: "°" },
 ];
-// A fake speed trace, 0–60 s, for the Plot Card demo.
-const DEMO_TIME = Array.from({ length: 240 }, (_, i) => i * 250);
-const DEMO_SPEED = DEMO_TIME.map((t) => 32 + 12 * Math.sin(t / 4000) + 4 * Math.sin(t / 900));
+// Fake speed over one lap (0–100% in 0.5% steps) for the Plot Card demo: two straights, a
+// hairpin at 76%. Compared laps are the same trace, shifted a little.
+const DEMO_TRACK = Array.from({ length: 201 }, (_, i) => i / 2);
+const demoSpeed = (shift: number) =>
+  DEMO_TRACK.map((percent) => {
+    const x = percent + shift;
+    return 38 + 8 * Math.sin(x / 8) + 3 * Math.sin(x / 2.5) - 22 * Math.exp(-(((x - 76) / 4) ** 2));
+  });
+const DEMO_LAPS: ChartSeries[] = [
+  { id: "l3", label: "L3", unit: "mph", time: DEMO_TRACK, values: demoSpeed(0), series: 1 },
+  { id: "l4", label: "L4", unit: "mph", time: DEMO_TRACK, values: demoSpeed(-1.5), series: 4 },
+  { id: "l7", label: "L7", unit: "mph", time: DEMO_TRACK, values: demoSpeed(1.5), series: 5 },
+];
+// Module-level so the chart isn't rebuilt on every hover re-render.
+const DEMO_SINGLE = DEMO_LAPS.slice(0, 1);
+const plotActions = (
+  <>
+    <IconButton label="Full screen">
+      <Maximize2 />
+    </IconButton>
+    <IconButton label="Chart actions">
+      <MoreHorizontal />
+    </IconButton>
+  </>
+);
 
 // Dev-only gallery of components/ui, to compare against the Figma library.
 export default function ComponentsView() {
-  const [axis, setAxis] = useState<"track" | "distance" | "time">("track");
   const [track, setTrack] = useState("palmer");
+  // Track % under the chart cursor; the readouts show 50% while it's off the chart.
+  const [cursor, setCursor] = useState<number | null>(null);
+  const readoutAt = (values: readonly number[]) => values[(cursor ?? 50) * 2].toFixed(1);
+  const lapReadouts = DEMO_LAPS.map((lap) => ({
+    series: lap.series ?? 1,
+    label: lap.label,
+    value: readoutAt(lap.values),
+  }));
   const [on, setOn] = useState(true);
   const [lapIndex, setLapIndex] = useState(1);
   const [compared, setCompared] = useState<readonly number[]>([1]);
@@ -85,7 +114,6 @@ export default function ComponentsView() {
                 <Search
                   aria-label="Search signals"
                   placeholder="Search 340 signals…"
-                  shortcut
                   className={styles.topBarSearch}
                 />
                 <Avatar initials="CW" name="Casey Wu" />
@@ -202,18 +230,8 @@ export default function ComponentsView() {
         </div>
       </Section>
 
-      <Section title="Segmented Control, Tab">
+      <Section title="Tab">
         <div className={styles.row}>
-          <SegmentedControl
-            aria-label="X axis"
-            value={axis}
-            onChange={setAxis}
-            options={[
-              { value: "track", label: "Track %" },
-              { value: "distance", label: "Distance" },
-              { value: "time", label: "Time" },
-            ]}
-          />
           <Tabs defaultValue="laps">
             <TabList aria-label="Panels">
               <Tab value="laps">Laps</Tab>
@@ -313,37 +331,32 @@ export default function ComponentsView() {
 
       <Section title="Plot Card, Chart Tooltip">
         <div className={styles.row}>
-          <div className={styles.plot}>
+          <div className={cx(styles.plot, styles.stack)}>
             <PlotCard
               title="Speed"
               unit="mph"
-              readout="33.6"
-              actions={
-                <>
-                  <IconButton label="Full screen">
-                    <Maximize2 />
-                  </IconButton>
-                  <IconButton label="Chart actions">
-                    <MoreHorizontal />
-                  </IconButton>
-                </>
-              }
+              readout={readoutAt(DEMO_SINGLE[0].values)}
+              actions={plotActions}
             >
               <TimeSeriesChart
+                xAxis="track"
                 height={180}
-                series={[
-                  { id: "speed", label: "Speed", unit: "mph", time: DEMO_TIME, values: DEMO_SPEED },
-                ]}
+                series={DEMO_SINGLE}
+                onHoverTime={setCursor}
+              />
+            </PlotCard>
+            <PlotCard title="Speed" unit="mph" readout={lapReadouts} actions={plotActions}>
+              <TimeSeriesChart
+                xAxis="track"
+                height={180}
+                series={DEMO_LAPS}
+                onHoverTime={setCursor}
               />
             </PlotCard>
           </div>
           <ChartTooltip
-            title="50.0%, t +00:36.240"
-            rows={[
-              { series: 1, label: "Lap 4", value: "33.6 mph" },
-              { series: 2, label: "Lap 7", value: "32.9 mph" },
-              { series: 3, label: "Lap 9", value: "34.1 mph" },
-            ]}
+            title={`${(cursor ?? 50).toFixed(1)}%`}
+            rows={lapReadouts.map((row) => ({ ...row, value: `${row.value} mph` }))}
           />
         </div>
       </Section>

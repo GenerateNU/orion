@@ -4,7 +4,7 @@ import styles from "./ChartTooltip.module.css";
 export type ChartTooltipRow = { series: Series; label: string; value: string };
 
 type ChartTooltipProps = {
-  // Where the cursor is, e.g. "50.0%, t +00:36.240".
+  // Where the cursor is on the lap, e.g. "50.0%".
   title: string;
   // One row per series under the cursor.
   rows: readonly ChartTooltipRow[];

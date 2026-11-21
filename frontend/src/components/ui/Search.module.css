@@ -21,12 +21,3 @@
   border-color: var(--focus-ring);
   outline: 3px solid color-mix(in srgb, var(--focus-ring) 60%, transparent);
 }
-
-.kbd {
-  padding: 1px calc(var(--space-2) - 1px);
-  font: var(--type-data-axis);
-  color: var(--text-muted);
-  background: var(--bg-raised);
-  border: 1px solid var(--border-subtle);
-  border-radius: var(--radius-sm);
-}
