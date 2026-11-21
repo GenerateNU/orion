@@ -1,11 +1,4 @@
-/* Pipeline re-run controls in the track map panel: a button per step in the panel
-   header, and a status row per step. */
-
-.buttons {
-  display: flex;
-  flex-wrap: wrap;
-  gap: var(--space-1);
-}
+/* Pipeline status in the track map panel: a row per step. */
 
 .status {
   display: flex;
@@ -22,7 +15,7 @@
   list-style: none;
 }
 
-/* Name, status and time on one line; a note (stale or error) wraps below. */
+/* Name, status and time on one line; an error wraps below. */
 .step {
   display: grid;
   grid-template-columns: 72px auto minmax(0, 1fr);
@@ -46,8 +39,7 @@
   background: var(--badge-tint);
 }
 
-.idle,
-.skipped {
+.idle {
   --badge-color: var(--status-idle);
   --badge-tint: var(--status-idle-tint);
 }
@@ -73,17 +65,13 @@
   text-align: right;
 }
 
-.note {
-  grid-column: 1 / -1;
-  font-size: 12px;
-  color: var(--status-queued);
-}
-
 /* Pipeline errors can be long tracebacks: two lines here, the rest in the tooltip. */
 .error {
   display: -webkit-box;
+  grid-column: 1 / -1;
   overflow: hidden;
   -webkit-line-clamp: 2;
   -webkit-box-orient: vertical;
+  font-size: 12px;
   color: var(--status-failed);
 }

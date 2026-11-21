@@ -6,7 +6,7 @@ import LoadingState from "@components/ui/LoadingState";
 import Breadcrumb, { BreadcrumbCurrent, BreadcrumbLink } from "@components/layout/Breadcrumb";
 import PageHeader from "@components/layout/PageHeader";
 import StatusBadge from "@components/runs/StatusBadge";
-import { ButtonLink } from "@components/ui/Button";
+import Button, { ButtonLink } from "@components/ui/Button";
 import { ApiError } from "@api/client";
 import { formatDate, formatDuration } from "@utils/format";
 import DashboardStoreProvider from "@features/dashboard/state/DashboardStoreProvider";
@@ -14,7 +14,7 @@ import { useLastRunStore } from "@features/dashboard/state/lastRunStore";
 import { useDashboardRun } from "@features/dashboard/state/useDashboard";
 import styles from "./DashboardView.module.css";
 import { TrackMap } from "@features/dashboard/panels/TrackMap";
-import { PipelineButtons, PipelineStepList } from "@features/dashboard/panels/PipelineControls";
+import { PipelineStepList } from "@features/dashboard/panels/PipelineControls";
 import { usePipelineSteps } from "@hooks/usePipelineSteps";
 import SensorChartsPanel from "@components/charts/SensorChartPanel";
 
@@ -95,11 +95,9 @@ function RunDashboard() {
             <h2 id="track-map-heading" className={styles.panelHeading}>
               Track position
             </h2>
-            <PipelineButtons
-              disabled={pipeline.isBusy}
-              onRunStep={pipeline.runStep}
-              onRunAll={pipeline.runAll}
-            />
+            <Button disabled={pipeline.isBusy} onClick={pipeline.runPipeline}>
+              Run pipeline
+            </Button>
           </div>
           <PipelineStepList steps={pipeline.steps} error={pipeline.error} />
           <TrackMap />

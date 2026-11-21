@@ -25,8 +25,8 @@ def _queue(request: Request) -> JobQueue:
     "", response_model=PipelineRunResponse, status_code=status.HTTP_202_ACCEPTED
 )
 def create_run(body: PipelineRunCreate, request: Request) -> PipelineRunResponse:
-    """Queue a job for the worker. 400 if `step` isn't a pipeline step, 409 if the
-    run already has an active job."""
+    """Queue a job for the worker, starting from `step` if given. 400 if `step`
+    isn't a pipeline step, 409 if the run already has an active job."""
     if body.step is not None and body.step not in STEPS:
         raise HTTPException(
             status_code=400,

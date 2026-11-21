@@ -34,7 +34,7 @@ def make_client() -> tuple[TestClient, FakeQueue]:
     return TestClient(app), queue
 
 
-def test_queues_a_single_step():
+def test_queues_a_job_from_a_step():
     client, queue = make_client()
     response = client.post("/runs", json={"run_id": "run-1", "step": "clean_step"})
     assert response.status_code == 202

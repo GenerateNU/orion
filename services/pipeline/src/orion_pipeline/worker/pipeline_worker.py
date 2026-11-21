@@ -26,7 +26,8 @@ class PipelineWorker:
                 continue
             try:
                 if job.step:
-                    self.runner.run_step(job.run_id, job.step)
+                    # Re-run from this step: it and every step after it.
+                    self.runner.run_from(job.run_id, job.step)
                 else:
                     self.runner.run_all(job.run_id)
                 self.queue.finish(job.id)

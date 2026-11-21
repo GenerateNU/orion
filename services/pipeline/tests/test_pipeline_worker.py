@@ -33,8 +33,8 @@ class FakeRunner:
     def run_all(self, run_id: str) -> None:
         self.calls.append(("run_all", run_id))
 
-    def run_step(self, run_id: str, step: str) -> None:
-        self.calls.append(("run_step", run_id, step))
+    def run_from(self, run_id: str, start_step: str) -> None:
+        self.calls.append(("run_from", run_id, start_step))
 
 
 def run_one_job(step: str | None) -> list[tuple[str, ...]]:
@@ -47,8 +47,8 @@ def run_one_job(step: str | None) -> list[tuple[str, ...]]:
     return runner.calls
 
 
-def test_job_with_a_step_runs_only_that_step():
-    assert run_one_job("clean_step") == [("run_step", "run-1", "clean_step")]
+def test_job_with_a_step_runs_from_that_step():
+    assert run_one_job("state_step") == [("run_from", "run-1", "state_step")]
 
 
 def test_job_without_a_step_runs_the_whole_pipeline():

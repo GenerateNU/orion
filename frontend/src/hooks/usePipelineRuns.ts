@@ -16,16 +16,12 @@ import { z } from "zod";
 const PipelineRunListSchema = z.array(PipelineRunResponseSchema);
 
 // How often a queued/running job is re-fetched. There's no SSE endpoint yet.
-export const PIPELINE_POLL_MS = 2000;
+const PIPELINE_POLL_MS = 2000;
 
 // After a job finishes, the run lists show its new status. A successful job also
 // rewrote the run's data, so that one run's cached metadata and traces are refetched.
 // Other runs' cached traces are left alone.
-export function invalidateAfterJob(
-  queryClient: QueryClient,
-  runId: string,
-  status: PipelineStatus,
-) {
+function invalidateAfterJob(queryClient: QueryClient, runId: string, status: PipelineStatus) {
   queryClient.invalidateQueries({ queryKey: runKeys.lists() });
   queryClient.invalidateQueries({ queryKey: penelopeRunKeys.all });
   if (status === "succeeded") {

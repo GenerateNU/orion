@@ -28,9 +28,10 @@ class JobQueue:
         self.engine = engine
 
     def enqueue(self, run_id: str, step: str | None = None) -> PipelineRun:
-        """Queue a job for `run_id`: just `step`, or the whole pipeline if None.
-        Raises JobAlreadyActiveError if the run already has a queued or running
-        job, so the same run is never processed twice at once."""
+        """Queue a job for `run_id`, starting from `step` (it and every later step
+        run), or the whole pipeline if None. Raises JobAlreadyActiveError if the run
+        already has a queued or running job, so the same run is never processed
+        twice at once."""
         with Session(self.engine, expire_on_commit=False) as session, session.begin():
             active = session.scalar(select_active_pipeline_run(run_id))
             if active is not None:

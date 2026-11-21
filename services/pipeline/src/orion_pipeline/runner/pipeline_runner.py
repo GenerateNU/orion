@@ -7,7 +7,7 @@ from orion_pipeline.clients.oriondb_client import OrionDBClient
 from orion_pipeline.clients.penelope_client import PenelopeClient
 from orion_pipeline.runner.run_context import RunContext
 from orion_pipeline.steps.base_step import PipelineStep
-from orion_pipeline.steps.step_registry import STEPS, ordered_steps
+from orion_pipeline.steps.step_registry import ordered_steps
 
 logger = logging.getLogger(__name__)
 
@@ -36,13 +36,14 @@ class PipelineRunner:
         for step_cls in ordered_steps():
             self._run(step_cls, ctx)
 
-    # Runs single specific step
-    def run_step(self, run_id: str, step: str) -> None:
-        self._run(STEPS[step], self._context(run_id))
-
-    # Runs remaining steps starting from pipeline stage.
+    # Runs start_step and every step after it, in order. Later steps use the
+    # earlier ones' output, so re-running a step means re-running what follows it.
     def run_from(self, run_id: str, start_step: str) -> None:
-        raise NotImplementedError
+        order = ordered_steps()
+        start = [s.name for s in order].index(start_step)
+        ctx = self._context(run_id)
+        for step_cls in order[start:]:
+            self._run(step_cls, ctx)
 
     def _context(self, run_id: str) -> RunContext:
         return RunContext(

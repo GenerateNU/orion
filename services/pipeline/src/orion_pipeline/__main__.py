@@ -9,6 +9,7 @@ from orion_core.db.engines import make_sync_engine
 from orion_core.settings import get_settings
 from orion_pipeline.jobs.job_queue import JobQueue
 from orion_pipeline.runner.pipeline_runner import PipelineRunner
+from orion_pipeline.steps.step_registry import STEPS
 from orion_pipeline.worker.pipeline_worker import PipelineWorker
 
 
@@ -22,6 +23,12 @@ def main() -> None:
     commands.add_parser("worker", help="Process queued jobs forever")
     run = commands.add_parser("run", help="Run the pipeline for one run_id, right now")
     run.add_argument("run_id")
+    run.add_argument(
+        "--from",
+        dest="start_step",
+        choices=list(STEPS),
+        help="Start at this step and run every step after it (default: all steps)",
+    )
     args = parser.parse_args()
 
     logging.basicConfig(level=logging.INFO)
@@ -36,6 +43,8 @@ def main() -> None:
     elif args.command == "worker":
         queue = JobQueue(make_sync_engine(settings.orion_database_url))
         PipelineWorker(queue, PipelineRunner(settings)).run_forever()
+    elif args.start_step:
+        PipelineRunner(settings).run_from(args.run_id, args.start_step)
     else:
         PipelineRunner(settings).run_all(args.run_id)
 
