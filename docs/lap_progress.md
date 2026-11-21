@@ -30,8 +30,7 @@ The ideal lap is picked from complete, normal laps only. A lap is left out if it
 | --- | --- |
 | The first lap | It includes the drive before the first crossing (the pits). |
 | The last lap | It stops wherever the run stops. |
-| A lap with a hole in its data over 1 s | Its path has a gap in it. |
-| A lap over 1.5 × the median lap time | Long stops, or two laps merged by a missed crossing. |
+| A lap over 1.5 × the median lap time | Long stops, holes in the data, or two laps merged by a missed crossing. |
 
 A run with 1 or 2 laps has no lap left, so it gets no percentages (no
 `lap_progress` rows). With 3 laps, only the middle one can be chosen, so it
@@ -139,7 +138,6 @@ All in `Settings` (`orion_core/settings.py`), each settable from `.env`:
 
 | Setting | Default | What it does |
 | --- | --- | --- |
-| `lap_progress_max_gap_s` | 1.0 | Longest data hole a lap may have to be chosen |
 | `lap_progress_max_lap_time_ratio` | 1.5 | Slowest lap that may be chosen, × the median |
 | `lap_progress_spacing_m` | 1.0 | Distance between the ideal lap's points |
 | `lap_progress_smoothing_m` | 0.25 | How far smoothing may move the ideal lap |

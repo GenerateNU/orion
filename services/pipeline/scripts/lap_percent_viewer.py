@@ -54,8 +54,7 @@ from orion_pipeline.runner.run_context import RunContext  # noqa: E402
 from orion_pipeline.steps.lap_progress_step.ideal_lap import (  # noqa: E402
     choose_laps,
     find_medoid,
-    lap_stats,
-    laps_from_ids,
+    lap_durations,
 )
 from orion_pipeline.steps.lap_progress_step.lap_progress_utils import (  # noqa: E402
     FloatArray,
@@ -122,8 +121,7 @@ def ideal_lap(
 ) -> IdealLap | None:
     """The run's ideal lap, built the way the lap progress step builds it."""
     chosen = choose_laps(
-        lap_stats(times, laps_from_ids(times, lap_ids)),
-        max_gap_s=ctx.lap_progress_max_gap_s,
+        lap_durations(times, lap_ids),
         max_lap_time_ratio=ctx.lap_progress_max_lap_time_ratio,
     )
     if not chosen:

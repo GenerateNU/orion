@@ -42,11 +42,8 @@ class Settings(BaseSettings):
     lap_min_lap_time_s: float = 10.0
 
     # Lap progress (see docs/lap_progress.md). Untuned starting guesses.
-    # A lap with a hole in its data longer than this can't be the ideal lap, in
-    # seconds.
-    lap_progress_max_gap_s: float = 1.0
-    # A lap slower than this times the median lap is an outlier (a long stop, or laps
-    # merged by a missed crossing), so it can't be the ideal lap.
+    # A lap slower than this times the median lap is an outlier (a long stop, a hole
+    # in the data, or laps merged by a missed crossing), so it can't be the ideal lap.
     lap_progress_max_lap_time_ratio: float = 1.5
     # Distance between the points of each resampled lap, in meters.
     lap_progress_spacing_m: float = 1.0

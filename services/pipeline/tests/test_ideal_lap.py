@@ -9,8 +9,7 @@ from orion_pipeline.steps.lap_progress_step.ideal_lap import (
     assign_lap_ids,
     choose_laps,
     find_medoid,
-    lap_stats,
-    laps_from_ids,
+    lap_durations,
 )
 from orion_pipeline.steps.lap_progress_step.lap_progress_utils import (
     IdealLap,
@@ -29,8 +28,7 @@ def drive(laps: list[dict[str, Any]]) -> tuple[pd.DataFrame, pd.DataFrame]:
     """A run around a 50 m circle, one dict per lap.
 
     Each dict has `secs` (lap time), and optionally `loops` (how many times
-    round the circle the lap goes, for merged laps, default 1) and `gap`
-    ((from_s, to_s) within the lap with no points).
+    round the circle the lap goes, for merged laps, default 1).
 
     Args:
         laps: One dict per lap, as above.
@@ -44,13 +42,9 @@ def drive(laps: list[dict[str, Any]]) -> tuple[pd.DataFrame, pd.DataFrame]:
         n = round(lap["secs"] / DT_S)
         frac = np.arange(n) / n
         theta = 2 * np.pi * lap.get("loops", 1) * frac
-        keep = np.ones(n, dtype=bool)
-        if "gap" in lap:
-            lo, hi = lap["gap"]
-            keep = (frac * lap["secs"] < lo) | (frac * lap["secs"] >= hi)
-        times.extend(t0 + frac[keep] * lap["secs"])
-        xs.extend(RADIUS_M * np.sin(theta[keep]))
-        ys.extend(RADIUS_M * (1 - np.cos(theta[keep])))
+        times.extend(t0 + frac * lap["secs"])
+        xs.extend(RADIUS_M * np.sin(theta))
+        ys.extend(RADIUS_M * (1 - np.cos(theta)))
         starts.append(t0)
         t0 += lap["secs"]
         ends.append(t0)
@@ -70,9 +64,10 @@ def drive(laps: list[dict[str, Any]]) -> tuple[pd.DataFrame, pd.DataFrame]:
 
 def chosen(laps: list[dict[str, Any]], **tunables: float) -> list[int]:
     positions, lap_rows = drive(laps)
+    lap_ids = assign_lap_ids(positions["time"], lap_rows)
     return choose_laps(
-        lap_stats(positions["time"], lap_rows),
-        **{"max_gap_s": 1.0, "max_lap_time_ratio": 1.5, **tunables},
+        lap_durations(positions["time"], lap_ids),
+        **{"max_lap_time_ratio": 1.5, **tunables},
     )
 
 
@@ -107,16 +102,6 @@ def test_choose_laps_skips_merged_laps():
     assert chosen([*laps, {"secs": 49}, {"secs": 50}]) == [2, 4, 5]
 
 
-def test_choose_laps_skips_laps_with_holes_in_the_data():
-    laps: list[dict[str, Any]] = [
-        {"secs": 50},
-        {"secs": 50, "gap": (10, 15)},
-        {"secs": 50},
-        {"secs": 50},
-    ]
-    assert chosen(laps) == [3]
-
-
 def test_choose_laps_respects_its_tunables():
     laps = [{"secs": 50}, {"secs": 50}, {"secs": 70}, {"secs": 50}, {"secs": 50}]
     assert chosen(laps) == [2, 3, 4]
@@ -125,16 +110,6 @@ def test_choose_laps_respects_its_tunables():
 
 def test_too_few_laps_choose_nothing():
     assert chosen([{"secs": 50}, {"secs": 50}]) == []
-    assert chosen([{"secs": 50}, {"secs": 50, "gap": (5, 20)}, {"secs": 50}]) == []
-
-
-def test_lap_stats_counts_missing_data_at_a_lap_edge_as_a_hole():
-    positions, lap_rows = drive(
-        [{"secs": 20}, {"secs": 30, "gap": (0, 3)}, {"secs": 20}]
-    )
-    stats = lap_stats(positions["time"], lap_rows)
-    assert stats["max_gap_s"].iloc[1] == pytest.approx(3.0, abs=0.01)
-    assert stats["duration_s"].tolist() == pytest.approx([20, 30, 20])
 
 
 # ---- Picking the ideal lap ---------------------------------------------------
@@ -212,14 +187,11 @@ def test_assign_lap_ids_uses_half_open_laps():
     assert assign_lap_ids(times, lap_rows).tolist() == [1, 1, 2, 2]
 
 
-def test_laps_from_ids_rebuilds_lap_windows():
+def test_lap_durations_times_each_lap():
     positions, lap_rows = drive([{"secs": 20}, {"secs": 30}, {"secs": 25}])
     lap_ids = assign_lap_ids(positions["time"], lap_rows)
-    laps = laps_from_ids(positions["time"], lap_ids)
+    durations = lap_durations(positions["time"], lap_ids)
 
-    assert laps["lap_id"].tolist() == [1, 2, 3]
-    # Each lap starts at its first point and ends where the next one starts.
-    assert laps["start_time"].tolist() == lap_rows["start_time"].tolist()
-    assert laps["end_time"].tolist()[:2] == lap_rows["start_time"].tolist()[1:]
-    # The last lap ends at the run's last point.
-    assert laps["end_time"].iloc[-1] == positions["time"].iloc[-1]
+    assert durations.index.tolist() == [1, 2, 3]
+    # The last lap ends at the run's last point, one tick before its end.
+    assert durations.tolist() == pytest.approx([20, 30, 25 - DT_S])

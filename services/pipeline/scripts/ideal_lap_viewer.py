@@ -61,8 +61,7 @@ from orion_pipeline.steps.lap_progress_step.ideal_lap import (  # noqa: E402
     assign_lap_ids,
     choose_laps,
     find_medoid,
-    lap_stats,
-    laps_from_ids,
+    lap_durations,
 )
 from orion_pipeline.steps.lap_progress_step.lap_progress_utils import (  # noqa: E402
     FloatArray,
@@ -233,10 +232,9 @@ def main() -> None:
     lap_ids = assign_lap_ids(times, client.read_frame(select_laps(run_id)))
     x, y = to_local_xy(positions["lattitude"], positions["longitude"])
 
-    stats = lap_stats(times, laps_from_ids(times, lap_ids))
+    lap_times = lap_durations(times, lap_ids)
     chosen = choose_laps(
-        stats,
-        max_gap_s=ctx.lap_progress_max_gap_s,
+        lap_times,
         max_lap_time_ratio=ctx.lap_progress_max_lap_time_ratio,
     )
     if not chosen:
@@ -246,7 +244,7 @@ def main() -> None:
         resample(x[lap_ids == i], y[lap_ids == i], ctx.lap_progress_spacing_m)
         for i in chosen
     ]
-    durations = stats.set_index("lap_id").loc[chosen, "duration_s"]
+    durations = lap_times.loc[chosen]
     median_lap = int(durations.sort_values(kind="stable").index[(len(chosen) - 1) // 2])
     medoid_index = find_medoid(laps)
     medoid = laps[medoid_index]
@@ -294,7 +292,7 @@ def main() -> None:
     for ax in axes.flat[len(candidates) :]:
         ax.set_visible(False)
     fig.suptitle(
-        f"Run {run_id}: {len(stats)} laps, ideal lap picked from laps {chosen}"
+        f"Run {run_id}: {len(lap_times)} laps, ideal lap picked from laps {chosen}"
     )
     fig.legend(
         handles=legend_handles(chosen),

@@ -23,7 +23,6 @@ class RunContext(BaseModel):
     lap_min_lap_time_s: float = get_settings().lap_min_lap_time_s
 
     # Lap progress step tunables. See the matching `lap_progress_*` fields on Settings.
-    lap_progress_max_gap_s: float = get_settings().lap_progress_max_gap_s
     lap_progress_max_lap_time_ratio: float = (
         get_settings().lap_progress_max_lap_time_ratio
     )

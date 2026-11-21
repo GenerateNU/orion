@@ -11,8 +11,7 @@ from orion_pipeline.steps.lap_progress_step.ideal_lap import (
     assign_lap_ids,
     choose_laps,
     find_medoid,
-    lap_stats,
-    laps_from_ids,
+    lap_durations,
 )
 from orion_pipeline.steps.lap_progress_step.lap_progress_utils import (
     drop_forward_jumps,
@@ -79,8 +78,7 @@ class LapProgressStep(PipelineStep):
         time_s = np.asarray((times - times.iloc[0]).dt.total_seconds(), np.float64)
 
         chosen = choose_laps(
-            lap_stats(times, laps_from_ids(times, lap_ids)),
-            max_gap_s=ctx.lap_progress_max_gap_s,
+            lap_durations(times, lap_ids),
             max_lap_time_ratio=ctx.lap_progress_max_lap_time_ratio,
         )
         if not chosen:
