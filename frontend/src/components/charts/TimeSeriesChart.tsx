@@ -18,7 +18,6 @@ export type ChartSeries = {
 export type TimeSeriesChartProps = {
   series: ChartSeries[];
   height?: number;
-  yLabel?: string;
   visibleWindow?: TimeWindow | null;
   onCommitWindow?: (window: TimeWindow) => void;
   onResetWindow?: () => void;
@@ -67,7 +66,6 @@ const applyWindow = (chart: uPlot, timeWindow: TimeWindow | null) => {
 export const TimeSeriesChart = ({
   series,
   height = 600,
-  yLabel = "",
   visibleWindow = null,
   onCommitWindow,
   onResetWindow,
@@ -105,16 +103,14 @@ export const TimeSeriesChart = ({
       },
       axes: [
         {
-          label: "Time",
           values: (_chart, ticks) => ticks.map(formatTime),
           stroke: (chart) => cssStyle(chart, "--text-muted"),
           grid: { stroke: (chart) => cssStyle(chart, "--border-default") },
           ticks: { stroke: (chart) => cssStyle(chart, "--border-default") },
         },
         {
-          label: yLabel,
-          labelGap: 8,
-          size: 60,
+          // No label, no space reserved for one: callers show the unit themselves.
+          size: 48,
           values: (_chart, ticks, _axisIdx, _space, increment) => formatTicks(ticks, increment),
           stroke: (chart) => cssStyle(chart, "--text-muted"),
           grid: { stroke: (chart) => cssStyle(chart, "--border-default") },
@@ -156,7 +152,7 @@ export const TimeSeriesChart = ({
         ],
       },
     }),
-    [height, yLabel, series],
+    [height, series],
   );
 
   useEffect(() => {

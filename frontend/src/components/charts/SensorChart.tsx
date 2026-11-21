@@ -31,6 +31,8 @@ export default function SensorChart({ name, unit, height }: SensorChartProps) {
       time.push((t - trace.startMs) as RunTime);
       values.push(value);
     });
+    // The series can be listed with no readings in it: that's the empty state too.
+    if (time.length === 0) return undefined;
     return [{ id: name, label: name, unit, time, values }];
   }, [trace, name, unit]);
 
@@ -40,5 +42,6 @@ export default function SensorChart({ name, unit, height }: SensorChartProps) {
   }
   if (!series) return <EmptyState message="This run has no readings for this sensor." />;
 
-  return <TimeSeriesChartFunctionality series={series} height={height} yLabel={unit} />;
+  // The unit is in the card title, so the axis needs no label.
+  return <TimeSeriesChartFunctionality series={series} height={height} />;
 }
