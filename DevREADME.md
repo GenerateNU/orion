@@ -95,6 +95,7 @@ proxies `/api/*` to the backend instead.
 | `sensor_sources`      | Maps each Penelope `raw_tag` (`dataTypeName`) to a sensor             |
 | `cleaned_data`        | Output of the clean step: `run_id, time, sensor, values`              |
 | `estimated_car_state` | Output of state estimation (step not implemented yet)                 |
+| `graph_tabs`          | One row (`id` 1): the dashboard's graph tabs as JSONB, shared by everyone |
 
 Naming: **`run_id`** (a string) identifies a run everywhere. **`raw_tag`** is Penelope's
 name for a sensor, and **`sensor`** is our cleaned name for it.
@@ -142,6 +143,7 @@ Penelope return 503, and the run list just omits Penelope's run times.
 | `GET /sensors`                      | Penelope      |
 | `GET /runs/{run_id}/sensors/data`   | Penelope      |
 | `GET /runs/{run_id}/state`          | OrionDB `estimated_car_state` |
+| `GET/PUT /graph-tabs`               | OrionDB `graph_tabs`; `PUT` replaces the whole list |
 | `POST/GET /pipeline/runs`, `GET /pipeline/runs/{id}` | forwarded to the pipeline API |
 
 The backend **never runs pipeline code**. It reaches the pipeline over HTTP (`PIPELINE_API_URL`).

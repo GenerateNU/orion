@@ -6,12 +6,13 @@ from datetime import datetime
 from typing import Any
 
 from sqlalchemy import Select, delete, exists, select, update
-from sqlalchemy.dialects.postgresql import insert
+from sqlalchemy.dialects.postgresql import Insert, insert
 from sqlalchemy.sql.dml import ReturningDelete, ReturningInsert, ReturningUpdate
 
 from orion_core.models.orion import (
     CleanedData,
     EstimatedCarState,
+    GraphTab,
     PipelineRun,
     PipelineStatus,
     Run,
@@ -146,3 +147,16 @@ def update_run(run_id: str, **values: datetime | None) -> ReturningUpdate[Run]:
 def delete_run(run_id: str) -> ReturningDelete[str]:
     """Delete a run, returning its id. Returns no row if it doesn't exist."""
     return delete(Run).where(Run.run_id == run_id).returning(Run.run_id)
+
+
+def select_graph_tabs() -> Select[list[dict[str, Any]]]:
+    """The saved graph tab list. Returns no row if nothing has been saved yet."""
+    return select(GraphTab.tabs).where(GraphTab.id == 1)
+
+
+def upsert_graph_tabs(tabs: list[dict[str, Any]]) -> Insert:
+    """Replace the saved graph tab list with `tabs`, creating the row if needed."""
+    stmt = insert(GraphTab).values(id=1, tabs=tabs)
+    return stmt.on_conflict_do_update(
+        index_elements=[GraphTab.id], set_={"tabs": stmt.excluded.tabs}
+    )
