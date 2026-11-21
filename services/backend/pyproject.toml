@@ -8,6 +8,7 @@ dependencies = [
     "fastapi>=0.115",
     "httpx>=0.28",
     "uvicorn[standard]>=0.34",
+    "pandas>=2.2",
 ]
 
 [tool.uv.sources]

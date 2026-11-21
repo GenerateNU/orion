@@ -53,9 +53,8 @@ def test_query_window_edges(tag, raw_time, included):
 
 
 def get_data(monkeypatch, offset_s=OFFSET.total_seconds(), **kwargs):
-    monkeypatch.setattr(
-        sensor_service, "get_settings", lambda: SimpleNamespace(gps_time_offset_s=offset_s)
-    )
+    settings = SimpleNamespace(gps_time_offset_s=offset_s, lap_percent_match_tolerance_s=0.05)
+    monkeypatch.setattr(sensor_service, "get_settings", lambda: settings)
     rows = [
         {"raw_tag": GPS, "time": START, "values": [1.0, 2.0]},
         {"raw_tag": OTHER, "time": START, "values": [80.0]},
@@ -66,7 +65,7 @@ def get_data(monkeypatch, offset_s=OFFSET.total_seconds(), **kwargs):
         calls.append(args)
         return [SimpleNamespace(_mapping=row) for row in rows]
 
-    service = SensorService(MagicMock())
+    service = SensorService(MagicMock(), MagicMock())
     monkeypatch.setattr(service.repository, "list_readings", list_readings)
     response = asyncio.run(service.get_sensor_data("run", [GPS, OTHER], START, END, **kwargs))
     return response, calls[0]

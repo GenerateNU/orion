@@ -41,6 +41,25 @@ class SensorSeries(BaseModel):
         ),
         examples=[[[42.3398, -71.0892], [42.3399, -71.0890]]],
     )
+    lap_id: list[int | None] | None = Field(
+        default=None,
+        description=(
+            "Only when queried by lap percent. The lap each reading falls in, from the "
+            "run's laps (`[start_time, end_time)`, the last lap's end included). Same "
+            "length as `time`; `null` outside every lap."
+        ),
+        examples=[[3, 3]],
+    )
+    lap_percent: list[float | None] | None = Field(
+        default=None,
+        description=(
+            "Only when queried by lap percent. How far around the run's ideal lap the "
+            "car was at each reading, 0-100, from the nearest estimated position within "
+            "`LAP_PERCENT_MATCH_TOLERANCE_S`. Same length as `time`; `null` when there's "
+            "no position that close or the car was off track there."
+        ),
+        examples=[[41.7, 41.9]],
+    )
 
 
 class SensorDataResponse(BaseModel):
