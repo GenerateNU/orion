@@ -8,11 +8,13 @@ import PageHeader from "@components/layout/PageHeader";
 import StatusBadge from "@components/runs/StatusBadge";
 import Button, { ButtonLink } from "@components/ui/Button";
 import { ApiError } from "@api/client";
+import { cx } from "@utils/classNames";
 import { formatDate, formatDuration } from "@utils/format";
 import DashboardStoreProvider from "@features/dashboard/state/DashboardStoreProvider";
 import { useLastRunStore } from "@features/dashboard/state/lastRunStore";
 import { useDashboardRun } from "@features/dashboard/state/useDashboard";
 import styles from "./DashboardView.module.css";
+import GpsToggle from "@features/dashboard/panels/GpsToggle";
 import { TrackMap } from "@features/dashboard/panels/TrackMap";
 import { useRunPipeline } from "@hooks/useRunPipeline";
 import SensorChartsPanel from "@components/charts/SensorChartPanel";
@@ -94,13 +96,16 @@ function RunDashboard() {
 
       <div className={styles.layout}>
         <section className={styles.panel} aria-labelledby="track-map-heading">
-          <h2 id="track-map-heading" className={styles.panelHeading}>
-            Track position
-          </h2>
+          <div className={styles.panelHeader}>
+            <h2 id="track-map-heading" className={styles.panelHeading}>
+              Track position
+            </h2>
+            <GpsToggle />
+          </div>
           <TrackMap />
         </section>
-        <section className={styles.panel} aria-labelledby="sensor-charts-heading">
-          <h2 id="sensor-charts-heading" className={styles.panelHeading}>
+        <section className={cx(styles.panel, styles.right)} aria-labelledby="sensor-charts-heading">
+          <h2 id="sensor-charts-heading" className={styles.visuallyHidden}>
             Sensors
           </h2>
           <SensorChartsPanel />

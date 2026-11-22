@@ -284,10 +284,10 @@ The `Gate` dataclass stores:
 | --- | --- |
 | `x`, `y` | The gate center: the revisited point P |
 | `heading_x`, `heading_y` | The unit heading at P: the direction the car drives through the gate |
-| `half_width_m` | How far the gate reaches on each side of its center (`lap_gate_half_width_m`, 5 m) |
+| `half_width_m` | How far the gate reaches on each side of its center (`lap_gate_half_width_m`, 15 m) |
 
 The gate line goes through the center, perpendicular to the heading, and is
-`2 × half_width_m` (10 m) long.
+`2 × half_width_m` (30 m) long.
 
 ```
                          ▲ left = +5
@@ -471,7 +471,7 @@ They are **untuned starting guesses**.
 | `lap_min_revisit_time_s` (`LAP_MIN_REVISIT_TIME_S`) | 5.0 | Minimum time between two points for a revisit to count | Too small lets slow driving match itself. Too large could skip a very short loop. |
 | `lap_min_revisit_distance_m` (`LAP_MIN_REVISIT_DISTANCE_M`) | 50.0 | Minimum distance driven between two points for a revisit to count | Too small lets a slowly creeping car match itself. Too large misses tracks shorter than it (not realistic for FSAE). |
 | `lap_gate_search_sample_every` (`LAP_GATE_SEARCH_SAMPLE_EVERY`) | 5 | The gate search only looks at every Nth point | Bigger is faster but spaces sampled points further apart. Set to 1 to use every point. |
-| `lap_gate_half_width_m` (`LAP_GATE_HALF_WIDTH_M`) | 5.0 | The gate reaches this far on each side of its center (10 m total) | Wider tolerates different racing lines, but risks catching a nearby, parallel part of the track. Should stay larger than the hitbox radius. |
+| `lap_gate_half_width_m` (`LAP_GATE_HALF_WIDTH_M`) | 15.0 | The gate reaches this far on each side of its center (30 m total) | Wider tolerates different racing lines, but risks catching a nearby, parallel part of the track. Should stay larger than the hitbox radius. Raised from 5.0 after run `80a58216-3dae-4c3d-ac69-f4afff3f928f`: the car's line spread about 20 m across the track at the gate, so a 10 m gate counted 3 of 8 passes. The count stopped changing from 12.5 m up to 30 m. |
 | `lap_min_lap_time_s` (`LAP_MIN_LAP_TIME_S`) | 10.0 | Minimum time between two lap boundaries | Bigger suppresses more jitter, but must stay below the fastest real lap. |
 
 ## 11. Known limitations

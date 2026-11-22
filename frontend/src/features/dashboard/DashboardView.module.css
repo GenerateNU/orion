@@ -1,21 +1,19 @@
-/* Track map on the left, the other panels on the right; stacked when narrow. */
+/* Fills the space below the header: track map (40%, scaled to fit, never scrolls)
+   beside the sensor charts (60%, scrolls on its own). Stacked when narrow, and the
+   page scrolls instead. */
 .layout {
+  flex: 1;
+  min-height: 0;
   display: grid;
-  grid-template-columns: minmax(320px, 440px) minmax(0, 1fr);
+  grid-template-columns: minmax(0, 2fr) minmax(0, 3fr);
   gap: var(--space-4);
-  align-items: start;
-}
-
-@media (max-width: 960px) {
-  .layout {
-    grid-template-columns: minmax(0, 1fr);
-  }
 }
 
 .panel {
   display: flex;
   flex-direction: column;
   gap: var(--space-3);
+  min-height: 0;
   padding: var(--space-4);
   background: var(--bg-surface);
   border: 1px solid var(--border-default);
@@ -27,6 +25,41 @@
   display: flex;
   flex-wrap: wrap;
   gap: var(--space-2);
+}
+
+.panelHeader {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-2);
+}
+
+/* Doesn't scroll itself: the graph tabs stay at its top and the graphs scroll
+   inside it (SensorChartPanel). */
+.right {
+  overflow: hidden;
+}
+
+/* Named for screen readers; the graph tabs head the pane on screen. */
+.visuallyHidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+
+@media (max-width: 960px) {
+  .layout {
+    flex: none;
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .right {
+    overflow: visible;
+  }
 }
 
 .panelHeading {
