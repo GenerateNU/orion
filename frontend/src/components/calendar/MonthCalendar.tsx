@@ -1,4 +1,4 @@
-import { useMemo } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { ChevronLeft, ChevronRight } from "lucide-react";
 import Button from "@components/ui/Button";
 import IconButton from "@components/ui/IconButton";
@@ -9,6 +9,31 @@ import styles from "./MonthCalendar.module.css";
 
 const WEEKDAYS = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
 const NO_RUNS: readonly RunRow[] = [];
+const WEEKS = 6;
+
+// A day cell's fixed parts (CalendarDay.module.css): 8px padding and 1.5px border
+// top and bottom, the date's 20px line, and a 4px gap before each 16px run line.
+const CELL_CHROME = 2 * 8 + 20;
+const LINE = 16 + 4;
+// --space-2 (MonthCalendar.module.css); --space-1 at phone widths.
+const gridGap = () => (window.matchMedia("(max-width: 768px)").matches ? 4 : 8);
+
+// How many run lines fit under the date in a cell, from the grid's height.
+function useLineCount() {
+  const gridRef = useRef<HTMLDivElement>(null);
+  const [lineCount, setLineCount] = useState(0);
+  useEffect(() => {
+    const grid = gridRef.current;
+    if (!grid) return;
+    const observer = new ResizeObserver(() => {
+      const rowHeight = (grid.clientHeight - (WEEKS - 1) * gridGap()) / WEEKS;
+      setLineCount(Math.max(0, Math.floor((rowHeight - CELL_CHROME) / LINE)));
+    });
+    observer.observe(grid);
+    return () => observer.disconnect();
+  }, []);
+  return [gridRef, lineCount] as const;
+}
 
 type MonthCalendarProps = {
   month: MonthKey;
@@ -34,6 +59,7 @@ export default function MonthCalendar({
 }: MonthCalendarProps) {
   const weeks = useMemo(() => monthGrid(month), [month]);
   const heading = formatMonthHeading(month);
+  const [gridRef, lineCount] = useLineCount();
 
   return (
     <section className={styles.calendar} aria-labelledby="calendar-heading">
@@ -58,7 +84,7 @@ export default function MonthCalendar({
         ))}
       </div>
 
-      <div className={styles.grid} role="group" aria-label={`Days of ${heading}`}>
+      <div ref={gridRef} className={styles.grid} role="group" aria-label={`Days of ${heading}`}>
         {weeks.flat().map((day) => (
           <CalendarDay
             key={day.day}
@@ -66,6 +92,7 @@ export default function MonthCalendar({
             runs={runsByDay.get(day.day) ?? NO_RUNS}
             selected={day.day === selectedDay}
             isToday={day.day === today}
+            lineCount={lineCount}
             onSelect={onSelectDay}
           />
         ))}

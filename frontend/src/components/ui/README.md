@@ -65,7 +65,8 @@ local `"YYYY-MM-DD"` day keys and `"YYYY-MM"` month keys (`utils/calendar.ts`).
   `selectedDay`, `today`, `onSelectDay`, `onMonthChange` (±1), `onToday`. Month header with
   previous/next and Today, then a Monday-first grid of six weeks.
 - `components/calendar/CalendarDay` (a Month grid cell): `day`, `runs`, `selected`, `isToday`,
-  `onSelect`. The date, then each run's start time with a status dot; past 3 runs, "+N more".
+  `lineCount`, `onSelect`. The date, then each run's start time with a status dot, as many as
+  `lineCount` allows; when they don't all fit, the last line is "+N more".
 - `components/runs/RunStatusDot` (calendar "Ellipse"): `status`. A 6px dot in the status color: the
   compact form of StatusBadge.
 - `components/runs/DayRunsPanel` (Runs on the selected day): `day`, `runs`, `selectedRunId`,
