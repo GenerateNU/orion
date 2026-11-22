@@ -3,6 +3,7 @@ import { keepPreviousData } from "@tanstack/react-query";
 import type { MetricsResponse } from "@schemas/metrics.schema";
 import type { SensorDataResponse, SensorSeries } from "@schemas/sensor.schema";
 import type { StateDataResponse } from "@schemas/state.schema";
+import { useDerivedMetricData } from "@hooks/useDerivedMetrics";
 import { useMetrics } from "@hooks/useMetrics";
 import { useSensorData } from "@hooks/useSensors";
 import { useStateEstimation } from "@hooks/useStateEstimation";
@@ -131,5 +132,35 @@ export const useSensorTrace = (sensors: readonly string[], scope: DataScope) => 
     traceIsLoading: sensorDataIsLoading,
     traceIsPlaceholderData: sensorDataIsPlaceholderData,
     traceError: sensorDataError,
+  };
+};
+
+// One derived metric (list them with useDerivedMetrics), computed by the backend
+// from Penelope sensors and keyed by `name` in `series`. Use the "overview" scope
+// so it's computed once per run and zooming doesn't refetch.
+export const useDerivedMetricTrace = (name: string | undefined, scope: DataScope) => {
+  const { runId, timeline } = useDashboardRun();
+  // Queries only run once the timeline is known, so `select` never sees the 0.
+  const startMs = timeline?.startMs ?? 0;
+  const window = useFetchWindow(scope);
+  const range = useMemo(
+    () => (timeline ? toIsoRange(timeline, window, "utc") : undefined),
+    [timeline, window],
+  );
+  const select = useCallback(
+    (data: SensorDataResponse): SensorTraces => ({ startMs, series: data.series }),
+    [startMs],
+  );
+  const {
+    derivedMetricData,
+    derivedMetricDataIsLoading,
+    derivedMetricDataIsPlaceholderData,
+    derivedMetricDataError,
+  } = useDerivedMetricData(runId, name, range, { select, placeholderData: keepPreviousData });
+  return {
+    trace: derivedMetricData,
+    traceIsLoading: derivedMetricDataIsLoading,
+    traceIsPlaceholderData: derivedMetricDataIsPlaceholderData,
+    traceError: derivedMetricDataError,
   };
 };
