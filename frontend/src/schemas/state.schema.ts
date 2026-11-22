@@ -10,6 +10,9 @@ export const StateDataResponseSchema = z.object({
   time: EpochTimesSchema,
   // [latitude, longitude], same length as `time`.
   positions: z.array(z.tuple([z.number(), z.number()])),
+  // How far around the ideal lap each position is (0-100), same length as `time`;
+  // null off track or when the run has no lap percents.
+  lap_percent: z.array(z.number().nullable()),
 });
 
 export type StateDataResponse = z.infer<typeof StateDataResponseSchema>;

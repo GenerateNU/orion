@@ -25,3 +25,12 @@ class StateDataResponse(BaseModel):
         ),
         examples=[[[42.3398, -71.0892], [42.3399, -71.0890]]],
     )
+    lap_percent: list[float | None] = Field(
+        default_factory=list,
+        description=(
+            "How far around the run's ideal lap each position is, 0-100, same length "
+            "as `time`. `null` off track, or when the pipeline hasn't computed lap "
+            "percents for the run."
+        ),
+        examples=[[41.7, 41.9]],
+    )

@@ -87,6 +87,22 @@
   stroke-width: 4;
 }
 
+/* Selected laps when comparing laps, each in its lap color; faded outside the
+   percent window when one is picked. */
+.lap path {
+  fill: none;
+  stroke-width: 2.5;
+  pointer-events: none;
+}
+
+.lapFaded {
+  opacity: 0.3;
+}
+
+.lap .lapPart {
+  stroke-width: 4;
+}
+
 /* Not committed yet (the default ±100 m when a run opens). */
 .pending .windowGlow {
   opacity: 0.1;

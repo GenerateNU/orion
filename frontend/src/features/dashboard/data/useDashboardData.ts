@@ -87,6 +87,8 @@ export type RunPositions = {
   time: Float64Array;
   // [latitude, longitude], same length as `time`.
   positions: [number, number][];
+  // Lap percent (0-100) of each position, same length as `time`; null off track.
+  lapPercent: (number | null)[];
 };
 
 export const useRunPositions = (scope: DataScope) => {
@@ -103,6 +105,7 @@ export const useRunPositions = (scope: DataScope) => {
       startMs,
       time: data.time,
       positions: data.positions,
+      lapPercent: data.lap_percent,
     }),
     [startMs],
   );

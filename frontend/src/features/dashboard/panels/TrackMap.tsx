@@ -3,21 +3,35 @@ import type { PointerEvent as ReactPointerEvent } from "react";
 import EmptyState from "@components/ui/EmptyState";
 import ErrorState from "@components/ui/ErrorState";
 import LoadingState from "@components/ui/LoadingState";
-import { useNoLapsSelected, useRunPositions } from "@features/dashboard/data/useDashboardData";
-import { useHoverTimeSubscription } from "@features/dashboard/state/useDashboard";
+import {
+  useCompareLaps,
+  useLaps,
+  useNoLapsSelected,
+  useRunPositions,
+} from "@features/dashboard/data/useDashboardData";
+import {
+  useDashboardActions,
+  useHoverTimeSubscription,
+  usePercentWindow,
+  useSelectedLaps,
+} from "@features/dashboard/state/useDashboard";
+import { lapColor, NO_LAPS_MESSAGE, type Lap } from "@features/dashboard/utils/laps";
+import type { TimeWindow } from "@features/dashboard/utils/time";
 import {
   anchorAt,
   distanceAt,
   gapPath,
   headingAt,
+  lapIndexRange,
+  lapPercentSpan,
   makeTrack,
+  nearestLapPercent,
   nearestSample,
   positionAt,
   tickAt,
   trackPath,
   windowPath,
 } from "@features/dashboard/utils/trackmap";
-import { NO_LAPS_MESSAGE } from "@features/dashboard/utils/laps";
 import { cx } from "@utils/classNames";
 import { TrackVisualization, type DragMode } from "./TrackVisualization";
 import {
@@ -32,6 +46,10 @@ import styles from "./TrackMap.module.css";
 // the start line, and the longer bars that are the window's resize handles.
 const TICK_HALF_LENGTH = 2.6;
 const HANDLE_HALF_LENGTH = 3.4;
+// The whole lap, in lap percent: what the map highlights when no chart is zoomed.
+const WHOLE_LAP = [0, 100] as const;
+// A drag on the map shorter than this, in lap percent, is a click and picks nothing.
+const MIN_PERCENT_DRAG = 0.5;
 // How close (screen px) a press must be to the road to move the car there.
 const ROAD_HIT_PX = 14;
 // The car's grab circle, in SVG units: this big when the handles are far away,
@@ -86,7 +104,6 @@ export function TrackMap() {
     [positions],
   );
   const { selection, selectionRef, update, commit, applied } = useTrackSelection(track);
-  const noLapsSelected = useNoLapsSelected();
 
   // Static layers, once per track.
   const base = useMemo(() => {
@@ -121,6 +138,107 @@ export function TrackMap() {
       ] as const,
     };
   }, [track, selection]);
+
+  // Comparing laps (3+ laps), the map draws only the selected laps, each in its
+  // lap color, and the charts ignore the time window, so its handles and the car
+  // are hidden. Dragging along a lap picks a percent window for the charts instead.
+  const { laps } = useLaps();
+  const selectedLaps = useSelectedLaps();
+  const percentWindow = usePercentWindow();
+  const { commitPercentWindow } = useDashboardActions();
+  const compareLaps = useCompareLaps();
+  const noLapsSelected = useNoLapsSelected();
+  const shownLaps = useMemo(
+    () => (compareLaps && laps ? laps.filter((lap) => selectedLaps.includes(lap.id)) : []),
+    [compareLaps, laps, selectedLaps],
+  );
+
+  // The percent window being dragged on the map, until it's committed on release.
+  const [draftPercent, setDraftPercent] = useState<TimeWindow | null>(null);
+  const percentDragRef = useRef<{ pointerId: number; from: number } | null>(null);
+  const highlightWindow = draftPercent ?? percentWindow;
+
+  // Each shown lap whole, and the stretch inside the percent window if there is one.
+  const lapPaths = useMemo(() => {
+    if (!track || !positions) return [];
+    const span = (lap: Lap, window: TimeWindow) =>
+      lapPercentSpan(track, lap, window, positions.lapPercent);
+    return shownLaps.flatMap((lap) => {
+      const whole = span(lap, WHOLE_LAP);
+      if (!whole) return [];
+      const part = highlightWindow ? span(lap, highlightWindow) : null;
+      return [
+        {
+          lapId: lap.id,
+          color: lapColor(lap.id),
+          whole: windowPath(track, whole[0], whole[1]),
+          part: part ? windowPath(track, part[0], part[1]) : null,
+        },
+      ];
+    });
+  }, [track, positions, shownLaps, highlightWindow]);
+
+  // Index ranges of the shown laps' positions, searched when dragging on the map.
+  const shownRanges = useMemo(
+    () => (track ? shownLaps.map((lap) => lapIndexRange(track, lap)) : []),
+    [track, shownLaps],
+  );
+
+  const percentAt = useCallback(
+    (e: ReactPointerEvent<SVGSVGElement>, maxPx = Infinity) => {
+      const svg = svgRef.current;
+      const p = svg && toSvgPoint(svg, e);
+      if (!p || !track || !positions) return null;
+      return nearestLapPercent(
+        track,
+        p.x,
+        p.y,
+        positions.lapPercent,
+        shownRanges,
+        maxPx * p.unitsPerPx,
+      );
+    },
+    [track, positions, shownRanges],
+  );
+
+  // A press on a shown lap starts a percent window there; empty space does nothing.
+  const handlePercentDown = (e: ReactPointerEvent<SVGSVGElement>) => {
+    if (!e.isPrimary || e.button !== 0 || percentDragRef.current) return;
+    const from = percentAt(e, ROAD_HIT_PX);
+    if (from === null) return;
+    e.preventDefault();
+    try {
+      svgRef.current?.setPointerCapture(e.pointerId);
+    } catch {
+      // The pointer is already gone; the drag still works while it's over the map.
+    }
+    percentDragRef.current = { pointerId: e.pointerId, from };
+    setDraftPercent([from, from]);
+  };
+
+  const handlePercentMove = (e: ReactPointerEvent<SVGSVGElement>) => {
+    const drag = percentDragRef.current;
+    if (!drag || e.pointerId !== drag.pointerId) return;
+    const to = percentAt(e);
+    if (to !== null) setDraftPercent([Math.min(drag.from, to), Math.max(drag.from, to)]);
+  };
+
+  // Release commits the window to the URL, where the charts pick it up.
+  const handlePercentUp = (e: ReactPointerEvent<SVGSVGElement>) => {
+    const drag = percentDragRef.current;
+    if (!drag || e.pointerId !== drag.pointerId) return;
+    percentDragRef.current = null;
+    if (draftPercent && draftPercent[1] - draftPercent[0] >= MIN_PERCENT_DRAG) {
+      commitPercentWindow(draftPercent);
+    }
+    setDraftPercent(null);
+  };
+
+  const handlePercentCancel = (e: ReactPointerEvent<SVGSVGElement>) => {
+    if (percentDragRef.current?.pointerId !== e.pointerId) return;
+    percentDragRef.current = null;
+    setDraftPercent(null);
+  };
 
   // Hover from other panels (charts) shows as a faint ghost marker. Moved
   // directly, not through React state, so the map doesn't re-render per frame.
@@ -266,21 +384,25 @@ export function TrackMap() {
         gaps={base.gaps}
         start={base.start}
         window={shape.window}
+        compareLaps={compareLaps}
+        lapPaths={lapPaths}
         car={shape.car}
         edges={shape.edges}
         pending={!applied && !dragMode}
         dragMode={dragMode}
-        onPointerDown={handlePointerDown}
-        onPointerMove={handlePointerMove}
-        onPointerUp={handlePointerUp}
-        onPointerCancel={handlePointerCancel}
-        onLostPointerCapture={handlePointerUp}
+        onPointerDown={compareLaps ? handlePercentDown : handlePointerDown}
+        onPointerMove={compareLaps ? handlePercentMove : handlePointerMove}
+        onPointerUp={compareLaps ? handlePercentUp : handlePointerUp}
+        onPointerCancel={compareLaps ? handlePercentCancel : handlePointerCancel}
+        onLostPointerCapture={compareLaps ? handlePercentUp : handlePointerUp}
       />
 
       <p className={styles.hint}>
-        {applied
-          ? "Drag the car to move the window · drag a handle to resize · Esc cancels"
-          : "Drag the car or click the track to select a window"}
+        {compareLaps
+          ? "Drag along a lap to compare that part of every selected lap"
+          : applied
+            ? "Drag the car to move the window · drag a handle to resize · Esc cancels"
+            : "Drag the car or click the track to select a window"}
       </p>
     </div>
   );
