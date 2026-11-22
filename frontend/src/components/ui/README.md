@@ -66,8 +66,7 @@ Figma "Runs, Laps & Signals" and "Data Viz" pieces:
   under the cursor). Charts with the same `xAxis` share one cursor. The dashboard still plots time
   until it has per-sample track %. Memoize `series`: a new array rebuilds the chart.
 
-Not built as components: Run Row (`components/runs/RunsTable` is the runs list), Session
-Timeline and the Track Map pieces (chart/map work).
+Not built as components: Session Timeline and the Track Map pieces (chart/map work).
 Page chrome lives in `components/layout`, e.g. `TopBar` (Figma "Top Bar"): children are a
 `TopBarNav` of `TopBarLink`s (Context=Library) or a `Breadcrumb` (Context=Run); `actions` go on
 the right (Search, Avatar, a Share Button…).
