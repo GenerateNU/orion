@@ -16,8 +16,11 @@
   gap: var(--space-2);
 }
 
-/* Heading/H2, tracked −0.5%. */
+/* Heading/H2, tracked −0.5%. A fixed width and tabular digits, so the arrows
+   after it don't move as the month changes. */
 .heading {
+  min-width: 5em;
+  font-variant-numeric: tabular-nums;
   margin: 0 var(--space-1) 0 0;
   font: var(--type-heading-h2);
   letter-spacing: -0.005em;

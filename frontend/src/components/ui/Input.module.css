@@ -9,6 +9,12 @@
   outline: none;
 }
 
+/* The ring goes on the surrounding box (Field, Search), not the bare input. Needs
+   the extra specificity: global.css loads last, so its :focus-visible would win. */
+.input:focus-visible {
+  outline: none;
+}
+
 .input::placeholder {
   color: var(--text-muted);
 }

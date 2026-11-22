@@ -2,7 +2,7 @@
 .row {
   display: flex;
   align-items: center;
-  gap: var(--space-3);
+  gap: var(--space-2-5);
   width: 100%;
   padding: var(--space-2-5) var(--space-3);
   text-align: left;
@@ -39,6 +39,8 @@
   height: 20px;
 }
 
+/* The date-time and its ⓘ over the short run name, sharing whatever width the row
+   has left. */
 .name {
   display: flex;
   flex: 1;
@@ -47,13 +49,15 @@
   min-width: 0;
 }
 
-/* Heading/H4 */
-.time {
-  font: var(--type-heading-h4);
+.title {
+  display: flex;
+  align-items: center;
+  gap: var(--space-1);
+  min-width: 0;
 }
 
 /* Data/Axis */
-.id {
+.shortName {
   overflow: hidden;
   font: var(--type-data-axis);
   color: var(--text-muted);
@@ -61,17 +65,47 @@
   white-space: nowrap;
 }
 
-/* Data/Value */
+/* Heading/H4 */
+.time {
+  overflow: hidden;
+  font: var(--type-heading-h4);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.info {
+  display: flex;
+  flex-shrink: 0;
+  color: var(--text-muted);
+  cursor: help;
+}
+
+.info:hover {
+  color: var(--text-primary);
+}
+
+.info svg {
+  width: 14px;
+  height: 14px;
+}
+
+/* Data/Code, inside the tooltip. */
+.runId {
+  font: var(--type-data-code);
+}
+
+/* Data/Value. Centered, so an unprocessed run's "—" sits in the middle of where the
+   times are rather than at their left edge. */
 .duration {
   flex-shrink: 0;
-  width: 80px;
+  width: 64px;
   font: var(--type-data-value);
+  text-align: center;
 }
 
 .status {
   display: flex;
   flex-shrink: 0;
-  width: 120px;
 }
 
 @media (max-width: 520px) {

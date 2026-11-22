@@ -10,12 +10,13 @@ type TopBarProps = {
   children?: ReactNode;
   // Right-aligned: e.g. Search and Avatar, or a Share Button and Avatar.
   actions?: ReactNode;
+  className?: string;
 };
 
 // Figma "Top Bar": the Orion logo, then page navigation, then actions.
-export default function TopBar({ children, actions }: TopBarProps) {
+export default function TopBar({ children, actions, className }: TopBarProps) {
   return (
-    <header className={styles.topBar}>
+    <header className={cx(styles.topBar, className)}>
       <span className={styles.logo}>
         <img src={logoUrl} alt="" width={33} height={18} />
         Orion

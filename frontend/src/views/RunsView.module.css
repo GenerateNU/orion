@@ -1,5 +1,14 @@
-/* Figma "Body": the calendar, and beside it the day panel once a day is picked
-   (roughly equal widths, as in the frame). Stacks when there isn't room for both. */
+/* The top bar sits 16px higher than .main's top padding would put it, with more room
+   above its bottom border. */
+.topBar {
+  margin-top: calc(-1 * var(--space-3));
+  padding-bottom: var(--space-4);
+}
+
+/* Figma "Body": the calendar, a ResizeHandle, then the day panel once a day is
+   picked. The panel defaults to a third of the width (at least 420px, enough for a
+   run row); dragging sets --panel-width, capped so the calendar keeps 480px.
+   Calendar and panel stack when there isn't room for both. */
 .body {
   display: grid;
   grid-template-columns: minmax(0, 1fr);
@@ -7,8 +16,22 @@
   gap: var(--space-4);
 }
 
+/* Stacked: no handle. */
+.resizeHandle {
+  display: none;
+}
+
 @media (min-width: 1200px) {
   .body[data-panel-open="true"] {
-    grid-template-columns: minmax(0, 1.05fr) minmax(0, 1fr);
+    /* The handle is the gutter between them. */
+    column-gap: 0;
+    grid-template-columns:
+      minmax(0, 1fr)
+      var(--space-4)
+      min(var(--panel-width, max(420px, calc((100% - var(--space-4)) / 3))), calc(100% - 504px));
+  }
+
+  .resizeHandle {
+    display: block;
   }
 }

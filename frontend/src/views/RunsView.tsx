@@ -1,6 +1,7 @@
-import { useCallback, useMemo, useState } from "react";
+import { useCallback, useMemo, useRef, useState, type CSSProperties } from "react";
 import { useNavigate, useSearch } from "@tanstack/react-router";
 import MonthCalendar from "@components/calendar/MonthCalendar";
+import ResizeHandle from "@components/layout/ResizeHandle";
 import TopBar from "@components/layout/TopBar";
 import DayRunsPanel from "@components/runs/DayRunsPanel";
 import RunSearch from "@components/runs/RunSearch";
@@ -24,6 +25,33 @@ import type { RunsSearch } from "@utils/runsSearchParams";
 import styles from "./RunsView.module.css";
 
 const NO_RUNS: readonly RunRow[] = [];
+
+// The day panel's width once the user has dragged it; the default is a third of the
+// page (RunsView.module.css). Remembered per browser.
+const PANEL_WIDTH_KEY = "orion.runs.panelWidth";
+const PANEL_MIN_WIDTH = 360;
+// Width the calendar always keeps beside the panel (the 504px in the CSS is this
+// plus the handle).
+const CALENDAR_MIN_WIDTH = 480;
+const HANDLE_WIDTH = 24;
+
+function readPanelWidth(): number | null {
+  try {
+    const value = Number(localStorage.getItem(PANEL_WIDTH_KEY));
+    return value >= PANEL_MIN_WIDTH ? value : null;
+  } catch {
+    return null;
+  }
+}
+
+function storePanelWidth(width: number | null) {
+  try {
+    if (width === null) localStorage.removeItem(PANEL_WIDTH_KEY);
+    else localStorage.setItem(PANEL_WIDTH_KEY, String(Math.round(width)));
+  } catch {
+    // Storage blocked (private window…): the width just isn't remembered.
+  }
+}
 
 // Figma "Runs · Calendar": every run on a month calendar. Clicking a day opens its
 // runs in a side panel; a selected run opens its dashboard. The month, day and run
@@ -85,6 +113,34 @@ export default function RunsView() {
     [setSearch],
   );
 
+  // Resizing the day panel: the width is measured when a drag starts, so the default
+  // (a third of the page) works as a starting point too.
+  const bodyRef = useRef<HTMLDivElement>(null);
+  const [panelWidth, setPanelWidth] = useState(readPanelWidth);
+  const resizeStartWidth = useRef(0);
+  const maxPanelWidth = () =>
+    Math.max(
+      PANEL_MIN_WIDTH,
+      (bodyRef.current?.clientWidth ?? 0) - CALENDAR_MIN_WIDTH - HANDLE_WIDTH,
+    );
+  const handleResizeStart = () => {
+    const panel = bodyRef.current?.lastElementChild;
+    resizeStartWidth.current = panel?.getBoundingClientRect().width ?? PANEL_MIN_WIDTH;
+  };
+  const handleResize = (deltaX: number) => {
+    // The panel is on the right: dragging left widens it.
+    const width = Math.min(
+      maxPanelWidth(),
+      Math.max(PANEL_MIN_WIDTH, resizeStartWidth.current - deltaX),
+    );
+    setPanelWidth(width);
+    storePanelWidth(width);
+  };
+  const handleResetWidth = () => {
+    setPanelWidth(null);
+    storePanelWidth(null);
+  };
+
   const [pendingRunId, setPendingRunId] = useState<string | null>(null);
   const handleQueue = useCallback(
     async (runId: string) => {
@@ -103,7 +159,10 @@ export default function RunsView() {
   return (
     <>
       <h1 className="sr-only">Runs</h1>
-      <TopBar actions={<RunSearch rows={runRows} onSelect={handleSearchSelect} />} />
+      <TopBar
+        className={styles.topBar}
+        actions={<RunSearch rows={runRows} onSelect={handleSearchSelect} />}
+      />
 
       {!runRowsError && penelopeRunsError && (
         <Notice tone="warning" title="Penelope is unavailable">
@@ -137,7 +196,16 @@ export default function RunsView() {
       ) : runRowsError ? (
         <ErrorState error={runRowsError} />
       ) : (
-        <div className={styles.body} data-panel-open={selectedDay !== null}>
+        <div
+          ref={bodyRef}
+          className={styles.body}
+          data-panel-open={selectedDay !== null}
+          style={
+            panelWidth === null
+              ? undefined
+              : ({ "--panel-width": `${panelWidth}px` } as CSSProperties)
+          }
+        >
           <MonthCalendar
             month={month}
             runsByDay={runsByDay}
@@ -147,6 +215,18 @@ export default function RunsView() {
             onMonthChange={(delta) => setSearch({ ...search, month: addMonths(month, delta) })}
             onToday={() => setSearch({ ...search, month: toMonthKey(new Date()) })}
           />
+          {selectedDay && (
+            <ResizeHandle
+              className={styles.resizeHandle}
+              label="Resize day panel"
+              value={panelWidth ?? undefined}
+              min={PANEL_MIN_WIDTH}
+              max={maxPanelWidth()}
+              onResizeStart={handleResizeStart}
+              onResize={handleResize}
+              onReset={handleResetWidth}
+            />
+          )}
           {selectedDay && (
             <DayRunsPanel
               day={selectedDay}

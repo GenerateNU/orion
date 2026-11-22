@@ -7,6 +7,9 @@ import { searchRuns } from "@utils/runSearch";
 import { cx } from "@utils/classNames";
 import styles from "./RunSearch.module.css";
 
+// Matches offered; the list shows about five and scrolls for the rest.
+const MAX_RESULTS = 20;
+
 type RunSearchProps = {
   rows: readonly RunRow[];
   onSelect: (row: RunRow) => void;
@@ -15,15 +18,30 @@ type RunSearchProps = {
 
 // Figma "Search" in the Runs top bar: find a run by name and/or date. Shows the top
 // matches as a listbox (arrow keys + Enter, or click); ⌘K / Ctrl+K focuses it.
+// Shorter than the stock Search (36px, like a Button) to sit lighter in the top bar.
 export default function RunSearch({ rows, onSelect, className }: RunSearchProps) {
   const [query, setQuery] = useState("");
   const [open, setOpen] = useState(false);
   const [active, setActive] = useState(0);
   const inputRef = useRef<HTMLInputElement>(null);
   const listId = useId();
+  const optionId = (index: number) => `${listId}-option-${index}`;
 
-  const results = useMemo(() => searchRuns(rows, query), [rows, query]);
+  // About five fit before the list scrolls (RunSearch.module.css).
+  const results = useMemo(() => searchRuns(rows, query, MAX_RESULTS), [rows, query]);
   const showList = open && query.trim() !== "";
+
+  // Keep the highlighted result in view as the arrow keys move past the fifth. Only
+  // when the highlight moves, so a wheel-scrolled list isn't pulled back on refetch.
+  useEffect(() => {
+    if (showList) {
+      document.getElementById(`${listId}-option-${active}`)?.scrollIntoView({ block: "nearest" });
+    }
+  }, [active, listId, showList]);
+
+  useEffect(() => {
+    if (showList) document.getElementById(optionId(active))?.scrollIntoView({ block: "nearest" });
+  });
 
   useEffect(() => {
     const onKeyDown = (event: globalThis.KeyboardEvent) => {
@@ -61,11 +79,10 @@ export default function RunSearch({ rows, onSelect, className }: RunSearchProps)
     }
   };
 
-  const optionId = (index: number) => `${listId}-option-${index}`;
-
   return (
     <div className={cx(styles.container, className)}>
       <Search
+        className={styles.field}
         ref={inputRef}
         aria-label="Search runs by name or date"
         placeholder="Search runs by name or date…"
@@ -86,9 +103,6 @@ export default function RunSearch({ rows, onSelect, className }: RunSearchProps)
         onBlur={() => setTimeout(() => setOpen(false), 100)}
         onKeyDown={handleKeyDown}
       />
-      <kbd className={styles.shortcut} aria-hidden="true">
-        ⌘K
-      </kbd>
       {showList && (
         <ul id={listId} role="listbox" aria-label="Matching runs" className={styles.results}>
           {results.length === 0 ? (

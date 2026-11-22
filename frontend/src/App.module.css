@@ -1,18 +1,11 @@
 /* Viewport-tall shell: .main scrolls, so a page can pin panes to the viewport. */
-.shell {
-  display: flex;
-  height: 100vh;
-  height: 100dvh;
-}
-
 .main {
-  flex: 1;
-  min-width: 0;
-  min-height: 0;
-  overflow-y: auto;
   display: flex;
   flex-direction: column;
   gap: var(--space-4);
+  height: 100vh;
+  height: 100dvh;
+  overflow-y: auto;
   padding: var(--space-5) var(--space-6);
 }
 
@@ -21,15 +14,8 @@
   outline: none;
 }
 
-/* Narrow screens: the sidebar becomes a top bar. Same breakpoint as Sidebar and NavItem. */
 @media (max-width: 768px) {
-  .shell {
-    flex-direction: column;
-    height: auto;
-  }
-
   .main {
-    overflow-y: visible;
     padding: var(--space-4) var(--space-3);
   }
 }

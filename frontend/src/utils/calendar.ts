@@ -109,7 +109,9 @@ const dayHeadingFormat = new Intl.DateTimeFormat(undefined, {
   day: "numeric",
 });
 const dayLabelFormat = new Intl.DateTimeFormat(undefined, { dateStyle: "full" });
-const monthHeadingFormat = new Intl.DateTimeFormat(undefined, { month: "long", year: "numeric" });
+// en-US so the month is always three letters ("Sep", not en-GB's "Sept"); the
+// calendar's weekday labels are English too.
+const monthHeadingFormat = new Intl.DateTimeFormat("en-US", { month: "short", year: "numeric" });
 
 // "09:48"
 export const formatRunTime = (row: RunRow) => {
@@ -129,7 +131,7 @@ export const formatDayHeading = (day: DayKey) => dayHeadingFormat.format(parseDa
 // "Saturday, August 15, 2026": a day cell's accessible name.
 export const formatDayLabel = (day: DayKey) => dayLabelFormat.format(parseDayKey(day));
 
-// "August 2026"
+// "Aug 2026"
 export const formatMonthHeading = (month: MonthKey) =>
   monthHeadingFormat.format(parseMonthKey(month));
 

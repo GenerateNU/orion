@@ -4,24 +4,9 @@
   max-width: 100%;
 }
 
-/* Room on the right of the input for the ⌘K hint. */
-.container input {
-  padding-right: 40px;
-}
-
-/* Figma Search's shortcut chip. */
-.shortcut {
-  position: absolute;
-  top: 50%;
-  right: var(--space-2-5);
-  padding: var(--space-0-5) var(--space-2);
-  font: var(--type-data-axis);
-  color: var(--text-muted);
-  background: var(--bg-raised);
-  border: 1px solid var(--border-subtle);
-  border-radius: var(--radius-sm);
-  transform: translateY(-50%);
-  pointer-events: none;
+/* 36px tall instead of Search's 52px; only here, the shared Search keeps Figma's size. */
+.container .field {
+  padding-block: calc(var(--space-2) - 1px);
 }
 
 .results {
@@ -31,8 +16,12 @@
   left: 0;
   z-index: 10;
   min-width: 320px;
+  /* About five results (32px each), then it scrolls. The half-row hints at more. */
+  max-height: calc(5.5 * 32px + 2 * var(--space-1));
   margin: 0;
   padding: var(--space-1);
+  overflow-y: auto;
+  overscroll-behavior: contain;
   list-style: none;
   background: var(--bg-surface);
   border: 1px solid var(--border-default);
@@ -76,9 +65,5 @@
 @media (max-width: 768px) {
   .container {
     width: 100%;
-  }
-
-  .shortcut {
-    display: none;
   }
 }

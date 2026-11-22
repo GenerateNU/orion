@@ -1,6 +1,8 @@
-/* Figma "Runs on the selected day": a surface card beside the calendar.
-   Padding is Figma's minus the 1px border. */
+/* Figma "Runs on the selected day": a surface card beside the calendar, sticky so it
+   stays on screen while the calendar scrolls. Padding is Figma's minus the 1px border. */
 .panel {
+  position: sticky;
+  top: 0;
   display: flex;
   flex-direction: column;
   gap: var(--space-3);
@@ -40,11 +42,17 @@
   color: var(--text-muted);
 }
 
+/* Shows about four DayRunRows (60px each: 36px content + 12px padding top and
+   bottom), then scrolls. The half-row past the fourth hints there are more. */
 .runs {
   display: flex;
   flex-direction: column;
+  flex-shrink: 0;
   gap: var(--space-2);
+  max-height: calc(4.5 * 60px + 4 * var(--space-2));
   margin: 0;
   padding: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
   list-style: none;
 }

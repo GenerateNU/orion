@@ -9,12 +9,15 @@ type StatTileProps = {
   delta?: { text: string; better: boolean };
   // A gold note instead of a delta, e.g. "Session best".
   note?: string;
+  // "sm": tighter padding, no min-width and a Data/Readout M value, so several fit
+  // side by side in a narrow panel.
+  size?: "md" | "sm";
 };
 
 // Figma "Stat Tile": Delta (Better | Worse | None). One headline number.
-export default function StatTile({ label, value, delta, note }: StatTileProps) {
+export default function StatTile({ label, value, delta, note, size = "md" }: StatTileProps) {
   return (
-    <div className={styles.tile}>
+    <div className={cx(styles.tile, size === "sm" && styles.sm)}>
       <p className={styles.label}>{label}</p>
       <p className={styles.value}>{value}</p>
       {delta && (

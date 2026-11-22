@@ -132,8 +132,6 @@
   --space-7: 48px;
   --space-8: 64px;
 
-  --sidebar-width: 240px;
-
   font: var(--type-body-m);
   color: var(--text-primary);
   background: var(--bg-canvas);

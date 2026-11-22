@@ -1,3 +1,4 @@
+import { useEffect, useRef } from "react";
 import { X } from "lucide-react";
 import DayRunRow from "@components/runs/DayRunRow";
 import SelectedRunDetails from "@components/runs/SelectedRunDetails";
@@ -19,7 +20,8 @@ type DayRunsPanelProps = {
 };
 
 // Figma "Runs on the selected day": the side panel that opens when a calendar day
-// is clicked. Lists the day's runs by time; the selected one shows its details.
+// is clicked. Lists the day's runs by time, scrolling past about four so the
+// selected run's details below always stay in view.
 export default function DayRunsPanel({
   day,
   runs,
@@ -29,6 +31,12 @@ export default function DayRunsPanel({
   onQueue,
   onClose,
 }: DayRunsPanelProps) {
+  const listRef = useRef<HTMLUListElement>(null);
+  // The list scrolls past ~4 runs: keep the selected one in view (e.g. picked from search).
+  useEffect(() => {
+    listRef.current?.querySelector('[aria-pressed="true"]')?.scrollIntoView({ block: "nearest" });
+  }, [selectedRunId, day]);
+
   const selected = runs.find((run) => run.runId === selectedRunId) ?? null;
   const count = runs.length === 1 ? "1 run" : `${runs.length} runs`;
 
@@ -40,7 +48,7 @@ export default function DayRunsPanel({
             {formatDayHeading(day)}
           </h2>
           {runs.length > 0 && (
-            <p className={styles.description}>{count} · click one to select it</p>
+            <p className={styles.description}>{count} · Click a run to see stats</p>
           )}
         </div>
         <IconButton label="Close day" onClick={onClose}>
@@ -51,7 +59,7 @@ export default function DayRunsPanel({
       {runs.length === 0 ? (
         <EmptyState message="No runs on this day." />
       ) : (
-        <ul className={styles.runs} aria-label={`Runs on ${formatDayHeading(day)}`}>
+        <ul ref={listRef} className={styles.runs} aria-label={`Runs on ${formatDayHeading(day)}`}>
           {runs.map((run) => (
             <li key={run.runId}>
               <DayRunRow row={run} selected={run.runId === selectedRunId} onSelect={onSelectRun} />

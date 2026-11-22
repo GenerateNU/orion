@@ -37,7 +37,7 @@ Every component also accepts the props of the element it renders (`onClick`, `di
 | `ErrorState`                          | –            | `error` (any thrown value; shown via `describeError`).                                                                               |
 | `Pagination`                          | –            | `page`, `pageCount`, `onPageChange`, `label`.                                                                                        |
 | `ProgressBar`                         | –            | `label` (accessible name), `value` (0–1; leave out for indeterminate).                                                               |
-| `StatTile`                            | Stat Tile    | `label`, `value`, `delta` (`{ text, better }`: green or red) or `note` (gold, e.g. "Session best").                                  |
+| `StatTile`                            | Stat Tile    | `label`, `value`, `delta` (`{ text, better }`: green or red) or `note` (gold, e.g. "Session best"); `size="sm"` for narrow panels.   |
 
 Run-specific components built on these live next to their feature, e.g.
 `components/runs/StatusBadge` (Figma "Status Badge": `status`, `detail`). The rest of the
@@ -70,7 +70,7 @@ Not built as components: Run Row (`components/runs/RunsTable` is the runs list),
 Timeline and the Track Map pieces (chart/map work).
 Page chrome lives in `components/layout`, e.g. `TopBar` (Figma "Top Bar"): children are a
 `TopBarNav` of `TopBarLink`s (Context=Library) or a `Breadcrumb` (Context=Run); `actions` go on
-the right (Search, Avatar, a Share Button…). The app shell still uses `Sidebar`.
+the right (Search, Avatar, a Share Button…).
 
 ## Which button?
 
