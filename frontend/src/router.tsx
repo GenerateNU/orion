@@ -10,12 +10,13 @@ import {
 import EmptyState from "@components/ui/EmptyState";
 import LoadingState from "@components/ui/LoadingState";
 import { validateDashboardSearch } from "@features/dashboard/utils/search";
+import { validateRunsSearch } from "@utils/runsSearchParams";
 import RunsView from "@views/RunsView";
 import App from "./App";
 
 // Routes, in code (few enough not to need file-based routing):
 //   /                        → redirect to /runs
-//   /runs                    → RunsView
+//   /runs                    → RunsView, calendar selection in ?month=&day=&run=
 //   /runs/$runId/dashboard   → DashboardView, selection in ?t=&laps= (utils/search.ts)
 //   /components              → ComponentsView, dev builds only (components/ui gallery)
 
@@ -32,6 +33,7 @@ const indexRoute = createRoute({
 const runsRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: "/runs",
+  validateSearch: validateRunsSearch,
   component: RunsView,
 });
 

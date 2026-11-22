@@ -1,0 +1,14 @@
+/* Figma "Body": the calendar, and beside it the day panel once a day is picked
+   (roughly equal widths, as in the frame). Stacks when there isn't room for both. */
+.body {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  align-items: start;
+  gap: var(--space-4);
+}
+
+@media (min-width: 1200px) {
+  .body[data-panel-open="true"] {
+    grid-template-columns: minmax(0, 1.05fr) minmax(0, 1fr);
+  }
+}

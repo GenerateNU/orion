@@ -45,6 +45,14 @@ Figma "Runs, Laps & Signals" and "Data Viz" pieces:
 
 - `components/runs/LapRow` (Lap Row): `lap`, `time`, `delta`, `series`, `selected`, `compared`,
   `onSelect`, `onCompareChange`. Click the row to select; the checkbox compares.
+- `components/calendar/MonthCalendar` (Calendar): `month`, `runsByDay`, `selectedDay`, `today`,
+  `onSelectDay`, `onMonthChange`, `onToday`. Each cell is a `CalendarDay` (date, then each run's
+  time with a `components/runs/RunStatusDot`).
+- `components/runs/DayRunsPanel` (Runs on the selected day): `day`, `runs`, `selectedRunId`,
+  `pendingRunId`, `onSelectRun`, `onQueue`, `onClose`. Rows are `DayRunRow` (Run Row); the selected
+  run shows `SelectedRunDetails` (Stat Tiles + Open dashboard).
+- `components/runs/RunSearch` (Search in the Runs top bar): `rows`, `onSelect`. Matches run name
+  and/or date (`utils/runSearch.ts`); ⌘K focuses it.
 - `components/runs/LapStepper` (Lap Stepper): `label`, `onPrevious`, `onNext` (leave one out to
   disable that arrow).
 - `components/charts/SeriesChip` (Series Chip): `series` (1–8, the `--data-series-N` color),

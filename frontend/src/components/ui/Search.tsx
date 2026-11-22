@@ -1,10 +1,10 @@
-import type { ComponentPropsWithoutRef } from "react";
+import type { ComponentPropsWithRef } from "react";
 import { Search as SearchIcon } from "lucide-react";
 import { cx } from "@utils/classNames";
 import inputStyles from "./Input.module.css";
 import styles from "./Search.module.css";
 
-type SearchProps = Omit<ComponentPropsWithoutRef<"input">, "type"> & {
+type SearchProps = Omit<ComponentPropsWithRef<"input">, "type"> & {
   // Accessible name; the placeholder alone isn't one.
   "aria-label": string;
 };

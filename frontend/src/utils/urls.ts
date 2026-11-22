@@ -11,6 +11,7 @@ export const apiUrls = {
 
   // A run's data: raw readings from Penelope, then pipeline stage outputs
   sensorData: (runId: string) => `${run(runId)}/sensors/data`,
+  lapSummary: (runId: string) => `${run(runId)}/laps/summary`,
   state: (runId: string) => `${run(runId)}/state`,
   metrics: (runId: string) => `${run(runId)}/metrics`, // PLANNED: no backend route yet
 };

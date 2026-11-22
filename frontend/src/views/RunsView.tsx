@@ -1,21 +1,36 @@
-import { useCallback, useState } from "react";
-import { Route } from "lucide-react";
-import EmptyState from "@components/ui/EmptyState";
+import { useCallback, useMemo, useState } from "react";
+import { useNavigate, useSearch } from "@tanstack/react-router";
+import MonthCalendar from "@components/calendar/MonthCalendar";
+import TopBar from "@components/layout/TopBar";
+import DayRunsPanel from "@components/runs/DayRunsPanel";
+import RunSearch from "@components/runs/RunSearch";
 import ErrorState from "@components/ui/ErrorState";
 import LoadingState from "@components/ui/LoadingState";
-import PageHeader from "@components/layout/PageHeader";
-import RunsTable from "@components/runs/RunsTable";
 import Notice from "@components/ui/Notice";
-import Pagination from "@components/ui/Pagination";
-import { usePagination } from "@hooks/usePagination";
 import { usePipelineMutations } from "@hooks/usePipelineRuns";
 import { useRunRows } from "@hooks/useRunRows";
+import {
+  addMonths,
+  groupRunsByDay,
+  monthOfDay,
+  runDayKey,
+  toDayKey,
+  toMonthKey,
+  type DayKey,
+} from "@utils/calendar";
 import { describeError } from "@utils/describeError";
+import type { RunRow } from "@utils/runRows";
+import type { RunsSearch } from "@utils/runsSearchParams";
+import styles from "./RunsView.module.css";
 
-const PAGE_SIZE = 8;
+const NO_RUNS: readonly RunRow[] = [];
 
-// Figma "Runs — Landing": every run, its pipeline status and the next action.
+// Figma "Runs · Calendar": every run on a month calendar. Clicking a day opens its
+// runs in a side panel; a selected run opens its dashboard. The month, day and run
+// live in the URL (utils/runsSearchParams.ts) so Back from a dashboard returns here.
 export default function RunsView() {
+  const search = useSearch({ from: "/runs" });
+  const navigate = useNavigate({ from: "/runs" });
   const {
     runRows,
     runRowsIsLoading,
@@ -25,9 +40,49 @@ export default function RunsView() {
     pipelineRunsError,
   } = useRunRows();
   const { triggerPipeline, triggerPipelineError } = usePipelineMutations();
-  const { page, pageCount, pageItems, setPage, firstItem, lastItem } = usePagination(
-    runRows,
-    PAGE_SIZE,
+
+  const runsByDay = useMemo(() => groupRunsByDay(runRows), [runRows]);
+  const undatedCount = useMemo(() => runRows.filter((row) => !runDayKey(row)).length, [runRows]);
+
+  const today = toDayKey(new Date());
+  const selectedDay = search.day ?? null;
+  const month = search.month ?? (selectedDay ? monthOfDay(selectedDay) : toMonthKey(new Date()));
+  const dayRuns = (selectedDay && runsByDay.get(selectedDay)) || NO_RUNS;
+
+  // In-page selection replaces the history entry; opening a dashboard pushes one.
+  const setSearch = useCallback(
+    (next: RunsSearch) => navigate({ search: next, replace: true }),
+    [navigate],
+  );
+
+  const handleSelectDay = useCallback(
+    (day: DayKey) => {
+      if (day === selectedDay) {
+        setSearch({ month });
+        return;
+      }
+      // A lone run is selected straight away; with several the user picks one.
+      const runs = runsByDay.get(day) ?? [];
+      setSearch({
+        month: monthOfDay(day),
+        day,
+        run: runs.length === 1 ? runs[0].runId : undefined,
+      });
+    },
+    [month, runsByDay, selectedDay, setSearch],
+  );
+
+  const handleSelectRun = useCallback(
+    (runId: string) => setSearch({ ...search, run: runId }),
+    [search, setSearch],
+  );
+
+  const handleSearchSelect = useCallback(
+    (row: RunRow) => {
+      const day = runDayKey(row);
+      if (day) setSearch({ month: monthOfDay(day), day, run: row.runId });
+    },
+    [setSearch],
   );
 
   const [pendingRunId, setPendingRunId] = useState<string | null>(null);
@@ -37,7 +92,7 @@ export default function RunsView() {
       try {
         await triggerPipeline({ run_id: runId });
       } catch {
-        // Shown above the table via triggerPipelineError.
+        // Shown above the calendar via triggerPipelineError.
       } finally {
         setPendingRunId(null);
       }
@@ -45,28 +100,14 @@ export default function RunsView() {
     [triggerPipeline],
   );
 
-  const placeholder = runRowsIsLoading ? (
-    <LoadingState message="Loading runs…" />
-  ) : runRowsError ? (
-    <ErrorState error={runRowsError} />
-  ) : runRows.length === 0 ? (
-    <EmptyState
-      icon={<Route />}
-      title="No runs yet"
-      message="Runs recorded in Penelope will appear here."
-    />
-  ) : undefined;
-
   return (
     <>
-      <PageHeader
-        title="Runs"
-        description="Queue a pipeline to process or re-process a run. Open a loaded run to view its dashboard."
-      />
+      <h1 className="sr-only">Runs</h1>
+      <TopBar actions={<RunSearch rows={runRows} onSelect={handleSearchSelect} />} />
 
       {!runRowsError && penelopeRunsError && (
         <Notice tone="warning" title="Penelope is unavailable">
-          Only processed runs are listed. {describeError(penelopeRunsError)}
+          Only processed runs are shown. {describeError(penelopeRunsError)}
         </Notice>
       )}
       {!runRowsError && runsError && (
@@ -84,24 +125,41 @@ export default function RunsView() {
           {describeError(triggerPipelineError)}
         </Notice>
       )}
+      {undatedCount > 0 && (
+        <Notice tone="info" title="Some runs have no date">
+          {undatedCount === 1 ? "1 run has" : `${undatedCount} runs have`} no recorded time, so{" "}
+          {undatedCount === 1 ? "it isn't" : "they aren't"} on the calendar.
+        </Notice>
+      )}
 
-      <RunsTable
-        rows={pageItems}
-        pendingRunId={pendingRunId}
-        placeholder={placeholder}
-        onQueue={handleQueue}
-        summary={!placeholder && `Showing ${firstItem}–${lastItem} of ${runRows.length} runs`}
-        pagination={
-          !placeholder && (
-            <Pagination
-              page={page}
-              pageCount={pageCount}
-              onPageChange={setPage}
-              label="Runs pages"
+      {runRowsIsLoading ? (
+        <LoadingState message="Loading runs…" />
+      ) : runRowsError ? (
+        <ErrorState error={runRowsError} />
+      ) : (
+        <div className={styles.body} data-panel-open={selectedDay !== null}>
+          <MonthCalendar
+            month={month}
+            runsByDay={runsByDay}
+            selectedDay={selectedDay}
+            today={today}
+            onSelectDay={handleSelectDay}
+            onMonthChange={(delta) => setSearch({ ...search, month: addMonths(month, delta) })}
+            onToday={() => setSearch({ ...search, month: toMonthKey(new Date()) })}
+          />
+          {selectedDay && (
+            <DayRunsPanel
+              day={selectedDay}
+              runs={dayRuns}
+              selectedRunId={search.run ?? null}
+              pendingRunId={pendingRunId}
+              onSelectRun={handleSelectRun}
+              onQueue={handleQueue}
+              onClose={() => setSearch({ month })}
             />
-          )
-        }
-      />
+          )}
+        </div>
+      )}
     </>
   );
 }

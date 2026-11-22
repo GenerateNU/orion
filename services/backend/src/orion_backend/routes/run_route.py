@@ -7,7 +7,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from orion_backend.core.database import get_optional_penelope_db, get_orion_db
 from orion_backend.core.openapi import error_responses
-from orion_backend.schemas.run_schema import RunResponse
+from orion_backend.schemas.run_schema import RunLapSummaryResponse, RunResponse
 from orion_backend.services.run_service import RunService
 
 router = APIRouter(prefix="/runs", tags=["runs"])
@@ -45,6 +45,22 @@ async def get_run(
 ) -> RunResponse:
     """One run by id. 404 if OrionDB has never seen it."""
     return await service.get_run(run_id)
+
+
+@router.get(
+    "/{run_id}/laps/summary",
+    response_model=RunLapSummaryResponse,
+    summary="Get a run's lap summary",
+    responses=error_responses(404),
+)
+async def get_run_lap_summary(
+    run_id: Annotated[str, Path(description="Penelope run id.")],
+    service: RunService = Depends(get_run_service),
+) -> RunLapSummaryResponse:
+    """How many laps the run has and which was fastest, from OrionDB `laps`. A run the
+    lap step hasn't processed comes back with `lap_count: 0`. 404 if OrionDB has never
+    seen the run."""
+    return await service.get_lap_summary(run_id)
 
 
 @router.delete(

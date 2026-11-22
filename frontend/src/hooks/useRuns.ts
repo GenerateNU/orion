@@ -1,5 +1,11 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { RunResponseSchema, type RunListFilters, type RunResponse } from "@schemas/run.schema";
+import {
+  RunLapSummaryResponseSchema,
+  RunResponseSchema,
+  type RunLapSummaryResponse,
+  type RunListFilters,
+  type RunResponse,
+} from "@schemas/run.schema";
 import axios from "@api/client";
 import { penelopeRunKeys, runDataKeys, runKeys } from "@api/queryKeys";
 import type { DataQueryOptions } from "@api/queryOptions";
@@ -62,6 +68,38 @@ export const useRun = <TData = RunResponse>(
     runIsFetching: query.isFetching,
     runError: query.error,
     runRefetch: query.refetch,
+  };
+};
+
+// Hook for a run's lap count and fastest lap (OrionDB `laps`). Under runDataKeys, so
+// it refreshes when a pipeline job for the run finishes.
+export const useRunLapSummary = <TData = RunLapSummaryResponse>(
+  runId: string | undefined,
+  options: DataQueryOptions<RunLapSummaryResponse, TData> = {},
+) => {
+  const query = useQuery({
+    ...options,
+    queryKey: runDataKeys.lapSummary(runId),
+    queryFn: async (): Promise<RunLapSummaryResponse> => {
+      if (!runId) {
+        throw new Error("Run ID is required");
+      }
+
+      const { data } = await axios.get(apiUrls.lapSummary(runId));
+
+      const result = RunLapSummaryResponseSchema.safeParse(data);
+      if (!result.success) {
+        throw new Error(`Data validation failed: ${result.error.message}`);
+      }
+      return result.data;
+    },
+    enabled: !!runId && (options.enabled ?? true),
+  });
+
+  return {
+    lapSummary: query.data,
+    lapSummaryIsLoading: query.isLoading,
+    lapSummaryError: query.error,
   };
 };
 
