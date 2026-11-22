@@ -22,11 +22,10 @@
   border-radius: var(--radius-lg);
 }
 
-.panelHeader {
+/* Run pipeline and Back to runs, side by side in the page header. */
+.actions {
   display: flex;
   flex-wrap: wrap;
-  align-items: center;
-  justify-content: space-between;
   gap: var(--space-2);
 }
 

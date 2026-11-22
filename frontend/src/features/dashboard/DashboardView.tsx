@@ -14,8 +14,7 @@ import { useLastRunStore } from "@features/dashboard/state/lastRunStore";
 import { useDashboardRun } from "@features/dashboard/state/useDashboard";
 import styles from "./DashboardView.module.css";
 import { TrackMap } from "@features/dashboard/panels/TrackMap";
-import { PipelineStepList } from "@features/dashboard/panels/PipelineControls";
-import { usePipelineSteps } from "@hooks/usePipelineSteps";
+import { useRunPipeline } from "@hooks/useRunPipeline";
 import SensorChartsPanel from "@components/charts/SensorChartPanel";
 
 const dashboardRoute = getRouteApi("/runs/$runId/dashboard");
@@ -35,8 +34,7 @@ export default function DashboardView() {
 // state/useDashboard.ts and data through data/useDashboardData.ts.
 function RunDashboard() {
   const { runId, run, runIsLoading, runError } = useDashboardRun();
-  // Called here, not in the panel, so the menu and the step list share Run all's state.
-  const pipeline = usePipelineSteps(runId);
+  const pipeline = useRunPipeline(runId);
 
   const setLastRunId = useLastRunStore((state) => state.setLastRunId);
   useEffect(() => {
@@ -83,23 +81,22 @@ function RunDashboard() {
         badge={<StatusBadge status="loaded" />}
         description={`${formatDate(run.run_time ?? run.start_time)} · ${formatDuration(run.duration_s)}`}
         actions={
-          <ButtonLink variant="secondary" to="/runs">
-            <span aria-hidden="true">←</span> Back to runs
-          </ButtonLink>
+          <div className={styles.actions}>
+            <Button disabled={pipeline.isBusy} onClick={pipeline.runPipeline}>
+              {pipeline.isBusy ? "Running…" : "Run pipeline"}
+            </Button>
+            <ButtonLink variant="secondary" to="/runs">
+              <span aria-hidden="true">←</span> Back to runs
+            </ButtonLink>
+          </div>
         }
       />
 
       <div className={styles.layout}>
         <section className={styles.panel} aria-labelledby="track-map-heading">
-          <div className={styles.panelHeader}>
-            <h2 id="track-map-heading" className={styles.panelHeading}>
-              Track position
-            </h2>
-            <Button disabled={pipeline.isBusy} onClick={pipeline.runPipeline}>
-              Run pipeline
-            </Button>
-          </div>
-          <PipelineStepList steps={pipeline.steps} error={pipeline.error} />
+          <h2 id="track-map-heading" className={styles.panelHeading}>
+            Track position
+          </h2>
           <TrackMap />
         </section>
         <section className={styles.panel} aria-labelledby="sensor-charts-heading">
