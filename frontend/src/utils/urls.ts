@@ -8,6 +8,7 @@ export const apiUrls = {
   sensors: () => "/sensors",
   pipelineRuns: () => "/pipeline/runs",
   pipelineRun: (jobId: number) => `/pipeline/runs/${jobId}`,
+  graphTabs: () => "/graph-tabs",
 
   // A run's data: raw readings from Penelope, then pipeline stage outputs
   sensorData: (runId: string) => `${run(runId)}/sensors/data`,

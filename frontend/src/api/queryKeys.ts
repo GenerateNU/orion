@@ -17,6 +17,11 @@ export const sensorKeys = {
   all: ["sensors"] as const,
 };
 
+// The dashboard's graph tabs: one list shared by the whole team.
+export const graphTabKeys = {
+  all: ["graph-tabs"] as const,
+};
+
 export const pipelineRunKeys = {
   all: ["pipeline-runs"] as const,
   list: (filters: PipelineRunFilters) => [...pipelineRunKeys.all, "list", filters] as const,

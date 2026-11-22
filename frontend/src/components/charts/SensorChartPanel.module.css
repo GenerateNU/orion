@@ -18,6 +18,14 @@
   border-bottom: 1px solid var(--border-default);
 }
 
+/* Load and save errors, under the tab bar so they stay visible while the graphs scroll. */
+.notices {
+  flex: none;
+  display: grid;
+  gap: var(--space-2);
+  margin-top: var(--space-3);
+}
+
 /* Scrolls on its own, so nothing shows above or beside the tab bar. The negative
    margin puts the scrollbar in the pane's padding instead of over the cards. */
 .body {
