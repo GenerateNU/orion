@@ -24,7 +24,8 @@ export interface TrackVisualizationProps {
   // Each selected lap in its lap color: the whole lap, and the stretch in the
   // percent window if there is one (the whole lap is then drawn faintly).
   lapPaths: readonly { lapId: number; color: string; whole: string; part: string | null }[];
-  // A line across the track where the run starts.
+  // A line across the track where the run starts, or the start/finish line when
+  // comparing laps.
   start: Tick;
   // The car, pointing in its direction of travel (degrees, SVG rotation), and
   // the radius of its grab circle (SVG units): small enough not to cover the

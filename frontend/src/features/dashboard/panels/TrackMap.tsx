@@ -152,6 +152,15 @@ export function TrackMap() {
     () => (compareLaps && laps ? laps.filter((lap) => selectedLaps.includes(lap.id)) : []),
     [compareLaps, laps, selectedLaps],
   );
+  // Comparing laps, START marks the start/finish line, where every lap is 0%: the
+  // start of lap 2 (lap 1 starts with the recording, before the first crossing).
+  const finishLine = useMemo(
+    () =>
+      track && compareLaps && laps
+        ? tickAt(track, anchorAt(track, laps[1].window[0]), TICK_HALF_LENGTH)
+        : null,
+    [track, compareLaps, laps],
+  );
 
   // The percent window being dragged on the map, until it's committed on release.
   const [draftPercent, setDraftPercent] = useState<TimeWindow | null>(null);
@@ -382,7 +391,7 @@ export function TrackMap() {
         viewSize={track.viewSize}
         road={base.road}
         gaps={base.gaps}
-        start={base.start}
+        start={finishLine ?? base.start}
         window={shape.window}
         compareLaps={compareLaps}
         lapPaths={lapPaths}
