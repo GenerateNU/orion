@@ -1,12 +1,16 @@
 import { useCallback, useMemo } from "react";
 import { keepPreviousData } from "@tanstack/react-query";
-import type { MetricsResponse } from "@schemas/metrics.schema";
+import type { LapsResponse } from "@schemas/lap.schema";
 import type { SensorDataResponse, SensorSeries } from "@schemas/sensor.schema";
 import type { StateDataResponse } from "@schemas/state.schema";
-import { useMetrics } from "@hooks/useMetrics";
+import { useRunLaps } from "@hooks/useRunLaps";
 import { useSensorData } from "@hooks/useSensors";
 import { useStateEstimation } from "@hooks/useStateEstimation";
-import { useCommittedWindow, useDashboardRun } from "@features/dashboard/state/useDashboard";
+import {
+  useCommittedWindow,
+  useDashboardRun,
+  useSelectedLaps,
+} from "@features/dashboard/state/useDashboard";
 import { lapsFromMetrics, type Lap } from "@features/dashboard/utils/laps";
 import { snapWindow, toIsoRange, type TimeWindow } from "@features/dashboard/utils/time";
 
@@ -50,14 +54,19 @@ const useFetchWindow = (scope: DataScope): TimeWindow | null => {
 export const useLaps = () => {
   const { runId, timeline } = useDashboardRun();
   const select = useCallback(
-    (metrics: MetricsResponse): Lap[] => (timeline ? lapsFromMetrics(metrics, timeline) : []),
+    (response: LapsResponse): Lap[] => (timeline ? lapsFromMetrics(response, timeline) : []),
     [timeline],
   );
-  const { metrics, metricsIsLoading, metricsError } = useMetrics(runId, {
-    select,
-    enabled: !!timeline,
-  });
-  return { laps: metrics, lapsIsLoading: metricsIsLoading, lapsError: metricsError };
+  const { laps, lapsIsLoading, lapsError } = useRunLaps(runId, { select, enabled: !!timeline });
+  return { laps, lapsIsLoading, lapsError };
+};
+
+// True when the run has laps but none is selected: the panels then show
+// NO_LAPS_MESSAGE (utils/laps.ts) instead of data.
+export const useNoLapsSelected = (): boolean => {
+  const { laps } = useLaps();
+  const selectedLaps = useSelectedLaps();
+  return !!laps?.length && selectedLaps.length === 0;
 };
 
 export type RunPositions = {

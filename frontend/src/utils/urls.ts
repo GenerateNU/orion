@@ -13,4 +13,5 @@ export const apiUrls = {
   sensorData: (runId: string) => `${run(runId)}/sensors/data`,
   state: (runId: string) => `${run(runId)}/state`,
   metrics: (runId: string) => `${run(runId)}/metrics`, // PLANNED: no backend route yet
+  laps: (runId: string) => `${run(runId)}/laps`,
 };

@@ -3,7 +3,7 @@ import type { PointerEvent as ReactPointerEvent } from "react";
 import EmptyState from "@components/ui/EmptyState";
 import ErrorState from "@components/ui/ErrorState";
 import LoadingState from "@components/ui/LoadingState";
-import { useRunPositions } from "@features/dashboard/data/useDashboardData";
+import { useNoLapsSelected, useRunPositions } from "@features/dashboard/data/useDashboardData";
 import { useHoverTimeSubscription } from "@features/dashboard/state/useDashboard";
 import {
   anchorAt,
@@ -17,6 +17,7 @@ import {
   trackPath,
   windowPath,
 } from "@features/dashboard/utils/trackmap";
+import { NO_LAPS_MESSAGE } from "@features/dashboard/utils/laps";
 import { cx } from "@utils/classNames";
 import { TrackVisualization, type DragMode } from "./TrackVisualization";
 import {
@@ -85,6 +86,7 @@ export function TrackMap() {
     [positions],
   );
   const { selection, selectionRef, update, commit, applied } = useTrackSelection(track);
+  const noLapsSelected = useNoLapsSelected();
 
   // Static layers, once per track.
   const base = useMemo(() => {
@@ -249,6 +251,7 @@ export function TrackMap() {
   if (!track || !base || !shape || !selection) {
     return <EmptyState message="No position data for this run." />;
   }
+  if (noLapsSelected) return <EmptyState message={NO_LAPS_MESSAGE} />;
 
   return (
     // Placeholder data is the previous request's, shown while new data loads: dim

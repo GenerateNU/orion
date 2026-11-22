@@ -2,7 +2,7 @@ import { useEffect, useMemo, useRef } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { getRouteApi } from "@tanstack/react-router";
 import { useStore } from "zustand";
-import type { MetricsResponse } from "@schemas/metrics.schema";
+import type { LapsResponse } from "@schemas/lap.schema";
 import type { RunResponse } from "@schemas/run.schema";
 import { runDataKeys, runKeys } from "@api/queryKeys";
 import { useRun } from "@hooks/useRuns";
@@ -91,10 +91,10 @@ export const useDashboardActions = () => {
     // The span of the laps; the current window when lap times aren't loaded.
     const windowForLaps = (lapIds: readonly number[], current: TimeWindow | undefined) => {
       if (lapIds.length === 0) return undefined;
-      const metrics = queryClient.getQueryData<MetricsResponse>(runDataKeys.metrics(runId));
+      const response = queryClient.getQueryData<LapsResponse>(runDataKeys.laps(runId));
       const runTimes = timeline();
-      if (!metrics || !runTimes) return current;
-      return lapsToWindow(lapsFromMetrics(metrics, runTimes), lapIds) ?? current;
+      if (!response || !runTimes) return current;
+      return lapsToWindow(lapsFromMetrics(response, runTimes), lapIds) ?? current;
     };
 
     // Lap changes add a history entry, so Back undoes them.

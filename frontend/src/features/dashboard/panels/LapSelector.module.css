@@ -1,0 +1,64 @@
+/* A bordered box: a row of lap toggles that scrolls sideways when there are
+   many, with the Select all / Clear buttons under it. */
+.selector {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+  padding: var(--space-1) var(--space-2);
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-sm);
+}
+
+.laps {
+  display: flex;
+  gap: var(--space-3);
+  overflow-x: auto;
+  /* Scrolled with the wheel or a swipe; no scrollbar. */
+  scrollbar-width: none;
+}
+
+.lap {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  flex-shrink: 0;
+  padding: 2px 0;
+  font-size: 13px;
+  white-space: nowrap;
+  color: var(--text-primary);
+  background: none;
+  border: none;
+  cursor: pointer;
+}
+
+.time {
+  font-family: var(--font-mono);
+  font-size: 12px;
+  color: var(--text-muted);
+}
+
+.dot {
+  width: 10px;
+  height: 10px;
+  border-radius: var(--radius-pill);
+  background: var(--border-default);
+}
+
+.off {
+  color: var(--text-muted);
+}
+
+.lap:hover .dot {
+  box-shadow: 0 0 0 2px var(--bg-raised);
+}
+
+.actions {
+  display: flex;
+  justify-content: flex-end;
+  border-top: 1px solid var(--border-default);
+}
+
+.action {
+  padding: 4px 8px;
+  font-size: 12px;
+}

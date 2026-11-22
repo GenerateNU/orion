@@ -23,3 +23,35 @@ export function lapsToWindow(laps: readonly Lap[], lapIds: readonly number[]): T
     Math.max(...selected.map((lap) => lap.window[1])),
   ];
 }
+
+// Shown instead of the track map and sensor charts while no lap is selected.
+export const NO_LAPS_MESSAGE = "Select at least 1 lap to see its data.";
+
+// One color per lap (lap ids start at 1), the same everywhere it's drawn. Cycles
+// after 20 laps.
+const LAP_COLORS = [
+  "#1f77b4",
+  "#aec7e8",
+  "#ff7f0e",
+  "#ffbb78",
+  "#2ca02c",
+  "#98df8a",
+  "#d62728",
+  "#ff9896",
+  "#9467bd",
+  "#c5b0d5",
+  "#8c564b",
+  "#c49c94",
+  "#e377c2",
+  "#f7b6d2",
+  "#7f7f7f",
+  "#c7c7c7",
+  "#bcbd22",
+  "#dbdb8d",
+  "#17becf",
+  "#9edae5",
+];
+
+export function lapColor(lapId: number): string {
+  return LAP_COLORS[(lapId - 1) % LAP_COLORS.length];
+}

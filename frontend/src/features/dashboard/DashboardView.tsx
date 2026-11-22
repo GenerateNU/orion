@@ -13,6 +13,7 @@ import DashboardStoreProvider from "@features/dashboard/state/DashboardStoreProv
 import { useLastRunStore } from "@features/dashboard/state/lastRunStore";
 import { useDashboardRun } from "@features/dashboard/state/useDashboard";
 import styles from "./DashboardView.module.css";
+import { LapSelector } from "@features/dashboard/panels/LapSelector";
 import { TrackMap } from "@features/dashboard/panels/TrackMap";
 import SensorChartsPanel from "@components/charts/SensorChartPanel";
 
@@ -90,6 +91,7 @@ function RunDashboard() {
           <h2 id="track-map-heading" className={styles.panelHeading}>
             Track position
           </h2>
+          <LapSelector />
           <TrackMap />
         </section>
         <section className={styles.panel} aria-labelledby="sensor-charts-heading">
