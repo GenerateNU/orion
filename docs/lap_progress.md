@@ -31,6 +31,7 @@ The ideal lap is picked from complete, normal laps only. A lap is left out if it
 | The first lap | It includes the drive before the first crossing (the pits). |
 | The last lap | It stops wherever the run stops. |
 | A lap over 1.5 × the median lap time | Long stops, holes in the data, or two laps merged by a missed crossing. |
+| A lap under the median lap time ÷ 1.5 | Part of a lap split in two by a false crossing. |
 
 A run with 1 or 2 laps has no lap left, so it gets no percentages (no
 `lap_progress` rows). With 3 laps, only the middle one can be chosen, so it
@@ -83,8 +84,13 @@ turned into a percentage of its length.
   the car is heading too, so the far side of a hairpin never matches. The point is
   then placed between that ideal lap point and its neighbor, so percentages change
   smoothly instead of in 1 m steps.
-- **Never backwards.** Within a lap the percentage only goes up. A lap starts at 0%
-  and ends at 100% near the line, even if the car crosses it slightly early or late.
+- **Never backwards.** Within a lap the percentage only goes up. Each point is
+  measured against the lap's furthest progress so far, not the point before it, so
+  a point matched behind the car reads the furthest progress and one bad match
+  can't throw off the rest of the lap. A lap's first points just before the line
+  read 0%. Its last point is usually the last sample before the next crossing, so
+  a lap usually ends just under 100% (about 99%); points just past the line read
+  100%.
 - **Impossible jumps are dropped.** A match further ahead than the car could have
   driven since its furthest progress (40 m/s × the time, plus 10 m) is a bad match,
   so that point gets NULL instead of skipping the rest of the lap ahead.
@@ -134,21 +140,26 @@ fields. Matching is `attach_lap_progress` in `sensor_service.py` (pandas
 
 ## Settings
 
-All in `Settings` (`orion_core/settings.py`), each settable from `.env`:
+In `Settings` (`orion_core/settings.py`), each settable from `.env`:
 
 | Setting | Default | What it does |
 | --- | --- | --- |
-| `lap_progress_max_lap_time_ratio` | 1.5 | Slowest lap that may be chosen, × the median |
-| `lap_progress_spacing_m` | 1.0 | Distance between the ideal lap's points |
-| `lap_progress_smoothing_m` | 0.25 | How far smoothing may move the ideal lap |
+| `lap_progress_max_lap_time_ratio` | 1.5 | Laps slower than the median × this, or faster than the median ÷ this, can't be chosen |
 | `lap_progress_max_offtrack_m` | 15.0 | Further than this from the ideal lap: NULL |
-| `lap_progress_max_heading_diff_deg` | 60.0 | Turned further than this: NULL |
 | `lap_progress_min_speed_mps` | 1.0 | Slower than this: NULL |
-| `lap_progress_heading_weight_m` | 10.0 | How much heading counts when matching (a full turnaround = 2 × this, in meters) |
-| `lap_progress_gate_margin_m` | 20.0 | Near the line, a lap's first points read 0% and its last read 100% |
-| `lap_progress_max_speed_mps` | 40.0 | Fastest the car can go, for the jump check |
-| `lap_progress_jump_margin_m` | 10.0 | Slack in the jump check |
 | `lap_percent_match_tolerance_s` | 0.05 | Backend: furthest a reading may be from its nearest point |
+
+Constants at the top of `lap_progress_utils.py` (change them in code):
+
+| Constant | Value | What it does |
+| --- | --- | --- |
+| `SPACING_M` | 1.0 | Distance between the ideal lap's points |
+| `SMOOTHING_M` | 0.25 | How far smoothing may move the ideal lap |
+| `MAX_HEADING_DIFF_DEG` | 60.0 | Turned further than this: NULL |
+| `HEADING_WEIGHT_M` | 10.0 | How much heading counts when matching (a full turnaround = 2 × this, in meters) |
+| `GATE_MARGIN_M` | 20.0 | Near the line, a lap's first points read 0% and its last read 100% |
+| `MAX_SPEED_MPS` | 40.0 | Fastest the car can go, for the jump check |
+| `JUMP_MARGIN_M` | 10.0 | Slack in the jump check |
 
 ## Checking it by eye
 

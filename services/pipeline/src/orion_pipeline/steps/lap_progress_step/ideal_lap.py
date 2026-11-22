@@ -30,37 +30,33 @@ def assign_lap_ids(times: pd.Series, laps: pd.DataFrame) -> NDArray[np.int64]:
 def lap_durations(times: pd.Series, lap_ids: NDArray[np.int64]) -> pd.Series:
     """Each lap's time in seconds, indexed by `lap_id` in lap order.
 
-    Every lap starts at one of the run's points, so its start is its first point,
-    its end is the next lap's start, and the last lap ends at the run's last
-    point, the same way the lap step builds them.
+    Every lap starts at one of the run's points, so its start is its first point
+    and its end is the next lap's start. The last lap's time is NaN: it's never
+    chosen (see `choose_laps`).
     """
     starts = (
         pd.DataFrame({"lap_id": lap_ids, "time": times.to_numpy()})
         .groupby("lap_id", sort=True)["time"]
         .min()
     )
-    ends = starts.shift(-1).fillna(times.iloc[-1])
+    ends = starts.shift(-1)
     return (ends - starts).dt.total_seconds()
 
 
 def choose_laps(durations: pd.Series, *, max_lap_time_ratio: float) -> list[int]:
-    """The lap_ids of the complete, normal laps the ideal lap is picked from.
+    """The `lap_id`s the ideal lap may be picked from.
 
-    1. Not the first lap (it includes the drive before the first crossing) or
-       the last (it's cut off wherever the run ends).
-    2. Not an outlier: no slower than `max_lap_time_ratio` times the median lap
-       time of the laps left after 1. That drops laps with long stops or holes
-       in the data, and laps merged by a missed crossing.
-
-    Args:
-        durations: Output of `lap_durations`.
-        max_lap_time_ratio: Slowest allowed lap, as a multiple of the median.
-
-    Returns:
-        Empty when no lap qualifies, for example in a run with fewer than 3 laps.
+    Skips the first and last laps (out-lap and in-lap), and any lap more than
+    `max_lap_time_ratio` times slower or faster than the median. A slow lap
+    has a long stop or merged laps; a fast one is part of a lap split by a
+    false crossing.
     """
     candidates = durations.iloc[1:-1]
-    normal = candidates[candidates <= max_lap_time_ratio * candidates.median()]
+    median = candidates.median()
+    normal = candidates[
+        (candidates <= max_lap_time_ratio * median)
+        & (candidates >= median / max_lap_time_ratio)
+    ]
     return [int(lap_id) for lap_id in normal.index]
 
 
@@ -86,14 +82,18 @@ def find_medoid(laps: Sequence[IdealLap]) -> int:
 def build_ideal_lap(
     x: FloatArray,
     y: FloatArray,
+    times: pd.Series,
     lap_ids: NDArray[np.int64],
-    chosen: list[int],
     *,
-    spacing_m: float,
-    smoothing_m: float,
-) -> IdealLap:
-    """The ideal lap: the medoid of the `chosen` laps, lightly smoothed."""
-    laps = [resample(x[lap_ids == i], y[lap_ids == i], spacing_m) for i in chosen]
-    return smooth_loop(
-        laps[find_medoid(laps)], spacing_m=spacing_m, smoothing_m=smoothing_m
+    max_lap_time_ratio: float,
+) -> IdealLap | None:
+    chosen = choose_laps(
+        lap_durations(times, lap_ids), max_lap_time_ratio=max_lap_time_ratio
     )
+    if not chosen:
+        return None
+    laps = []
+    for lap_id in chosen:
+        in_lap = lap_ids == lap_id
+        laps.append(resample(x[in_lap], y[in_lap]))
+    return smooth_loop(laps[find_medoid(laps)])

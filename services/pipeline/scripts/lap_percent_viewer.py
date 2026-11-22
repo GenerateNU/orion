@@ -53,8 +53,6 @@ from orion_pipeline.clients.oriondb_client import OrionDBClient  # noqa: E402
 from orion_pipeline.runner.run_context import RunContext  # noqa: E402
 from orion_pipeline.steps.lap_progress_step.ideal_lap import (  # noqa: E402
     build_ideal_lap,
-    choose_laps,
-    lap_durations,
 )
 from orion_pipeline.steps.lap_progress_step.lap_progress_utils import (  # noqa: E402
     FloatArray,
@@ -118,19 +116,12 @@ def ideal_lap(
     ctx: RunContext,
 ) -> IdealLap | None:
     """The run's ideal lap, built the way the lap progress step builds it."""
-    chosen = choose_laps(
-        lap_durations(times, lap_ids),
-        max_lap_time_ratio=ctx.lap_progress_max_lap_time_ratio,
-    )
-    if not chosen:
-        return None
     return build_ideal_lap(
         x,
         y,
+        times,
         lap_ids,
-        chosen,
-        spacing_m=ctx.lap_progress_spacing_m,
-        smoothing_m=ctx.lap_progress_smoothing_m,
+        max_lap_time_ratio=ctx.lap_progress_max_lap_time_ratio,
     )
 
 

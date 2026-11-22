@@ -193,5 +193,6 @@ def test_lap_durations_times_each_lap():
     durations = lap_durations(positions["time"], lap_ids)
 
     assert durations.index.tolist() == [1, 2, 3]
-    # The last lap ends at the run's last point, one tick before its end.
-    assert durations.tolist() == pytest.approx([20, 30, 25 - DT_S])
+    # The last lap is never chosen, so it has no time.
+    assert durations.tolist()[:2] == pytest.approx([20, 30])
+    assert np.isnan(durations.iloc[2])
