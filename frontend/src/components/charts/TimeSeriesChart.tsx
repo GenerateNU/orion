@@ -6,19 +6,28 @@ import { formatDuration } from "@utils/format";
 import styles from "./TimeSeriesChart.module.css";
 
 const MIN_DRAG_PX = 4;
+// A series' line color when it doesn't set one.
+const DEFAULT_COLOR = "#d4b06a";
 
+// `time` is the x value of each point: RunTime, or lap percent when comparing laps.
 export type ChartSeries = {
   id: string;
   label: string;
   unit: string;
   time: RunTime[];
   values: number[];
+  color?: string;
 };
 
 export type TimeSeriesChartProps = {
   series: ChartSeries[];
   height?: number;
   yLabel?: string;
+  xLabel?: string;
+  formatX?: (value: number) => string;
+  // While hovering, a tooltip beside the cursor with every series' value at
+  // that x (uPlot's legend, moved to the cursor).
+  tooltip?: boolean;
   visibleWindow?: TimeWindow | null;
   onCommitWindow?: (window: TimeWindow) => void;
   onResetWindow?: () => void;
@@ -53,6 +62,36 @@ const selectionToWindow = (chart: uPlot): TimeWindow | null => {
   return [start, end];
 };
 
+// Series `s`'s value at the hovered x, read off its line: interpolated between
+// its nearest points either side, since joined series rarely share x values.
+// Null outside the series' range.
+const valueAt = (chart: uPlot, s: number, idx: number): number | null => {
+  const xs = chart.data[0];
+  const ys = chart.data[s];
+  if (ys[idx] != null) return ys[idx];
+  let before = idx - 1;
+  while (before >= 0 && ys[before] == null) before--;
+  let after = idx + 1;
+  while (after < xs.length && ys[after] == null) after++;
+  if (before < 0 || after >= xs.length) return null;
+  const y0 = ys[before] as number;
+  const y1 = ys[after] as number;
+  return y0 + ((y1 - y0) * (xs[idx] - xs[before])) / (xs[after] - xs[before]);
+};
+
+// Moves uPlot's legend beside the cursor as a tooltip (flipped to its left past
+// the middle of the plot), or hides it when the cursor is off the plot.
+const placeTooltip = (chart: uPlot) => {
+  const el = chart.root.querySelector<HTMLElement>(".u-legend");
+  if (!el) return;
+  const { idx, left = -1, top = -1 } = chart.cursor;
+  el.style.visibility = idx == null || left < 0 ? "hidden" : "visible";
+  if (idx == null || left < 0) return;
+  const flip = left > chart.over.clientWidth / 2;
+  el.style.left = `${chart.over.offsetLeft + left + (flip ? -el.offsetWidth - 12 : 12)}px`;
+  el.style.top = `${chart.over.offsetTop + Math.max(0, top - el.offsetHeight / 2)}px`;
+};
+
 const clearSelection = (chart: uPlot) => {
   chart.setSelect({ left: 0, top: 0, width: 0, height: 0 }, false);
 };
@@ -68,6 +107,9 @@ export const TimeSeriesChart = ({
   series,
   height = 600,
   yLabel = "",
+  xLabel = "Time",
+  formatX = formatTime,
+  tooltip = false,
   visibleWindow = null,
   onCommitWindow,
   onResetWindow,
@@ -93,7 +135,16 @@ export const TimeSeriesChart = ({
     (): uPlot.Options => ({
       width: 0,
       height,
-      legend: { show: false },
+      legend: {
+        show: tooltip,
+        live: true,
+        // A dot in each series' color (uPlot only colors a marker with a border).
+        markers: {
+          width: () => 1,
+          stroke: (_chart, s) => series[s - 1]?.color ?? DEFAULT_COLOR,
+          fill: (_chart, s) => series[s - 1]?.color ?? DEFAULT_COLOR,
+        },
+      },
       scales: {
         x: { time: false },
         y: {
@@ -105,8 +156,8 @@ export const TimeSeriesChart = ({
       },
       axes: [
         {
-          label: "Time",
-          values: (_chart, ticks) => ticks.map(formatTime),
+          label: xLabel,
+          values: (_chart, ticks) => ticks.map(formatX),
           stroke: (chart) => cssStyle(chart, "--text-muted"),
           grid: { stroke: (chart) => cssStyle(chart, "--border-default") },
           ticks: { stroke: (chart) => cssStyle(chart, "--border-default") },
@@ -128,11 +179,19 @@ export const TimeSeriesChart = ({
         bind: { dblclick: () => null },
       },
       series: [
-        {},
-        ...series.map(({ label }) => ({
+        { label: xLabel, value: (_chart, x) => (x == null ? "" : formatX(x)) },
+        ...series.map(({ label, color, unit }) => ({
           label,
-          stroke: "#d4b06a",
+          // The value read off the line at the hovered x (see valueAt), so every
+          // series shows one even where its points don't line up with the others'.
+          value: (chart: uPlot, _raw: number | null, s: number, idx: number | null) => {
+            const value = idx == null ? null : valueAt(chart, s, idx);
+            return value == null ? "—" : `${value.toFixed(1)} ${unit}`;
+          },
+          stroke: color ?? DEFAULT_COLOR,
           width: 1.5,
+          // Joined series leave gaps at each other's x values; draw through them.
+          spanGaps: true,
         })),
       ],
       hooks: {
@@ -148,6 +207,7 @@ export const TimeSeriesChart = ({
         ],
         setCursor: [
           (chart) => {
+            if (tooltip) placeTooltip(chart);
             const idx = chart.cursor.idx;
             callbacksRef.current.onHoverTime?.(
               idx == null ? null : (chart.data[0][idx] as RunTime),
@@ -156,7 +216,7 @@ export const TimeSeriesChart = ({
         ],
       },
     }),
-    [height, yLabel, series],
+    [height, yLabel, xLabel, formatX, tooltip, series],
   );
 
   useEffect(() => {

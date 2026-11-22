@@ -9,3 +9,66 @@
 .chart :global(.u-cursor-x) {
   border-right-color: var(--text-muted);
 }
+
+/* uPlot's legend, used as a tooltip: moved beside the cursor while hovering
+   (placeTooltip), one row per series. Not clickable. */
+.chart {
+  position: relative;
+}
+
+.chart :global(.u-legend) {
+  position: absolute;
+  z-index: 1;
+  visibility: hidden;
+  width: auto;
+  margin: 0;
+  padding: var(--space-1) var(--space-2);
+  font-size: 12px;
+  text-align: left;
+  color: var(--text-primary);
+  background: var(--bg-surface);
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-sm);
+  box-shadow: 0 2px 8px rgb(0 0 0 / 0.12);
+  pointer-events: none;
+  white-space: nowrap;
+}
+
+/* One series per row, not uPlot's inline layout. */
+.chart :global(.u-legend tr) {
+  display: table-row;
+  margin: 0;
+}
+
+.chart :global(.u-legend th),
+.chart :global(.u-legend td) {
+  display: table-cell;
+  padding: 1px 0;
+  font-weight: 400;
+}
+
+.chart :global(.u-legend .u-label) {
+  margin-right: var(--space-2);
+}
+
+.chart :global(.u-legend th::after) {
+  content: none;
+}
+
+.chart :global(.u-legend .u-value) {
+  padding-left: var(--space-2);
+  text-align: right;
+  font-weight: 600;
+}
+
+.chart :global(.u-legend .u-marker) {
+  width: 8px;
+  height: 8px;
+  margin-right: 6px;
+  border-radius: var(--radius-pill);
+}
+
+/* The first row is the hovered x, as a title. */
+.chart :global(.u-legend tr:first-child) {
+  color: var(--text-muted);
+}

@@ -32,4 +32,6 @@ export const runDataKeys = {
     [...runDataKeys.all(runId), "state", range] as const,
   sensors: (runId: string | undefined, range: object | undefined) =>
     [...runDataKeys.all(runId), "sensors", range] as const,
+  lapSensors: (runId: string | undefined, query: object | undefined) =>
+    [...runDataKeys.all(runId), "lap-sensors", query] as const,
 };

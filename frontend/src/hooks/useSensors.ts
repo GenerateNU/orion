@@ -1,7 +1,10 @@
 import { useQuery } from "@tanstack/react-query";
 import {
+  LapSensorDataResponseSchema,
   SensorDataResponseSchema,
   SensorResponseSchema,
+  type LapSensorDataQuery,
+  type LapSensorDataResponse,
   type SensorDataQuery,
   type SensorDataResponse,
   type SensorResponse,
@@ -76,5 +79,48 @@ export const useSensorData = <TData = SensorDataResponse>(
     sensorDataIsPlaceholderData: query.isPlaceholderData,
     sensorDataError: query.error,
     sensorDataRefetch: query.refetch,
+  };
+};
+
+// Hook for readings of `range.sensors` during each lap in `range.lap_ids`, the
+// whole lap, with each reading's lap percent: one response per lap, in order.
+// Fails with 404 for a run with no lap percents.
+export const useLapSensorData = <TData = LapSensorDataResponse>(
+  runId: string | undefined,
+  range: LapSensorDataQuery | undefined,
+  options: DataQueryOptions<LapSensorDataResponse, TData> = {},
+) => {
+  const query = useQuery({
+    ...options,
+    queryKey: runDataKeys.lapSensors(runId, range),
+    queryFn: async (): Promise<LapSensorDataResponse> => {
+      if (!runId || !range) {
+        throw new Error("Run ID and range are required");
+      }
+
+      // `lap_ids` repeats per lap (`lap_ids=3&lap_ids=5`), as the route expects.
+      const { data } = await axios.get(apiUrls.lapSensorData(runId), {
+        params: { ...range, sensors: range.sensors.join(",") },
+        paramsSerializer: { indexes: null },
+      });
+
+      const result = LapSensorDataResponseSchema.safeParse(data);
+      if (!result.success) {
+        throw new Error(`Data validation failed: ${result.error.message}`);
+      }
+      return result.data;
+    },
+    enabled:
+      !!runId &&
+      !!range &&
+      range.sensors.length > 0 &&
+      range.lap_ids.length > 0 &&
+      (options.enabled ?? true),
+  });
+
+  return {
+    lapSensorData: query.data,
+    lapSensorDataIsLoading: query.isLoading,
+    lapSensorDataError: query.error,
   };
 };

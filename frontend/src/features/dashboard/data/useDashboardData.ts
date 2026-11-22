@@ -1,17 +1,21 @@
 import { useCallback, useMemo } from "react";
 import { keepPreviousData } from "@tanstack/react-query";
 import type { LapsResponse } from "@schemas/lap.schema";
-import type { SensorDataResponse, SensorSeries } from "@schemas/sensor.schema";
+import type {
+  LapSensorDataResponse,
+  SensorDataResponse,
+  SensorSeries,
+} from "@schemas/sensor.schema";
 import type { StateDataResponse } from "@schemas/state.schema";
 import { useRunLaps } from "@hooks/useRunLaps";
-import { useSensorData } from "@hooks/useSensors";
+import { useLapSensorData, useSensorData } from "@hooks/useSensors";
 import { useStateEstimation } from "@hooks/useStateEstimation";
 import {
   useCommittedWindow,
   useDashboardRun,
   useSelectedLaps,
 } from "@features/dashboard/state/useDashboard";
-import { lapsFromMetrics, type Lap } from "@features/dashboard/utils/laps";
+import { lapsFromMetrics, MIN_LAPS_TO_COMPARE, type Lap } from "@features/dashboard/utils/laps";
 import { snapWindow, toIsoRange, type TimeWindow } from "@features/dashboard/utils/time";
 
 // The data panels draw, for the opened run. Each hook wraps an API hook from
@@ -61,6 +65,13 @@ export const useLaps = () => {
   return { laps, lapsIsLoading, lapsError };
 };
 
+// True when the run has enough laps to compare them by lap percent: the charts
+// then plot the selected laps against % of lap instead of time.
+export const useCompareLaps = (): boolean => {
+  const { laps } = useLaps();
+  return (laps?.length ?? 0) >= MIN_LAPS_TO_COMPARE;
+};
+
 // True when the run has laps but none is selected: the panels then show
 // NO_LAPS_MESSAGE (utils/laps.ts) instead of data.
 export const useNoLapsSelected = (): boolean => {
@@ -96,7 +107,7 @@ export const useRunPositions = (scope: DataScope) => {
     [startMs],
   );
   const { stateData, stateDataIsLoading, stateDataIsPlaceholderData, stateDataError } =
-    useStateEstimation(runId, range, { select, placeholderData: keepPreviousData });
+    useStateEstimation(runId, range, { select });
   return {
     positions: stateData,
     positionsIsLoading: stateDataIsLoading,
@@ -140,5 +151,47 @@ export const useSensorTrace = (sensors: readonly string[], scope: DataScope) => 
     traceIsLoading: sensorDataIsLoading,
     traceIsPlaceholderData: sensorDataIsPlaceholderData,
     traceError: sensorDataError,
+  };
+};
+
+// One lap's readings of a sensor by lap percent: `values[i]` at `percent[i]`,
+// ascending, readings with no percent (off track) left out.
+export type LapTrace = {
+  lapId: number;
+  percent: number[];
+  values: number[];
+};
+
+// Each of `lapIds`' readings of `sensor` (its first value) by lap percent, for
+// comparing laps. Keep `lapIds` stable (a memo or the URL's list).
+export const useLapSensorTraces = (sensor: string, lapIds: readonly number[]) => {
+  const { runId } = useDashboardRun();
+  const range = useMemo(() => ({ sensors: [sensor], lap_ids: [...lapIds] }), [sensor, lapIds]);
+  const select = useCallback(
+    (data: LapSensorDataResponse): LapTrace[] =>
+      data.flatMap((response, i): LapTrace[] => {
+        const series = response.series[sensor];
+        if (!series?.lap_percent) return [];
+        const points = series.values
+          .map((value, j) => [series.lap_percent?.[j], value[0]] as const)
+          .filter(
+            (point): point is readonly [number, number] => point[0] != null && point[1] != null,
+          )
+          .sort((a, b) => a[0] - b[0]);
+        return [
+          { lapId: lapIds[i], percent: points.map((p) => p[0]), values: points.map((p) => p[1]) },
+        ];
+      }),
+    [sensor, lapIds],
+  );
+  const { lapSensorData, lapSensorDataIsLoading, lapSensorDataError } = useLapSensorData(
+    runId,
+    range,
+    { select },
+  );
+  return {
+    traces: lapSensorData ?? [],
+    tracesIsLoading: lapSensorDataIsLoading,
+    tracesError: lapSensorDataError,
   };
 };

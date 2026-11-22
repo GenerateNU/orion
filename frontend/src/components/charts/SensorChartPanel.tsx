@@ -1,10 +1,16 @@
 import { useId, useMemo, useState } from "react";
 import { useSensors } from "@hooks/useSensors";
 import EmptyState from "@components/ui/EmptyState";
-import { useNoLapsSelected } from "@features/dashboard/data/useDashboardData";
-import { useDashboardActions, useVisibleWindow } from "@features/dashboard/state/useDashboard";
+import { useCompareLaps, useNoLapsSelected } from "@features/dashboard/data/useDashboardData";
+import {
+  useDashboardActions,
+  usePercentWindow,
+  useSelectedLaps,
+  useVisibleWindow,
+} from "@features/dashboard/state/useDashboard";
 import { NO_LAPS_MESSAGE } from "@features/dashboard/utils/laps";
 import styles from "./SensorChartPanel.module.css";
+import LapSensorChart from "./LapSensorChart";
 import SensorChart from "./SensorChart";
 
 const MAX_NUM_CHARTS = 6;
@@ -23,8 +29,13 @@ export default function SensorChartsPanel({
 
   const { sensors } = useSensors();
   const visibleWindow = useVisibleWindow();
-  const { resetWindow } = useDashboardActions();
+  const percentWindow = usePercentWindow();
+  const { resetWindow, resetPercentWindow } = useDashboardActions();
   const noLapsSelected = useNoLapsSelected();
+  // With 3+ laps the charts compare the selected laps by lap percent; otherwise
+  // they show the run over time.
+  const compareLaps = useCompareLaps();
+  const selectedLaps = useSelectedLaps();
 
   const units = useMemo(
     () => new Map(sensors?.map((sensor) => [sensor.name, sensor.unit ?? ""])),
@@ -40,8 +51,8 @@ export default function SensorChartsPanel({
         <button
           type="button"
           className={styles.reset}
-          onClick={() => resetWindow()}
-          disabled={visibleWindow === null}
+          onClick={() => (compareLaps ? resetPercentWindow() : resetWindow())}
+          disabled={(compareLaps ? percentWindow : visibleWindow) === null}
         >
           Reset zoom
         </button>
@@ -69,6 +80,13 @@ export default function SensorChartsPanel({
             </div>
             {noLapsSelected ? (
               <EmptyState message={NO_LAPS_MESSAGE} />
+            ) : compareLaps ? (
+              <LapSensorChart
+                name={name}
+                unit={units.get(name) ?? ""}
+                height={height}
+                lapIds={selectedLaps}
+              />
             ) : (
               <SensorChart name={name} unit={units.get(name) ?? ""} height={height} />
             )}

@@ -24,6 +24,10 @@ export function lapsToWindow(laps: readonly Lap[], lapIds: readonly number[]): T
   ];
 }
 
+// Lap percent needs an ideal lap, which needs at least 3 laps (docs/lap_progress.md),
+// so only then are laps compared by percent.
+export const MIN_LAPS_TO_COMPARE = 3;
+
 // Shown instead of the track map and sensor charts while no lap is selected.
 export const NO_LAPS_MESSAGE = "Select at least 1 lap to see its data.";
 
