@@ -10,9 +10,8 @@ from orion_pipeline.runner.run_context import RunContext
 from orion_pipeline.steps.lap_progress_step.ideal_lap import assign_lap_ids
 from orion_pipeline.steps.lap_progress_step.lap_progress_step import LapProgressStep
 from orion_pipeline.steps.lap_progress_step.lap_progress_utils import (
-    drop_forward_jumps,
-    lap_percentages,
     match_to_ideal_lap,
+    percent_of_lap,
     resample,
 )
 from orion_pipeline.steps.lap_step.lap_constants import EARTH_RADIUS_M
@@ -131,7 +130,7 @@ def run_step(positions: pd.DataFrame, laps: pd.DataFrame, **ctx_overrides):
     the writer mock).
     """
     reader = MagicMock()
-    reader.read_frame.side_effect = [positions, laps]
+    reader.read_frame.side_effect = [laps, positions]
     writer = MagicMock()
     ctx = RunContext(run_id="run-1", **ctx_overrides)
     LapProgressStep(reader=reader, writer=writer).run(ctx)
@@ -300,43 +299,58 @@ def test_empty_run_writes_nothing():
         ([10.0, np.nan, 20.0], [10.0, np.nan, 20.0]),
     ],
 )
-def test_lap_percentages(s, expected):
-    s = np.array(s)
-    percent = lap_percentages(s, np.ones(len(s), dtype=np.int64), 100.0, 5.0)
+def test_percent_of_lap(s, expected):
+    # Points 100 s apart, so the jump check never rejects one.
+    percent = guarded_percentages(s, 100.0 * np.arange(len(s)))
     assert percent.tolist() == pytest.approx(expected, nan_ok=True)
 
 
 # ---- Bad matches ----------------------------------------------------------
 
 
-def jump_guard(s, time_s):
-    return drop_forward_jumps(
-        np.array(s, dtype=float),
+def guarded_percentages(s, time_s):
+    """Percentages for one lap of a 100 m ideal lap (so meters = percent),
+    with a 10 m/s + 2 m jump check and a 5 m gate margin."""
+    s = np.array(s, dtype=float)
+    return percent_of_lap(
+        s,
         np.array(time_s, dtype=float),
+        np.ones(len(s), dtype=np.int64),
         100.0,
         max_speed_mps=10.0,
         jump_margin_m=2.0,
+        gate_margin_m=5.0,
     )
 
 
-def test_drop_forward_jumps_rejects_a_point_too_far_ahead():
+def test_a_point_too_far_ahead_is_rejected():
     # 1 m per second; the 60 m point is far beyond 10 m/s * 1 s + 2 m.
-    s = jump_guard([10, 11, 60, 13, 14], [0, 1, 2, 3, 4])
-    assert s.tolist() == pytest.approx([10, 11, np.nan, 13, 14], nan_ok=True)
+    percent = guarded_percentages([10, 11, 60, 13, 14], [0, 1, 2, 3, 4])
+    assert percent.tolist() == pytest.approx([10, 11, np.nan, 13, 14], nan_ok=True)
 
 
-def test_drop_forward_jumps_compares_to_the_furthest_point_not_the_last():
-    # The bad backward point (2 m) is kept, and the points after it aren't
+def test_a_bad_backward_point_holds_the_furthest_progress():
+    # The bad backward point (2 m) reads 11, and the points after it aren't
     # treated as jumps from it.
-    s = jump_guard([10, 11, 2, 13, 14], [0, 1, 2, 3, 4])
-    assert s.tolist() == pytest.approx([10, 11, 2, 13, 14])
+    percent = guarded_percentages([10, 11, 2, 13, 14], [0, 1, 2, 3, 4])
+    assert percent.tolist() == pytest.approx([10, 11, 11, 13, 14])
 
 
-def test_drop_forward_jumps_allows_more_after_a_gap_and_across_the_gate():
+def test_the_jump_check_allows_more_after_a_gap_and_across_the_gate():
     # 40 m ahead is fine after 5 s (10 m/s * 5 s + 2 m). 98 -> 3 m is 5 m
-    # forward around the loop, not 95 m back.
-    s = jump_guard([10, np.nan, 50, 98, 3], [0, 2, 5, 10, 11])
-    assert s.tolist() == pytest.approx([10, np.nan, 50, 98, 3], nan_ok=True)
+    # forward around the loop, not 95 m back, and ends the lap at 100.
+    percent = guarded_percentages([10, np.nan, 50, 98, 3], [0, 2, 5, 10, 11])
+    assert percent.tolist() == pytest.approx([10, np.nan, 50, 98, 100], nan_ok=True)
+
+
+def test_a_bad_match_just_over_half_a_lap_ahead_doesnt_freeze_the_lap():
+    s = np.arange(0.0, 50.0, 2.5)
+    s[4] += 51.0
+    percent = guarded_percentages(s, np.arange(len(s), dtype=float))
+
+    expected = np.arange(0.0, 50.0, 2.5)
+    expected[4] = expected[3]  # The bad point holds the progress before it.
+    assert percent.tolist() == pytest.approx(expected.tolist())
 
 
 def move_point(positions, index, to_u):

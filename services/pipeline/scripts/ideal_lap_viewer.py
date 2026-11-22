@@ -64,6 +64,7 @@ from orion_pipeline.steps.lap_progress_step.ideal_lap import (  # noqa: E402
     lap_durations,
 )
 from orion_pipeline.steps.lap_progress_step.lap_progress_utils import (  # noqa: E402
+    SMOOTHING_M,
     FloatArray,
     IdealLap,
     match_to_ideal_lap,
@@ -102,8 +103,6 @@ def match(ruler: IdealLap, x: FloatArray, y: FloatArray, ctx: RunContext) -> Flo
         ruler,
         min_speed_mps=0.0,
         max_offtrack_m=ctx.lap_progress_max_offtrack_m,
-        max_heading_diff_deg=ctx.lap_progress_max_heading_diff_deg,
-        heading_weight_m=ctx.lap_progress_heading_weight_m,
     )
 
 
@@ -123,7 +122,6 @@ def average(laps: list[IdealLap], ruler: IdealLap, ctx: RunContext) -> IdealLap:
         mean_y = np.bincount(bins, weights=y[matched])[full] / count[full]
         ruler = smooth_loop(
             IdealLap(mean_x, mean_y, np.zeros(len(mean_x)), 0.0),
-            spacing_m=ctx.lap_progress_spacing_m,
             smoothing_m=AVERAGE_SMOOTHING_M,
         )
     return ruler
@@ -214,7 +212,7 @@ def main() -> None:
     parser.add_argument(
         "--smoothing-m",
         type=float,
-        default=get_settings().lap_progress_smoothing_m,
+        default=SMOOTHING_M,
         help="RMS distance the smoothed medoid may stray from it, in meters.",
     )
     args = parser.parse_args()
@@ -236,10 +234,7 @@ def main() -> None:
     if not chosen:
         sys.exit(f"Run {run_id} has no lap that qualifies (it needs 3 or more laps).")
 
-    laps = [
-        resample(x[lap_ids == i], y[lap_ids == i], ctx.lap_progress_spacing_m)
-        for i in chosen
-    ]
+    laps = [resample(x[lap_ids == i], y[lap_ids == i]) for i in chosen]
     durations = lap_times.loc[chosen]
     median_lap = int(durations.sort_values(kind="stable").index[(len(chosen) - 1) // 2])
     medoid_index = find_medoid(laps)
@@ -251,10 +246,9 @@ def main() -> None:
         if key == "medoid":
             return f"medoid (lap {chosen[medoid_index]})", medoid
         if key == "smoothed":
-            spacing_m, smoothing_m = ctx.lap_progress_spacing_m, args.smoothing_m
             return (
-                f"smoothed medoid ({smoothing_m} m)",
-                smooth_loop(medoid, spacing_m=spacing_m, smoothing_m=smoothing_m),
+                f"smoothed medoid ({args.smoothing_m} m)",
+                smooth_loop(medoid, smoothing_m=args.smoothing_m),
             )
         return "average (rejected)", average(laps, medoid, ctx)
 

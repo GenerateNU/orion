@@ -26,14 +26,5 @@ class RunContext(BaseModel):
     lap_progress_max_lap_time_ratio: float = (
         get_settings().lap_progress_max_lap_time_ratio
     )
-    lap_progress_spacing_m: float = get_settings().lap_progress_spacing_m
-    lap_progress_smoothing_m: float = get_settings().lap_progress_smoothing_m
     lap_progress_max_offtrack_m: float = get_settings().lap_progress_max_offtrack_m
-    lap_progress_max_heading_diff_deg: float = (
-        get_settings().lap_progress_max_heading_diff_deg
-    )
     lap_progress_min_speed_mps: float = get_settings().lap_progress_min_speed_mps
-    lap_progress_heading_weight_m: float = get_settings().lap_progress_heading_weight_m
-    lap_progress_gate_margin_m: float = get_settings().lap_progress_gate_margin_m
-    lap_progress_max_speed_mps: float = get_settings().lap_progress_max_speed_mps
-    lap_progress_jump_margin_m: float = get_settings().lap_progress_jump_margin_m

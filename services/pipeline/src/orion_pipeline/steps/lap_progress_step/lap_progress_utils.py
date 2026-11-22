@@ -5,7 +5,6 @@ from dataclasses import dataclass
 from typing import Any, cast
 
 import numpy as np
-import pandas as pd
 from numpy.typing import NDArray
 from scipy.interpolate import splev, splprep
 from scipy.spatial import cKDTree
@@ -14,6 +13,25 @@ from orion_pipeline.steps.lap_step.lap_utils import distance_driven, headings
 
 FloatArray = NDArray[np.float64]
 IntArray = NDArray[np.int64]
+# Distance between the points of the ideal lap, in meters.
+SPACING_M = 1.0
+# How far, as an RMS, smoothing may move the ideal lap off the medoid lap's points
+# to iron out jitter, in meters.
+SMOOTHING_M = 0.25
+# Points heading more than this far from the ideal lap's direction are off track
+# (spins, wrong way), in degrees.
+MAX_HEADING_DIFF_DEG = 60.0
+# When matching, each unit of heading counts as this many meters, so a full
+# turn-around adds 2 x this to the distance and the far side of a hairpin (driven
+# the other way) never looks closest.
+HEADING_WEIGHT_M = 10.0
+# A lap's first points within this many meters before the start/finish line read
+# 0%, and its last points within this many meters past it read 100%.
+GATE_MARGIN_M = 20.0
+# A match further ahead of the car's furthest progress than it could drive at this
+# speed (m/s), plus `JUMP_MARGIN_M` (m) of slack for matching noise, is a bad match
+MAX_SPEED_MPS = 40.0
+JUMP_MARGIN_M = 10.0
 
 
 @dataclass(frozen=True)
@@ -30,12 +48,7 @@ class IdealLap:
     length_m: float
 
 
-def seconds_since_start(times: pd.Series) -> FloatArray:
-    """Seconds from the first time to each time."""
-    return np.asarray((times - times.iloc[0]).dt.total_seconds(), np.float64)
-
-
-def resample(x: FloatArray, y: FloatArray, spacing_m: float) -> IdealLap:
+def resample(x: FloatArray, y: FloatArray, spacing_m: float = SPACING_M) -> IdealLap:
     """The loop through `x, y` (closed back to the first point), redrawn with a
     point every `spacing_m` meters, starting at the first point."""
     xc, yc = np.append(x, x[0]), np.append(y, y[0])
@@ -47,7 +60,9 @@ def resample(x: FloatArray, y: FloatArray, spacing_m: float) -> IdealLap:
     )
 
 
-def smooth_loop(path: IdealLap, *, spacing_m: float, smoothing_m: float) -> IdealLap:
+def smooth_loop(
+    path: IdealLap, *, spacing_m: float = SPACING_M, smoothing_m: float = SMOOTHING_M
+) -> IdealLap:
     """`path` through a periodic smoothing spline, resampled from its first point.
 
     The spline strays from the path's points by about `smoothing_m` (RMS), which
@@ -78,24 +93,14 @@ def match_to_ideal_lap(
     *,
     min_speed_mps: float,
     max_offtrack_m: float,
-    max_heading_diff_deg: float,
-    heading_weight_m: float,
+    max_heading_diff_deg: float = MAX_HEADING_DIFF_DEG,
+    heading_weight_m: float = HEADING_WEIGHT_M,
 ) -> FloatArray:
-    """Meters along the ideal lap to each point.
-
-    Finds each point's nearest ideal lap point, then places the point between
-    it and a neighbor (see `_along`), so the distance changes smoothly instead
-    of in steps of the ideal lap's spacing. "Nearest" counts direction too, so the far
-    side of a hairpin never wins. NaN for points slower than `min_speed_mps`,
-    too far away, or heading the wrong way.
-    """
+    """Meters along the ideal lap to each point."""
     hx, hy = headings(x, y)
-    speed = (
-        np.hypot(np.gradient(x), np.gradient(y)) / np.gradient(time_s)
-        if len(x) > 1
-        else np.zeros(len(x))
+    moving = np.hypot(np.gradient(x), np.gradient(y)) >= min_speed_mps * np.gradient(
+        time_s
     )
-    on_track = (np.hypot(hx, hy) > 0) & (speed >= min_speed_mps)
     min_heading_dot = np.cos(np.radians(max_heading_diff_deg))
 
     # The ideal lap's direction at each point, from its neighbors around the loop.
@@ -111,11 +116,11 @@ def match_to_ideal_lap(
 
     off = np.hypot(ideal.x[idx] - x, ideal.y[idx] - y) > max_offtrack_m
     wrong_way = hx * tx[idx] + hy * ty[idx] < min_heading_dot
-    s = _along(x, y, idx, ideal, tx, ty)
-    return np.where(on_track & ~off & ~wrong_way, s, np.nan)
+    s = _project_onto_ideal_lap(x, y, idx, ideal, tx, ty)
+    return np.where(moving & ~off & ~wrong_way, s, np.nan)
 
 
-def _along(
+def _project_onto_ideal_lap(
     x: FloatArray,
     y: FloatArray,
     idx: IntArray,
@@ -147,60 +152,60 @@ def _along(
     return along
 
 
-def drop_forward_jumps(
+def _wrap_around_lap(d: float, length_m: float) -> float:
+    """`d` meters wrapped around a lap of `length_m`, into [-length_m / 2, length_m / 2)."""
+    return (d + length_m / 2) % length_m - length_m / 2
+
+
+def percent_of_lap(
     s: FloatArray,
     time_s: FloatArray,
+    lap_ids: IntArray,
     length_m: float,
     *,
-    max_speed_mps: float,
-    jump_margin_m: float,
-) -> FloatArray:
-    """`s` with impossible forward jumps set to NaN.
-
-    A point is rejected if it's further ahead of the furthest progress so far
-    than the car could drive since then: `max_speed_mps` times the time, plus
-    `jump_margin_m`. Comparing to the furthest progress, not the previous point,
-    means a bad backward match can't make the points after it look like jumps.
-    Backward points are kept (`lap_percentages` never goes backwards anyway).
-    """
-    out = s.copy()
-    furthest: float | None = None
-    furthest_time = 0.0
-    for i in np.flatnonzero(~np.isnan(s)):
-        if furthest is None:
-            furthest, furthest_time = s[i], time_s[i]
-            continue
-        # Meters ahead of the furthest point, wrapped around the lap.
-        ahead = (s[i] - furthest + length_m / 2) % length_m - length_m / 2
-        if ahead > max_speed_mps * (time_s[i] - furthest_time) + jump_margin_m:
-            out[i] = np.nan
-        elif ahead > 0:
-            furthest, furthest_time = s[i], time_s[i]
-    return out
-
-
-def lap_percentages(
-    s: FloatArray, lap_ids: IntArray, length_m: float, gate_margin_m: float
+    max_speed_mps: float = MAX_SPEED_MPS,
+    jump_margin_m: float = JUMP_MARGIN_M,
+    gate_margin_m: float = GATE_MARGIN_M,
 ) -> FloatArray:
     """Turn distances along the ideal lap into 0-100%, lap by lap.
 
-    Never goes backwards. Starts at 0 and ends at 100 near the start/finish line
-    (within `gate_margin_m`). Merged laps wrap back to 0. NaN stays NaN.
+    Each point is measured against the furthest progress so far, not against
+    the point before it, so one bad match can't throw off the points after it
     """
-    out = np.full(len(s), np.nan)
+    # Meters into each point's lap, counted past length_m for merged laps.
+    progress = np.full(len(s), np.nan)
+    furthest: float | None = None  # The run's furthest `s`, for the jump check.
+    furthest_time = 0.0
+    lap: int | None = None
+    lap_progress = 0.0
+    for i in np.flatnonzero(~np.isnan(s)):
+        if furthest is not None:
+            ahead = _wrap_around_lap(s[i] - furthest, length_m)
+            if ahead > max_speed_mps * (time_s[i] - furthest_time) + jump_margin_m:
+                continue
+            if ahead > 0:
+                furthest, furthest_time = s[i], time_s[i]
+        else:
+            furthest, furthest_time = s[i], time_s[i]
+
+        if lap_ids[i] != lap:
+            # A lap's first point just before the gate starts below 0.
+            lap = int(lap_ids[i])
+            near_gate = s[i] > length_m - gate_margin_m
+            lap_progress = s[i] - length_m if near_gate else s[i]
+        else:
+            lap_progress += max(_wrap_around_lap(s[i] - lap_progress, length_m), 0.0)
+        progress[i] = lap_progress
+
+    percent = 100.0 * (progress % length_m) / length_m
+    percent[progress < 0] = 0.0
+    # A lap that ends just past the gate reads 100 from the gate on.
     for lap_id in np.unique(lap_ids):
-        idx = np.flatnonzero((lap_ids == lap_id) & ~np.isnan(s))
-        if idx.size == 0:
+        in_lap = (lap_ids == lap_id) & ~np.isnan(progress)
+        if not in_lap.any():
             continue
-        raw = s[idx]
-        step = (np.diff(raw) + length_m / 2) % length_m - length_m / 2
-        first = raw[0] - length_m if raw[0] > length_m - gate_margin_m else raw[0]
-        unwrapped = np.maximum.accumulate(
-            first + np.concatenate(([0.0], np.cumsum(step)))
-        )
-        percent = 100.0 * (unwrapped % length_m) / length_m
-        loops = np.floor(unwrapped[-1] / length_m)
-        if loops >= 1 and unwrapped[-1] - loops * length_m < gate_margin_m:
-            percent[unwrapped >= loops * length_m] = 100.0
-        out[idx] = np.where(unwrapped < 0, 0.0, percent)
-    return out
+        last = progress[in_lap][-1]
+        loops = np.floor(last / length_m)
+        if loops >= 1 and last - loops * length_m < gate_margin_m:
+            percent[in_lap & (progress >= loops * length_m)] = 100.0
+    return percent
