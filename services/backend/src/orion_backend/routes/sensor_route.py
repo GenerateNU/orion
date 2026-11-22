@@ -8,7 +8,11 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from orion_backend.core.database import get_orion_db, get_penelope_db
 from orion_backend.core.openapi import error_responses
-from orion_backend.schemas.sensor_schema import SensorDataResponse, SensorResponse
+from orion_backend.schemas.sensor_schema import (
+    LapSensorDataResponse,
+    SensorDataResponse,
+    SensorResponse,
+)
 from orion_backend.services.sensor_service import SensorService
 
 router = APIRouter(tags=["sensors"])
@@ -37,10 +41,8 @@ async def list_sensors(
 @router.get(
     "/runs/{run_id}/sensors/data",
     response_model=SensorDataResponse,
-    # Leaves `lap_id` / `lap_percent` out entirely unless they were asked for.
-    response_model_exclude_unset=True,
     summary="Get raw sensor readings",
-    responses=error_responses(404, 422, 502, 503),
+    responses=error_responses(422, 502, 503),
 )
 async def get_sensor_data(
     run_id: Annotated[str, Path(description="Penelope run id.")],
@@ -67,7 +69,7 @@ async def get_sensor_data(
 
 @router.get(
     "/runs/{run_id}/laps/sensors/data",
-    response_model=list[SensorDataResponse],
+    response_model=list[LapSensorDataResponse],
     summary="Get sensor readings by lap percent",
     responses=error_responses(404, 422, 502, 503),
 )
@@ -84,23 +86,16 @@ async def get_lap_sensor_data(
     start_percent: Annotated[float, Query(description="Inclusive.")] = 0,
     end_percent: Annotated[float, Query(description="Inclusive.")] = 100,
     service: SensorService = Depends(get_sensor_service),
-) -> list[SensorDataResponse]:
+) -> list[LapSensorDataResponse]:
     """For each lap in `lap_ids` (e.g. `?lap_ids=3&lap_ids=5`), every reading of the
     requested sensors while that lap was between `start_percent` and `end_percent`
-    (the whole lap by default). One response per lap, in the order given, with
-    `lap_id` and `lap_percent` lined up with each series' `time`.
+    (the whole lap by default), with each reading's `lap_percent`. One response per
+    lap, in the order given.
 
     A lap with no positions in the percent range is a 404 (e.g. the pipeline hasn't
     processed the run, or it has fewer than 3 laps).
     """
     names = [name.strip() for name in sensors.split(",") if name.strip()]
-    return [
-        await service.get_sensor_data(
-            run_id,
-            names,
-            lap_id=lap_id,
-            start_percent=start_percent,
-            end_percent=end_percent,
-        )
-        for lap_id in lap_ids
-    ]
+    return await service.get_lap_sensor_data(
+        run_id, names, lap_ids, start_percent, end_percent
+    )

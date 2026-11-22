@@ -7,13 +7,11 @@ from orion_core.queries.orion_queries import select_estimated_positions, select_
 from orion_pipeline.clients.oriondb_client import OrionDBClient
 from orion_pipeline.runner.run_context import RunContext
 from orion_pipeline.steps.base_step import PipelineStep
-from orion_pipeline.steps.lap_progress_step.ideal_lap import (
+from orion_pipeline.steps.lap_progress_step.lap_progress_utils import (
     assign_lap_ids,
     build_ideal_lap,
-)
-from orion_pipeline.steps.lap_progress_step.lap_progress_utils import (
-    match_to_ideal_lap,
-    percent_of_lap,
+    distance_along,
+    lap_percents,
 )
 from orion_pipeline.steps.lap_step.lap_utils import to_local_xy
 from orion_pipeline.steps.step_registry import register_step
@@ -53,35 +51,29 @@ class LapProgressStep(PipelineStep):
         yield positions.assign(lap_id=assign_lap_ids(positions["time"], laps))
 
     def transform(self, df: pd.DataFrame, ctx: RunContext) -> pd.DataFrame:
-        times = df["time"]
-        lap_ids = df["lap_id"].to_numpy(dtype=np.int64)
-        x, y = to_local_xy(df["lattitude"], df["longitude"])
-        time_s = np.asarray((times - times.iloc[0]).dt.total_seconds(), np.float64)
+        """Build the ideal lap, then measure every position along it.
 
-        # Step 1: Build the ideal lap from the run's complete, normal laps.
-        ideal = build_ideal_lap(
-            x, y, times, lap_ids, max_lap_time_ratio=ctx.lap_progress_max_lap_time_ratio
-        )
+        Args:
+            df: The run's positions in time order, each with its `lap_id`.
+            ctx: The job being run.
+
+        Returns:
+            One `lap_progress` row per position. Empty if the run has fewer than
+            3 laps, since then there's no complete lap to measure along.
+        """
+        x, y = to_local_xy(df["lattitude"], df["longitude"])
+        lap_ids = df["lap_id"].to_numpy(dtype=np.int64)
+
+        ideal = build_ideal_lap(x, y, lap_ids)
         if ideal is None:
             return pd.DataFrame()
+        s = distance_along(ideal, x, y)
+        percent = lap_percents(s, df["time"], lap_ids, ideal.length_m)
 
-        # Step 2: Find how far along the ideal lap each position is, in meters.
-        s = match_to_ideal_lap(
-            x,
-            y,
-            time_s,
-            ideal,
-            min_speed_mps=ctx.lap_progress_min_speed_mps,
-            max_offtrack_m=ctx.lap_progress_max_offtrack_m,
-        )
-
-        # Step 3: Turn meters along the ideal lap into 0-100% for each lap,
-        # dropping matches further ahead than the car could have driven.
-        percent = percent_of_lap(s, time_s, lap_ids, ideal.length_m)
         return pd.DataFrame(
             {
                 "run_id": ctx.run_id,
-                "time": times.to_numpy(),
+                "time": df["time"].to_numpy(),
                 "lap_id": lap_ids,
                 "lap_percent": percent,
             }

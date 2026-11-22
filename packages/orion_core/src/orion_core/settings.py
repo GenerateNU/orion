@@ -25,9 +25,6 @@ class Settings(BaseSettings):
     # Seconds added to lagged sensors' timestamps (gps_lagged in sensor_catalog), by both
     # the clean step and the backend sensors API. 0 disables the correction.
     gps_time_offset_s: float = 3.0
-    # The backend sensors API gives each reading the lap_percent of the nearest
-    # estimated position within this many seconds, or null if there's none.
-    lap_percent_match_tolerance_s: float = 0.05
 
     # Lap detection (see docs/lap_detection.md). Untuned starting guesses.
     # Radius of each remembered point's hitbox, in meters.
@@ -42,17 +39,6 @@ class Settings(BaseSettings):
     lap_gate_half_width_m: float = 15.0
     # Minimum time between two counted gate crossings, in seconds.
     lap_min_lap_time_s: float = 10.0
-
-    # Lap progress (see docs/lap_progress.md). Untuned starting guesses.
-    # A lap slower than this times the median lap (a long stop, a hole in the data,
-    # or laps merged by a missed crossing) or faster than the median divided by it
-    # (part of a lap split by a false crossing) is an outlier, so it can't be the
-    # ideal lap.
-    lap_progress_max_lap_time_ratio: float = 1.5
-    # Points farther than this from the ideal lap are off track, in meters.
-    lap_progress_max_offtrack_m: float = 15.0
-    # Points slower than this get no percentage, in meters per second.
-    lap_progress_min_speed_mps: float = 1.0
 
 
 class SettingsError(RuntimeError):

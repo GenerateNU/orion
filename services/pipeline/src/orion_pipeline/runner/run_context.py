@@ -21,10 +21,3 @@ class RunContext(BaseModel):
     lap_gate_search_sample_every: int = get_settings().lap_gate_search_sample_every
     lap_gate_half_width_m: float = get_settings().lap_gate_half_width_m
     lap_min_lap_time_s: float = get_settings().lap_min_lap_time_s
-
-    # Lap progress step tunables. See the matching `lap_progress_*` fields on Settings.
-    lap_progress_max_lap_time_ratio: float = (
-        get_settings().lap_progress_max_lap_time_ratio
-    )
-    lap_progress_max_offtrack_m: float = get_settings().lap_progress_max_offtrack_m
-    lap_progress_min_speed_mps: float = get_settings().lap_progress_min_speed_mps
