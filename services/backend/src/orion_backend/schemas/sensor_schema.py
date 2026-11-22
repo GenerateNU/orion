@@ -80,15 +80,24 @@ class LapSensorSeries(SensorSeries):
     )
 
 
-class LapSensorDataResponse(SensorDataResponse):
-    """Every reading of the requested sensors while one lap was in a percent range.
-    `start` and `end` are the first and last time the lap was in that range."""
+class LapSensorDataResponse(BaseModel):
+    """Every reading of the requested sensors while one lap was in a percent range."""
 
+    run_id: str = Field(description="Penelope run id.", examples=["run-123"])
     lap_id: int = Field(description="The lap these readings are from.", examples=[3])
-    series: dict[str, LapSensorSeries] = Field(  # type: ignore[assignment]
+    start: datetime | None = Field(
+        description=(
+            "First time the lap was in the percent range. `null` if it never was."
+        ),
+    )
+    end: datetime | None = Field(
+        description="Last time the lap was in the percent range. `null` if it never was.",
+    )
+    series: dict[str, LapSensorSeries] = Field(
         default_factory=dict,
         description=(
             "One series per requested sensor, keyed by Penelope `dataTypeName`, each "
-            "with the `lap_percent` of every reading."
+            "with the `lap_percent` of every reading. A lap that was never in the "
+            "percent range comes back with empty series."
         ),
     )

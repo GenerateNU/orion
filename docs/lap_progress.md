@@ -87,7 +87,9 @@ returns one response per lap, in the order given (the percents default to the wh
 lap). It reads `lap_progress` once for all the laps. Each lap's window is its first
 and last position in the range; the readings in it are read from Penelope as usual,
 and each reading gets the `lap_percent` of the position nearest in time (after the
-GPS time offset). A lap with no position in the range is a 404.
+GPS time offset). A lap with no position in the range comes back with empty
+series and a null `start` and `end`; if none of the requested laps has one, it's
+a 404.
 
 The time-based `GET /runs/{run_id}/sensors/data` is unchanged.
 

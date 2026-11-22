@@ -77,9 +77,9 @@ class SensorService:
         between `start_percent` and `end_percent`, each with the `lap_percent` of its
         nearest estimated position. One response per lap, in the order given.
 
-        A lap's window is its first and last position in the range. Raises
-        NotFoundError if a lap has no position in it (for example, the run hasn't
-        been processed).
+        A lap's window is its first and last position in the range. A lap with no
+        position in the range comes back with empty series. Raises NotFoundError if
+        none of the laps has one (for example, the run hasn't been processed).
         """
         if start_percent > end_percent:
             raise InvalidParameterError(
@@ -91,12 +91,12 @@ class SensorService:
         positions_by_lap: dict[int, list[Row[int, datetime, float]]] = {}
         for row in rows:
             positions_by_lap.setdefault(row.lap_id, []).append(row)
+        if not any(lap_id in positions_by_lap for lap_id in lap_ids):
+            raise NotFoundError("lap_percent", f"{run_id}/{lap_ids}")
 
         responses = []
         for lap_id in lap_ids:
-            positions = positions_by_lap.get(lap_id)
-            if not positions:
-                raise NotFoundError("lap_percent", f"{run_id}/{lap_id}")
+            positions = positions_by_lap.get(lap_id, [])
             responses.append(
                 await self._lap_sensor_data(run_id, sensors, lap_id, positions)
             )
@@ -110,7 +110,17 @@ class SensorService:
         positions: list[Row[int, datetime, float]],
     ) -> LapSensorDataResponse:
         """Every reading of `sensors` from the first to the last of one lap's
-        `positions`, each with the `lap_percent` of the nearest one."""
+        `positions`, each with the `lap_percent` of the nearest one. Empty series
+        if there are no positions."""
+        if not positions:
+            empty = {
+                name: LapSensorSeries(time=[], values=[], lap_percent=[])
+                for name in dict.fromkeys(sensors)
+            }
+            return LapSensorDataResponse(
+                run_id=run_id, lap_id=lap_id, start=None, end=None, series=empty
+            )
+
         # OrionDB stores naive UTC; Penelope's times are timezone-aware.
         times = [row.time.replace(tzinfo=UTC) for row in positions]
         percents = [row.lap_percent for row in positions]

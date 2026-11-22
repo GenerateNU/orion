@@ -153,8 +153,23 @@ def test_lap_route_rejects_bad_parameters(client, params):
     assert response.status_code == 422
 
 
-def test_lap_route_with_a_lap_without_positions_is_404(client):
-    assert by_percent(client, lap_ids=[1, 2]).status_code == 404
+def test_lap_route_gives_a_lap_without_positions_empty_series(client, fake_dbs):
+    response = by_percent(client, lap_ids=[2, 1])
+
+    assert response.status_code == 200
+    empty, full = response.json()
+    assert (empty["lap_id"], empty["start"], empty["end"]) == (2, None, None)
+    assert empty["series"] == {
+        GPS: {"time": [], "values": [], "lap_percent": []},
+        OTHER: {"time": [], "values": [], "lap_percent": []},
+    }
+    assert full["series"][GPS]["lap_percent"] == [25.0]
+    # Penelope is only asked about the lap that has positions.
+    assert len(fake_dbs["penelope"]) == 1
+
+
+def test_lap_route_with_no_lap_with_positions_is_404(client):
+    assert by_percent(client, lap_ids=[2, 3]).status_code == 404
 
 
 def test_lap_route_still_503s_without_penelope(fake_dbs):

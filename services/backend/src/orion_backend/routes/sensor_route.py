@@ -92,8 +92,9 @@ async def get_lap_sensor_data(
     (the whole lap by default), with each reading's `lap_percent`. One response per
     lap, in the order given.
 
-    A lap with no positions in the percent range is a 404 (e.g. the pipeline hasn't
-    processed the run, or it has fewer than 3 laps).
+    A lap with no positions in the percent range comes back with empty series. If
+    none of the laps has any, it's a 404 (e.g. the pipeline hasn't processed the
+    run, or it has fewer than 3 laps).
     """
     names = [name.strip() for name in sensors.split(",") if name.strip()]
     return await service.get_lap_sensor_data(
