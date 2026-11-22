@@ -1,26 +1,28 @@
 import { useId, useState } from "react";
 import EmptyState from "@components/ui/EmptyState";
+import LoadingState from "@components/ui/LoadingState";
 import Menu from "@components/ui/Menu";
+import Notice from "@components/ui/Notice";
 import { useSensors } from "@hooks/useSensors";
-import {
-  useGraphViews,
-  type Graph,
-  type GraphLayout,
-  type GraphTab,
-} from "@features/dashboard/state/graphViews";
+import { useGraphViews } from "@features/dashboard/state/graphViews";
+import { useGraphTabsSync } from "@features/dashboard/state/useGraphTabsSync";
+import type { Graph, GraphLayout, GraphTab } from "@schemas/graphTab.schema";
 import {
   useDashboardActions,
   useGraphView,
   useVisibleWindow,
 } from "@features/dashboard/state/useDashboard";
 import { cx } from "@utils/classNames";
+import { describeError } from "@utils/describeError";
 import styles from "./SensorChartPanel.module.css";
 import SensorChart from "./SensorChart";
 
 // The right pane: tabs of graph cards (state/graphViews.ts), each a channel over
 // time. The active tab is ?view= when that names a tab, else the saved one.
 // Tabs work like a browser's: hover for ×, middle-click closes, double-click renames.
+// The tabs are shared by the team, loaded from and saved to the backend.
 export default function SensorChartsPanel({ height = 260 }: { height?: number }) {
+  const { isLoading, loadError, saveError } = useGraphTabsSync();
   const views = useGraphViews();
   const view = useGraphView();
   const { setGraphView, resetWindow } = useDashboardActions();
@@ -28,6 +30,8 @@ export default function SensorChartsPanel({ height = 260 }: { height?: number })
   const { sensors, sensorsError } = useSensors();
   const [renamingId, setRenamingId] = useState<string | null>(null);
   const [adding, setAdding] = useState(false);
+
+  if (isLoading) return <LoadingState message="Loading graph tabs…" />;
 
   const { tabs } = views;
   const active =
@@ -149,6 +153,20 @@ export default function SensorChartsPanel({ height = 260 }: { height?: number })
           />
         </div>
       </header>
+
+      {(loadError || saveError) && (
+        <div className={styles.notices}>
+          {loadError && (
+            <Notice tone="warning">
+              Graph tabs couldn't be loaded, so changes here won't be saved.{" "}
+              {describeError(loadError)}
+            </Notice>
+          )}
+          {saveError && (
+            <Notice tone="error">Graph tabs couldn't be saved. {describeError(saveError)}</Notice>
+          )}
+        </div>
+      )}
 
       {/* The only part that scrolls: the tab bar above stays put. */}
       <div className={styles.body}>
