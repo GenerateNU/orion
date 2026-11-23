@@ -20,6 +20,17 @@
 
 /* Scrolls on its own, so nothing shows above or beside the tab bar. The negative
    margin puts the scrollbar in the pane's padding instead of over the cards. */
+/* The compared laps' chips, between the tab bar and the charts. */
+.lapChips {
+  flex: none;
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+  margin: 0;
+  padding: var(--space-3) 0 0;
+  list-style: none;
+}
+
 .body {
   flex: 1;
   min-height: 0;

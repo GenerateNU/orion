@@ -1,5 +1,5 @@
 import { memo } from "react";
-import type { PointerEvent as ReactPointerEvent, ReactNode, RefObject } from "react";
+import type { PointerEvent as ReactPointerEvent, RefObject } from "react";
 import type { Point, Tick } from "@features/dashboard/utils/trackmap";
 import { cx } from "@utils/classNames";
 import styles from "./TrackMap.module.css";
@@ -24,12 +24,12 @@ export interface TrackVisualizationProps {
   // Each selected lap in its lap color: the whole lap, and the stretch in the
   // percent window if there is one (the whole lap is then drawn faintly).
   lapPaths: readonly { lapId: number; color: string; whole: string; part: string | null }[];
+  // Comparing laps: bars across the track at the percent window's ends, if there
+  // is one. Display only: dragging along a lap picks the window.
+  percentEdges: readonly [Tick, Tick] | null;
   // A line across the track where the run starts, or the start/finish line when
   // comparing laps.
   start: Tick;
-  // Extra layers drawn over the road, under the window (e.g. GpsTraceLayer). Keep
-  // it stable (memoised) so it doesn't defeat this component's memo.
-  overlay?: ReactNode;
   // The car, pointing in its direction of travel (degrees, SVG rotation), and
   // the radius of its grab circle (SVG units): small enough not to cover the
   // handles, since the car is drawn above them.
@@ -76,8 +76,8 @@ export const TrackVisualization = memo(function TrackVisualization({
   window,
   compareLaps,
   lapPaths,
+  percentEdges,
   start,
-  overlay,
   car,
   edges,
   pending,
@@ -112,8 +112,6 @@ export const TrackVisualization = memo(function TrackVisualization({
         </>
       )}
 
-      {overlay}
-
       <g className={styles.start}>
         <line x1={start.x1} y1={start.y1} x2={start.x2} y2={start.y2} />
         <text
@@ -133,12 +131,25 @@ export const TrackVisualization = memo(function TrackVisualization({
 
       <g className={styles.lap}>
         {lapPaths.map(({ lapId, color, whole, part }) => (
-          <g key={lapId} stroke={color}>
+          <g key={lapId} style={{ stroke: color }}>
             <path d={whole} className={cx(part !== null && styles.lapFaded)} />
             {part !== null && <path d={part} className={styles.lapPart} />}
           </g>
         ))}
       </g>
+
+      {percentEdges?.map((tick, i) => (
+        <g key={i} className={styles.lapEdge}>
+          <line
+            className={styles.handleOutline}
+            x1={tick.x1}
+            y1={tick.y1}
+            x2={tick.x2}
+            y2={tick.y2}
+          />
+          <line className={styles.handleBar} x1={tick.x1} y1={tick.y1} x2={tick.x2} y2={tick.y2} />
+        </g>
+      ))}
 
       {!compareLaps && (
         <>

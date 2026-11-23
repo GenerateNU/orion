@@ -12,11 +12,11 @@ import styles from "./LapSelector.module.css";
 
 // The run's laps as a horizontally scrolling row of toggles above the track map,
 // each with its lap color and lap time. No lap is selected until the user picks
-// some.
+// some (or uses LapActions, in the panel header).
 export function LapSelector() {
   const { laps, lapsIsLoading, lapsError } = useLaps();
   const selected = useSelectedLaps();
-  const { toggleLap, selectLaps, setHoverLap } = useDashboardActions();
+  const { toggleLap, setHoverLap } = useDashboardActions();
 
   // A mouse wheel scrolls the row sideways. Attached directly, not as onWheel,
   // because React's wheel listeners are passive and can't stop the page scrolling.
@@ -58,32 +58,43 @@ export function LapSelector() {
           >
             <span
               className={styles.dot}
-              style={isSelected(id) ? { background: lapColor(id) } : undefined}
+              style={isSelected(id) ? { background: lapColor(id, selected) } : undefined}
               aria-hidden="true"
             />
-            lap {id}
-            <span className={styles.time}>{formatDuration((end - start) / 1000)}</span>
+            Lap {id}
+            <span className={styles.time}>({formatDuration((end - start) / 1000)})</span>
           </button>
         ))}
       </div>
-      <div className={styles.actions}>
-        <Button
-          variant="ghost"
-          className={styles.action}
-          onClick={() => selectLaps(laps.map((lap) => lap.id))}
-          disabled={selected.length === laps.length}
-        >
-          Select all
-        </Button>
-        <Button
-          variant="ghost"
-          className={styles.action}
-          onClick={() => selectLaps([])}
-          disabled={selected.length === 0}
-        >
-          Clear
-        </Button>
-      </div>
+    </div>
+  );
+}
+
+// Select all / Clear for the lap row, shown beside the "Track position" heading.
+export function LapActions() {
+  const { laps } = useLaps();
+  const selected = useSelectedLaps();
+  const { selectLaps } = useDashboardActions();
+  if (!laps || laps.length === 0) return null;
+
+  return (
+    <div className={styles.actions}>
+      <Button
+        variant="ghost"
+        size="sm"
+        onClick={() => selectLaps(laps.map((lap) => lap.id))}
+        disabled={selected.length === laps.length}
+      >
+        Select all
+      </Button>
+      <Button
+        variant="ghost"
+        size="sm"
+        onClick={() => selectLaps([])}
+        disabled={selected.length === 0}
+      >
+        Clear
+      </Button>
     </div>
   );
 }

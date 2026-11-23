@@ -33,7 +33,6 @@ import {
   windowPath,
 } from "@features/dashboard/utils/trackmap";
 import { cx } from "@utils/classNames";
-import { GpsTraceLayer } from "./GpsTraceLayer";
 import { TrackVisualization, type DragMode } from "./TrackVisualization";
 import {
   clampHalf,
@@ -116,10 +115,6 @@ export function TrackMap() {
     };
   }, [track]);
 
-  // Memoised per track, so drags (which re-render this component) don't
-  // re-render it, and the GPS switch never re-renders this component at all.
-  const gpsLayer = useMemo(() => (track ? <GpsTraceLayer track={track} /> : null), [track]);
-
   // The selection's layers, on every drag move.
   const shape = useMemo(() => {
     if (!track || !selection) return null;
@@ -184,12 +179,28 @@ export function TrackMap() {
       return [
         {
           lapId: lap.id,
-          color: lapColor(lap.id),
+          color: lapColor(lap.id, selectedLaps),
           whole: windowPath(track, whole[0], whole[1]),
           part: part ? windowPath(track, part[0], part[1]) : null,
         },
       ];
     });
+  }, [track, positions, shownLaps, selectedLaps, highlightWindow]);
+
+  // White bars across the track at the percent window's two ends, where the first
+  // shown lap enters and leaves it (the laps run nearly on top of each other).
+  const percentEdges = useMemo(() => {
+    if (!track || !positions || !highlightWindow) return null;
+    for (const lap of shownLaps) {
+      const part = lapPercentSpan(track, lap, highlightWindow, positions.lapPercent);
+      if (part) {
+        return [
+          tickAt(track, anchorAt(track, part[0]), HANDLE_HALF_LENGTH),
+          tickAt(track, anchorAt(track, part[1]), HANDLE_HALF_LENGTH),
+        ] as const;
+      }
+    }
+    return null;
   }, [track, positions, shownLaps, highlightWindow]);
 
   // Index ranges of the shown laps' positions, searched when dragging on the map.
@@ -397,10 +408,10 @@ export function TrackMap() {
         road={base.road}
         gaps={base.gaps}
         start={finishLine ?? base.start}
-        overlay={gpsLayer}
         window={shape.window}
         compareLaps={compareLaps}
         lapPaths={lapPaths}
+        percentEdges={percentEdges}
         car={shape.car}
         edges={shape.edges}
         pending={!applied && !dragMode}
@@ -412,13 +423,20 @@ export function TrackMap() {
         onLostPointerCapture={compareLaps ? handlePercentUp : handlePointerUp}
       />
 
-      <p className={styles.hint}>
-        {compareLaps
-          ? "Drag along a lap to compare that part of every selected lap"
-          : applied
+      {/* The lap percent window the charts show, while one is picked. */}
+      {compareLaps && highlightWindow && (
+        <span className={styles.windowBadge}>
+          Window {Math.round(highlightWindow[0])}–{Math.round(highlightWindow[1])}%
+        </span>
+      )}
+
+      {!compareLaps && (
+        <p className={styles.hint}>
+          {applied
             ? "Drag the car to move the window · drag a handle to resize · Esc cancels"
             : "Drag the car or click the track to select a window"}
-      </p>
+        </p>
+      )}
     </div>
   );
 }

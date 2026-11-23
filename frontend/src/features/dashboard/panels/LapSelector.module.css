@@ -1,15 +1,15 @@
 /* A bordered box: a row of lap toggles that scrolls sideways when there are
-   many, with the Select all / Clear buttons under it. */
+   many. Select all / Clear (LapActions) sit in the panel header instead. */
 .selector {
   display: flex;
-  flex-direction: column;
-  gap: var(--space-1);
   padding: var(--space-1) var(--space-2);
   border: 1px solid var(--border-default);
   border-radius: var(--radius-sm);
 }
 
 .laps {
+  flex: 1;
+  min-width: 0;
   display: flex;
   gap: var(--space-3);
   overflow-x: auto;
@@ -54,11 +54,5 @@
 
 .actions {
   display: flex;
-  justify-content: flex-end;
-  border-top: 1px solid var(--border-default);
-}
-
-.action {
-  padding: 4px 8px;
-  font-size: 12px;
+  gap: var(--space-1);
 }

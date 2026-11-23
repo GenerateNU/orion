@@ -18,10 +18,11 @@ import {
   useSelectedLaps,
   useVisibleWindow,
 } from "@features/dashboard/state/useDashboard";
-import { NO_LAPS_MESSAGE } from "@features/dashboard/utils/laps";
+import { lapSeries, NO_LAPS_MESSAGE } from "@features/dashboard/utils/laps";
 import { cx } from "@utils/classNames";
 import styles from "./SensorChartPanel.module.css";
 import LapSensorChart from "./LapSensorChart";
+import SeriesChip from "./SeriesChip";
 import SensorChart from "./SensorChart";
 
 // The right pane: tabs of graph cards (state/graphViews.ts), each a channel over
@@ -36,6 +37,7 @@ export default function SensorChartsPanel({ height = 260 }: { height?: number })
   // With 3+ laps the charts compare the selected laps by lap percent (and zoom in
   // lap percent); otherwise they show the run over time.
   const compareLaps = useCompareLaps();
+  const selectedLaps = useSelectedLaps();
   const { sensors, sensorsError } = useSensors();
   const [renamingId, setRenamingId] = useState<string | null>(null);
   const [adding, setAdding] = useState(false);
@@ -166,6 +168,20 @@ export default function SensorChartsPanel({ height = 260 }: { height?: number })
           </Menu>
         </div>
       </header>
+
+      {/* Which color is which lap, for every chart below. Not clickable: laps are
+          picked above the track map. */}
+      {compareLaps && selectedLaps.length > 0 && (
+        <ul className={styles.lapChips} aria-label="Compared laps">
+          {[...selectedLaps]
+            .sort((a, b) => a - b)
+            .map((lapId) => (
+              <li key={lapId}>
+                <SeriesChip series={lapSeries(lapId, selectedLaps)} label={`Lap ${lapId}`} />
+              </li>
+            ))}
+        </ul>
+      )}
 
       {/* The only part that scrolls: the tab bar above stays put. */}
       <div className={styles.body}>

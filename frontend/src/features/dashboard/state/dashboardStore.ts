@@ -14,13 +14,10 @@ export type DashboardInteraction = {
   hoverLap: number | null;
   // Live while a brush is dragged; committed to the URL on release.
   draftWindow: TimeWindow | null;
-  // Whether the track map overlays the raw GPS readings on the road.
-  showGps: boolean;
 
   setHoverTime: (time: RunTime | null) => void;
   setHoverLap: (lap: number | null) => void;
   setDraftWindow: (window: TimeWindow | null) => void;
-  setShowGps: (show: boolean) => void;
 };
 
 export type DashboardStore = StoreApi<DashboardInteraction>;
@@ -32,11 +29,9 @@ export const createDashboardStore = (): DashboardStore =>
     hoverTime: null,
     hoverLap: null,
     draftWindow: null,
-    showGps: false,
     setHoverTime: (hoverTime) => set({ hoverTime }),
     setHoverLap: (hoverLap) => set({ hoverLap }),
     setDraftWindow: (draftWindow) => set({ draftWindow }),
-    setShowGps: (showGps) => set({ showGps }),
   }));
 
 export const DashboardStoreContext = createContext<DashboardStore | null>(null);
