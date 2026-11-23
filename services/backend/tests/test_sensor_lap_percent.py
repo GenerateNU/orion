@@ -3,127 +3,63 @@ from datetime import UTC, datetime, timedelta
 from types import SimpleNamespace
 from unittest.mock import MagicMock
 
-import pandas as pd
 import pytest
 from fastapi.testclient import TestClient
 
 from orion_backend.core.database import get_orion_db, get_penelope_db
-from orion_backend.core.exceptions import InvalidParameterError
 from orion_backend.main import app
-from orion_backend.repositories.lap_repository import LapRepository
+from orion_backend.repositories.lap_progress_repository import LapProgressRepository
 from orion_backend.repositories.sensor_repository import SensorRepository
 from orion_backend.services import sensor_service
-from orion_backend.services.sensor_service import SensorService, attach_lap_progress
+from orion_backend.services.sensor_service import SensorService, nearest_values
 
 GPS = "TPU/GPS/Location"
 OTHER = "BMS/Pack/SoC"
 OFFSET = timedelta(seconds=2)
-TOLERANCE = timedelta(milliseconds=50)
 # OrionDB times are naive UTC; Penelope's are timezone-aware.
 T0 = datetime(2026, 10, 1, 12, 0, 0)
 START = T0.replace(tzinfo=UTC)
 END = START + timedelta(minutes=1)
 
-# Two laps: [T0, T0 + 10 s) and [T0 + 10 s, T0 + 20 s], the last one's end included.
-LAPS = pd.DataFrame(
-    {
-        "lap_id": [1, 2],
-        "start_time": [T0, T0 + timedelta(seconds=10)],
-        "end_time": [T0 + timedelta(seconds=10), T0 + timedelta(seconds=20)],
-    }
-)
+
+def at(seconds: float) -> datetime:
+    return START + timedelta(seconds=seconds)
 
 
-def ms(milliseconds: float) -> timedelta:
-    return timedelta(milliseconds=milliseconds)
+# ---- nearest_values ----------------------------------------------------------------
 
 
-def positions(*rows: tuple[timedelta, float | None]) -> pd.DataFrame:
-    return pd.DataFrame(
-        [(T0 + at, percent) for at, percent in rows], columns=["time", "lap_percent"]
-    )
+def test_nearest_values_takes_the_nearest_known_time():
+    known = [at(0), at(1), at(2)]
+    times = [at(0.4), at(0.6), at(1.9)]
+    assert nearest_values(times, known, [10.0, 20.0, 30.0]) == [10.0, 20.0, 30.0]
 
 
-# ---- attach_lap_progress ---------------------------------------------------------
+def test_nearest_values_matches_however_far_away():
+    known = [at(0), at(1)]
+    times = [at(-60), at(60)]
+    assert nearest_values(times, known, [10.0, 20.0]) == [10.0, 20.0]
 
 
-def test_nearest_position_within_tolerance_gives_its_percent():
-    track = positions((ms(0), 10.0), (ms(100), 11.0), (ms(200), 12.0))
-    readings = [START + ms(40), START + ms(60), START + ms(190)]
-
-    _, percents = attach_lap_progress(readings, track, LAPS, TOLERANCE)
-
-    assert percents == [10.0, 11.0, 12.0]
+def test_nearest_values_keeps_the_order_of_times():
+    known = [at(0), at(1)]
+    assert nearest_values([at(1), at(0)], known, [10.0, 20.0]) == [20.0, 10.0]
 
 
-def test_no_position_within_tolerance_gives_null():
-    track = positions((ms(0), 10.0), (ms(1000), 20.0))
-    readings = [START + ms(50), START + ms(51), START + ms(500)]
-
-    _, percents = attach_lap_progress(readings, track, LAPS, TOLERANCE)
-
-    # 50 ms away is still a match; 51 ms and 500 ms aren't.
-    assert percents == [10.0, None, None]
-
-
-def test_null_percent_stays_null():
-    track = positions((ms(0), None), (ms(100), 30.0))
-    _, percents = attach_lap_progress([START, START + ms(100)], track, LAPS, TOLERANCE)
-    assert percents == [None, 30.0]
-
-
-def test_readings_keep_their_order():
-    track = positions((ms(0), 10.0), (ms(100), 11.0))
-    _, percents = attach_lap_progress([START + ms(100), START], track, LAPS, TOLERANCE)
-    assert percents == [11.0, 10.0]
-
-
-@pytest.mark.parametrize(
-    ("at", "lap_id"),
-    [
-        (timedelta(seconds=0), 1),  # a lap's start is in it
-        (timedelta(seconds=10) - ms(1), 1),
-        (timedelta(seconds=10), 2),  # a lap's end is the next lap's start
-        (timedelta(seconds=20), 2),  # the last lap's end is in it
-        (-ms(1), None),  # before the first lap
-        (timedelta(seconds=20) + ms(1), None),  # after the last lap
-    ],
-)
-def test_lap_id_at_lap_boundaries(at, lap_id):
-    lap_ids, _ = attach_lap_progress([START + at], positions(), LAPS, TOLERANCE)
-    assert lap_ids == [lap_id]
-
-
-def test_naive_times_count_as_utc():
-    track = positions((ms(0), 10.0))
-    aware, _ = attach_lap_progress([START], track, LAPS, TOLERANCE)
-    naive, percents = attach_lap_progress([T0], track, LAPS, TOLERANCE)
-    assert aware == naive == [1]
-    assert percents == [10.0]
-
-
-def test_run_without_laps_or_positions_gives_nulls():
-    empty_laps = LAPS.iloc[0:0]
-    lap_ids, percents = attach_lap_progress([START], positions(), empty_laps, TOLERANCE)
-    assert (lap_ids, percents) == ([None], [None])
-    assert attach_lap_progress([], positions(), LAPS, TOLERANCE) == ([], [])
-
-
-# ---- The service and route ----------------------------------------------------------
+# ---- The service and routes ---------------------------------------------------------
 
 
 @pytest.fixture
 def fake_dbs(monkeypatch):
-    """Penelope returns one GPS and one SoC reading at START; OrionDB has a position
-    at T0 + OFFSET (the GPS reading's corrected time) and one at T0, and the two
-    laps. Returns the calls made to the lap repository."""
-    settings = SimpleNamespace(
-        gps_time_offset_s=OFFSET.total_seconds(), lap_percent_match_tolerance_s=0.05
-    )
+    """Penelope returns one GPS and one SoC reading at START. OrionDB has three
+    positions for lap 1 only, at T0, T0 + OFFSET (the GPS reading's corrected time)
+    and T0 + 1 minute. Returns the calls made to each database."""
+    settings = SimpleNamespace(gps_time_offset_s=OFFSET.total_seconds())
     monkeypatch.setattr(sensor_service, "get_settings", lambda: settings)
-    calls: list[tuple[object, ...]] = []
+    calls: dict[str, list[tuple[object, ...]]] = {"orion": [], "penelope": []}
 
     async def list_readings(self, *args):
+        calls["penelope"].append(args)
         rows = [
             {"raw_tag": GPS, "time": START, "values": [1.0, 2.0]},
             {"raw_tag": OTHER, "time": START, "values": [80.0]},
@@ -131,65 +67,31 @@ def fake_dbs(monkeypatch):
         return [SimpleNamespace(_mapping=row) for row in rows]
 
     async def list_lap_percents(self, *args):
-        calls.append(("lap_percents", *args))
-        return [(T0, 5.0), (T0 + OFFSET, 25.0)]
-
-    async def list_laps(self, *args):
-        calls.append(("laps", *args))
-        return list(LAPS.itertuples(index=False, name=None))
-
-    async def find_lap_percent_times(self, *args):
-        calls.append(("lap_percent_times", *args))
-        # Only lap 1 has positions in the range, from T0 to T0 + 1 minute.
-        return (T0, T0 + timedelta(minutes=1)) if args[1] == 1 else (None, None)
+        calls["orion"].append(args)
+        rows = [(T0, 5.0), (T0 + OFFSET, 25.0), (T0 + timedelta(minutes=1), 30.0)]
+        return [
+            SimpleNamespace(lap_id=1, time=time, lap_percent=percent)
+            for time, percent in rows
+        ]
 
     monkeypatch.setattr(SensorRepository, "list_readings", list_readings)
-    monkeypatch.setattr(LapRepository, "list_lap_percents", list_lap_percents)
-    monkeypatch.setattr(LapRepository, "list_laps", list_laps)
-    monkeypatch.setattr(LapRepository, "find_lap_percent_times", find_lap_percent_times)
+    monkeypatch.setattr(LapProgressRepository, "list_lap_percents", list_lap_percents)
     return calls
 
 
-def get_lap(lap_id=1, **kwargs):
+def test_service_matches_readings_to_positions_on_corrected_times(fake_dbs):
     service = SensorService(MagicMock(), MagicMock())
-    return asyncio.run(
-        service.get_sensor_data(
-            "run",
-            [GPS, OTHER],
-            lap_id=lap_id,
-            start_percent=20.0,
-            end_percent=40.0,
-            **kwargs,
-        )
+    [response] = asyncio.run(
+        service.get_lap_sensor_data("run", [GPS, OTHER], [1], 20.0, 40.0)
     )
 
-
-def test_service_by_lap_percent_attaches_lap_progress_on_corrected_times(fake_dbs):
-    response = get_lap()
-
-    assert fake_dbs[0] == ("lap_percent_times", "run", 1, 20.0, 40.0)
-    # OrionDB's naive UTC times come back timezone-aware, for Penelope.
-    assert (response.start, response.end) == (START, END)
+    assert fake_dbs["orion"] == [("run", [1], 20.0, 40.0)]
+    # The window is the lap's first and last position, timezone-aware for Penelope.
+    assert (response.lap_id, response.start, response.end) == (1, START, END)
+    assert fake_dbs["penelope"][0][2:4] == (START, END)
     # The GPS reading is shifted to START + OFFSET, so it matches that position.
     assert response.series[GPS].lap_percent == [25.0]
     assert response.series[OTHER].lap_percent == [5.0]
-    assert response.series[GPS].lap_id == response.series[OTHER].lap_id == [1]
-    # OrionDB is asked for the window in naive UTC, widened by the tolerance.
-    assert fake_dbs[1] == ("lap_percents", "run", T0 - TOLERANCE, T0 + ms(60_050))
-    assert fake_dbs[2] == ("laps", "run")
-
-
-def test_service_by_time_skips_oriondb(fake_dbs):
-    service = SensorService(MagicMock(), MagicMock())
-    response = asyncio.run(service.get_sensor_data("run", [GPS, OTHER], START, END))
-
-    assert fake_dbs == []
-    assert response.series[GPS].lap_percent is None
-
-
-def test_service_by_lap_percent_needs_the_gps_offset(fake_dbs):
-    with pytest.raises(InvalidParameterError):
-        get_lap(gps_offset_on=False)
 
 
 @pytest.fixture
@@ -200,17 +102,9 @@ def client(fake_dbs):
     app.dependency_overrides.clear()
 
 
-def get(client, **params):
-    query = {
-        "sensors": f"{GPS},{OTHER}",
-        "start": START.isoformat(),
-        "end": END.isoformat(),
-    }
-    return client.get("/api/v1/runs/run/sensors/data", params={**query, **params})
-
-
 def test_time_route_returns_the_old_response(client):
-    response = get(client)
+    params = {"sensors": f"{GPS},{OTHER}", "start": START.isoformat(), "end": END}
+    response = client.get("/api/v1/runs/run/sensors/data", params=params)
 
     assert response.status_code == 200
     body = response.json()
@@ -219,7 +113,6 @@ def test_time_route_returns_the_old_response(client):
         GPS: {"time", "values"},
         OTHER: {"time", "values"},
     }
-    assert body["series"][GPS]["values"] == [[1.0, 2.0]]
 
 
 def by_percent(client, **params):
@@ -232,16 +125,17 @@ def by_percent(client, **params):
     return client.get("/api/v1/runs/run/laps/sensors/data", params={**query, **params})
 
 
-def test_lap_route_returns_one_response_per_lap(client):
+def test_lap_route_returns_one_response_per_lap_from_one_query(client, fake_dbs):
     response = by_percent(client)
 
     assert response.status_code == 200
     body = response.json()
-    assert len(body) == 2
+    assert [lap["lap_id"] for lap in body] == [1, 1]
     gps = body[0]["series"][GPS]
     assert gps["values"] == [[1.0, 2.0]]
-    assert gps["lap_id"] == [1]
     assert gps["lap_percent"] == [25.0]
+    assert len(fake_dbs["orion"]) == 1
+    assert len(fake_dbs["penelope"]) == 2
 
 
 @pytest.mark.parametrize(
@@ -259,13 +153,23 @@ def test_lap_route_rejects_bad_parameters(client, params):
     assert response.status_code == 422
 
 
-def test_time_route_with_no_window_is_422(client):
-    response = client.get("/api/v1/runs/run/sensors/data", params={"sensors": GPS})
-    assert response.status_code == 422
+def test_lap_route_gives_a_lap_without_positions_empty_series(client, fake_dbs):
+    response = by_percent(client, lap_ids=[2, 1])
+
+    assert response.status_code == 200
+    empty, full = response.json()
+    assert (empty["lap_id"], empty["start"], empty["end"]) == (2, None, None)
+    assert empty["series"] == {
+        GPS: {"time": [], "values": [], "lap_percent": []},
+        OTHER: {"time": [], "values": [], "lap_percent": []},
+    }
+    assert full["series"][GPS]["lap_percent"] == [25.0]
+    # Penelope is only asked about the lap that has positions.
+    assert len(fake_dbs["penelope"]) == 1
 
 
-def test_lap_route_with_no_match_is_404(client):
-    assert by_percent(client, lap_ids=[1, 2]).status_code == 404
+def test_lap_route_with_no_lap_with_positions_is_404(client):
+    assert by_percent(client, lap_ids=[2, 3]).status_code == 404
 
 
 def test_lap_route_still_503s_without_penelope(fake_dbs):

@@ -1,13 +1,15 @@
+from bisect import bisect_left
 from datetime import UTC, datetime, timedelta
 
-import numpy as np
-import pandas as pd
+from sqlalchemy import Row
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from orion_backend.core.exceptions import InvalidParameterError, NotFoundError
-from orion_backend.repositories.lap_repository import LapRepository
+from orion_backend.repositories.lap_progress_repository import LapProgressRepository
 from orion_backend.repositories.sensor_repository import SensorRepository
 from orion_backend.schemas.sensor_schema import (
+    LapSensorDataResponse,
+    LapSensorSeries,
     SensorDataResponse,
     SensorResponse,
     SensorSeries,
@@ -19,10 +21,8 @@ from orion_core.settings import get_settings
 class SensorService:
     def __init__(self, penelope_db: AsyncSession, orion_db: AsyncSession):
         self.repository = SensorRepository(penelope_db)
-        self.laps = LapRepository(orion_db)
-        settings = get_settings()
-        self.offset = timedelta(seconds=settings.gps_time_offset_s)
-        self.tolerance = timedelta(seconds=settings.lap_percent_match_tolerance_s)
+        self.lap_progress = LapProgressRepository(orion_db)
+        self.offset = timedelta(seconds=get_settings().gps_time_offset_s)
         self.lagged = lagged_raw_tags()
 
     async def list_sensors(self) -> list[SensorResponse]:
@@ -33,42 +33,19 @@ class SensorService:
         self,
         run_id: str,
         sensors: list[str],
-        start: datetime | None = None,
-        end: datetime | None = None,
+        start: datetime,
+        end: datetime,
         gps_offset_on: bool = True,
-        lap_id: int | None = None,
-        start_percent: float | None = None,
-        end_percent: float | None = None,
     ) -> SensorDataResponse:
         """Every reading of `sensors` in `[start, end]`, one series per sensor.
 
-        Give either `start` and `end`, or `lap_id`, `start_percent` and
-        `end_percent`. With the second, the window is the first and last time that
-        lap's `lap_percent` is in `[start_percent, end_percent]`, and each series
-        also gets `lap_id` and `lap_percent` (see `attach_lap_progress`).
-
         With `gps_offset_on`, `gps_time_offset_s` is added to the times of lagged
         sensors (see `sensor_catalog`), and the window applies to the shifted times.
-        Lap percent queries need it on, since positions are on shifted times. A
-        sensor with no rows in the range (or an unknown run) comes back empty.
+        A sensor with no rows in the range (or an unknown run) comes back empty.
         """
         sensors = list(dict.fromkeys(sensors))
         if not sensors:
             raise InvalidParameterError("`sensors` must name at least one sensor")
-
-        both = "give either `start` and `end`, or `lap_id`, `start_percent` and `end_percent`"
-        if lap_id is not None or start_percent is not None or end_percent is not None:
-            if lap_id is None or start_percent is None or end_percent is None:
-                raise InvalidParameterError(both)
-            if start is not None or end is not None:
-                raise InvalidParameterError(both)
-            if not gps_offset_on:
-                raise InvalidParameterError("lap percent queries need `gps_offset_on`")
-            start, end = await self.find_lap_percent_times(
-                run_id, lap_id, start_percent, end_percent
-            )
-        elif start is None or end is None:
-            raise InvalidParameterError(both)
         if start > end:
             raise InvalidParameterError("`start` must be at or before `end`")
 
@@ -86,100 +63,92 @@ class SensorService:
             series[reading["raw_tag"]].time.append(time)
             series[reading["raw_tag"]].values.append(reading["values"])
 
-        if lap_id is not None:
-            # Positions just outside the window can still be a reading's nearest.
-            positions = await self.laps.list_lap_percents(
-                run_id, to_utc(start) - self.tolerance, to_utc(end) + self.tolerance
-            )
-            laps = await self.laps.list_laps(run_id)
-            position_frame = pd.DataFrame(positions, columns=["time", "lap_percent"])
-            lap_frame = pd.DataFrame(laps, columns=["lap_id", "start_time", "end_time"])
-            for one in series.values():
-                one.lap_id, one.lap_percent = attach_lap_progress(
-                    one.time, position_frame, lap_frame, self.tolerance
-                )
-
         return SensorDataResponse(run_id=run_id, start=start, end=end, series=series)
 
-    async def find_lap_percent_times(
-        self, run_id: str, lap_id: int, start_percent: float, end_percent: float
-    ) -> tuple[datetime, datetime]:
-        """The first and last time `lap_id`'s `lap_percent` is in
-        `[start_percent, end_percent]`, as UTC.
+    async def get_lap_sensor_data(
+        self,
+        run_id: str,
+        sensors: list[str],
+        lap_ids: list[int],
+        start_percent: float,
+        end_percent: float,
+    ) -> list[LapSensorDataResponse]:
+        """For each lap in `lap_ids`, every reading of `sensors` while the lap was
+        between `start_percent` and `end_percent`, each with the `lap_percent` of its
+        nearest estimated position. One response per lap, in the order given.
 
-        Raises NotFoundError if no position in the lap matches.
+        A lap's window is its first and last position in the range. A lap with no
+        position in the range comes back with empty series. Raises NotFoundError if
+        none of the laps has one (for example, the run hasn't been processed).
         """
         if start_percent > end_percent:
             raise InvalidParameterError(
                 "`start_percent` must be at or below `end_percent`"
             )
-        start, end = await self.laps.find_lap_percent_times(
-            run_id, lap_id, start_percent, end_percent
+        rows = await self.lap_progress.list_lap_percents(
+            run_id, lap_ids, start_percent, end_percent
         )
-        if start is None or end is None:
-            raise NotFoundError("lap_percent", f"{run_id}/{lap_id}")
-        # OrionDB stores naive UTC; Penelope compares timezone-aware times.
-        return start.replace(tzinfo=UTC), end.replace(tzinfo=UTC)
+        positions_by_lap: dict[int, list[Row[int, datetime, float]]] = {}
+        for row in rows:
+            positions_by_lap.setdefault(row.lap_id, []).append(row)
+        if not any(lap_id in positions_by_lap for lap_id in lap_ids):
+            raise NotFoundError("lap_percent", f"{run_id}/{lap_ids}")
+
+        responses = []
+        for lap_id in lap_ids:
+            positions = positions_by_lap.get(lap_id, [])
+            responses.append(
+                await self._lap_sensor_data(run_id, sensors, lap_id, positions)
+            )
+        return responses
+
+    async def _lap_sensor_data(
+        self,
+        run_id: str,
+        sensors: list[str],
+        lap_id: int,
+        positions: list[Row[int, datetime, float]],
+    ) -> LapSensorDataResponse:
+        """Every reading of `sensors` from the first to the last of one lap's
+        `positions`, each with the `lap_percent` of the nearest one. Empty series
+        if there are no positions."""
+        if not positions:
+            empty = {
+                name: LapSensorSeries(time=[], values=[], lap_percent=[])
+                for name in dict.fromkeys(sensors)
+            }
+            return LapSensorDataResponse(
+                run_id=run_id, lap_id=lap_id, start=None, end=None, series=empty
+            )
+
+        # OrionDB stores naive UTC; Penelope's times are timezone-aware.
+        times = [row.time.replace(tzinfo=UTC) for row in positions]
+        percents = [row.lap_percent for row in positions]
+
+        data = await self.get_sensor_data(run_id, sensors, times[0], times[-1])
+        series = {
+            name: LapSensorSeries(
+                time=one.time,
+                values=one.values,
+                lap_percent=nearest_values(one.time, times, percents),
+            )
+            for name, one in data.series.items()
+        }
+        return LapSensorDataResponse(
+            run_id=run_id, lap_id=lap_id, start=data.start, end=data.end, series=series
+        )
 
 
-def to_utc(time: datetime) -> datetime:
-    """`time` as a naive UTC datetime, like OrionDB stores it. Naive input is
-    taken to be UTC already."""
-    return time if time.tzinfo is None else time.astimezone(UTC).replace(tzinfo=None)
-
-
-def attach_lap_progress(
-    times: list[datetime],
-    positions: pd.DataFrame,
-    laps: pd.DataFrame,
-    tolerance: timedelta,
-) -> tuple[list[int | None], list[float | None]]:
-    """Each reading's lap and lap percentage.
-
-    Args:
-        times: The readings' times, in any order, naive UTC or timezone-aware.
-        positions: The run's estimated positions near the readings: `time` (naive
-            UTC) and `lap_percent` (None where the step gave the point none).
-        laps: The run's `laps` rows: `lap_id`, `start_time`, `end_time`.
-        tolerance: How far a reading may be from its nearest position.
-
-    Returns:
-        `(lap_id, lap_percent)`, one entry per reading. `lap_id` comes from the lap
-        whose `[start_time, end_time)` holds the reading, with the last lap's end
-        included. `lap_percent` is the nearest position's, if one is within
-        `tolerance`. Either is None when there's no match.
-    """
-    if not times:
-        return [], []
-    at = pd.Series(pd.to_datetime([to_utc(t) for t in times])).astype("datetime64[ns]")
-    return _lap_ids(at, laps), _lap_percents(at, positions, tolerance)
-
-
-def _lap_ids(at: pd.Series, laps: pd.DataFrame) -> list[int | None]:
-    if laps.empty:
-        return [None] * len(at)
-    starts = laps["start_time"].astype("datetime64[ns]").to_numpy()
-    ends = laps["end_time"].astype("datetime64[ns]").to_numpy()
-    t = at.to_numpy()
-    index = np.searchsorted(starts, t, side="right") - 1
-    clipped = np.clip(index, 0, len(starts) - 1)
-    last = clipped == len(starts) - 1
-    inside = (index >= 0) & ((t < ends[clipped]) | (last & (t == ends[clipped])))
-    ids = laps["lap_id"].to_numpy()
-    return [int(ids[i]) if ok else None for i, ok in zip(clipped, inside, strict=True)]
-
-
-def _lap_percents(
-    at: pd.Series, positions: pd.DataFrame, tolerance: timedelta
-) -> list[float | None]:
-    if positions.empty:
-        return [None] * len(at)
-    readings = pd.DataFrame({"time": at, "order": range(len(at))}).sort_values("time")
-    nearest = pd.merge_asof(
-        readings,
-        positions.astype({"time": "datetime64[ns]", "lap_percent": "float64"}),
-        on="time",
-        direction="nearest",
-        tolerance=pd.Timedelta(tolerance),
-    ).sort_values("order")
-    return [None if pd.isna(p) else float(p) for p in nearest["lap_percent"]]
+def nearest_values(
+    times: list[datetime], known_times: list[datetime], values: list[float]
+) -> list[float]:
+    """For each time, the value at the nearest of `known_times` (ascending, not
+    empty), however far away it is."""
+    nearest = []
+    for time in times:
+        i = bisect_left(known_times, time)
+        after_last = i == len(known_times)
+        if after_last or (i > 0 and time - known_times[i - 1] < known_times[i] - time):
+            i -= 1
+        nearest.append(values[i])
+    return nearest

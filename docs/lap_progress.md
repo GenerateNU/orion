@@ -12,173 +12,119 @@ state_step          estimated_car_state: where the car was, 100 times a second
    │
 lap_step            laps: when each lap starts and ends (docs/lap_detection.md)
    │
-lap_progress_step   1. pick the good laps
+lap_progress_step   1. pick the laps the ideal lap can come from
    │                2. pick the ideal lap from them
    │                3. measure every point along the ideal lap
    ▼
-lap_progress        run_id, time, lap_id, lap_percent (0-100, or NULL)
+lap_progress        run_id, time, lap_id, lap_percent (0-100, never NULL)
    │
 backend             GET /runs/{id}/laps/sensors/data?lap_ids=3&lap_ids=5
-                    gives every sensor reading its lap_id and lap_percent
+                    gives every sensor reading its lap_percent
 ```
 
-## 1. Pick the good laps
+The step trusts its input: it doesn't filter out points it thinks are bad. Every
+position gets a percentage, and odd input gives odd percentages.
 
-The ideal lap is picked from complete, normal laps only. A lap is left out if it is:
+## 1. Pick the laps
+
+The ideal lap is picked from every lap except:
 
 | Left out | Why |
 | --- | --- |
 | The first lap | It includes the drive before the first crossing (the pits). |
 | The last lap | It stops wherever the run stops. |
-| A lap over 1.5 × the median lap time | Long stops, holes in the data, or two laps merged by a missed crossing. |
+| A lap longer than 1.5 × the median lap | Two laps merged by a missed crossing. It would win the medoid (it covers the track twice) and double the ideal lap's length. |
 
-A run with 1 or 2 laps has no lap left, so it gets no percentages (no
-`lap_progress` rows). With 3 laps, only the middle one can be chosen, so it
-alone is the ruler. There is no fallback on purpose: the ruler must be one complete
-loop from the line back to the line, and a run's first and last laps aren't. If a
-run that drove many laps shows only 1 or 2, lap detection missed crossings (see
-docs/lap_detection.md).
+A run with 1 or 2 laps has no lap left, so it gets no `lap_progress` rows: there's
+no complete loop from the line back to the line to measure along.
 
 ## 2. Pick the ideal lap
 
-The ideal lap is the ruler every lap is measured with. It is the **medoid**: the
-chosen lap whose line the other laps are closest to, on average. Each lap is redrawn
-with a point every 1 m from the start/finish line, then for each lap we measure how
-far the other laps' points are from it. The lap with the smallest average wins.
+The ideal lap is the ruler every lap is measured with. Each lap is redrawn with a
+point every 1 m from the start/finish line, so every meter of track counts equally,
+however fast the car went. The ideal lap is the **medoid**: the lap the other laps'
+points are closest to, on average. It is then **lightly smoothed** (a closed spline
+that may move it about 0.25 m RMS), which irons out GPS jitter.
 
-Why redraw: raw points come every 10 ms, so they bunch up where the car is slow and
-pile up where it stops. A point every 1 m makes every meter of track, and every lap,
-count equally, and gives the ruler evenly spaced marks with a clear direction at
-each one.
+We compared rulers on three runs, by how much the percentage at the same corner
+differs between laps (lower is better):
 
-Then it is **lightly smoothed** (a closed spline that may move it about 0.25 m), which
-irons out GPS jitter and small hooks without moving the line.
-
-### Why this one
-
-We compared three rulers on three runs. "Corner spread" is how much the percentage
-at the same corner differs between laps: lower is better.
-
-| Run | Median lap time (old) | Medoid | Smoothed medoid (used) | Average of all laps |
-| --- | --- | --- | --- | --- |
-| 80a58216 | 0.30% | 0.61% | **0.25%** | 0.56% |
-| 212c3dc4 | 5.30% | 2.04% | **1.31%** | 25.9% |
-| 3adaad41 | 0.77% | 0.62% | **0.47%** | 1.30% |
-
-- The **median-time lap** looks only at time, so it can pick a lap with an odd line
-  (on 212c3dc4 it has a hook at the hairpin).
-- The **average** sounds best but fell apart on real data: laps 1 m apart averaged in
-  1 m bins mixed different laps in neighboring bins, and on tight tracks points got
-  matched to the wrong part of the track. Each round made the path longer and
-  wigglier (up to 2.5× the real lap).
-- The **smoothed medoid** is a real lap the car drove, keeps a typical line, and
-  had the lowest corner spread on every run.
+| Run | Median-time lap | Medoid | Smoothed medoid (used) |
+| --- | --- | --- | --- |
+| 80a58216 | 0.30% | 0.61% | **0.25%** |
+| 212c3dc4 | 5.30% | 2.04% | **1.31%** |
+| 3adaad41 | 0.77% | 0.62% | **0.47%** |
 
 ## 3. Measure every point
 
-Each point of the run is matched to the ideal lap and gets the distance along it,
-turned into a percentage of its length.
-
-- **Matching.** The nearest ideal lap point, where "nearest" counts the direction
-  the car is heading too, so the far side of a hairpin never matches. The point is
-  then placed between that ideal lap point and its neighbor, so percentages change
-  smoothly instead of in 1 m steps.
-- **Never backwards.** Within a lap the percentage only goes up. A lap starts at 0%
-  and ends at 100% near the line, even if the car crosses it slightly early or late.
-- **Impossible jumps are dropped.** A match further ahead than the car could have
-  driven since its furthest progress (40 m/s × the time, plus 10 m) is a bad match,
-  so that point gets NULL instead of skipping the rest of the lap ahead.
-
-A point gets **NULL** (no percentage) when it is:
-
-- more than 15 m from the ideal lap (pits, off track),
-- heading more than 60° away from the ideal lap's direction (spins, wrong way),
-- slower than 1 m/s (stopped on track),
-- an impossible jump (above).
+- **Matching.** Each point is matched to its nearest ideal lap point, where heading
+  counts too (each unit of heading difference counts as 10 m), so the far side of a
+  hairpin, driven the other way, never matches. The point is then placed along the
+  ideal lap's direction there, so the distance changes smoothly.
+- **Never backwards.** Within a lap the percentage only goes up. A lap's first point
+  more than half a lap "ahead" is really just before the line, so it reads 0%. The
+  percentage is capped at 100, so a merged lap reads 100% for its second loop.
+- **Impossible jumps don't count.** A match further ahead than the car could have
+  driven since the lap's last progress (40 m/s × the time, plus 10 m) is a bad match,
+  so that point keeps the previous percentage.
 
 ## 4. Where it is stored
 
-The step's own table, `lap_progress`: one row per point of `estimated_car_state`
-(same `run_id` and `time`), with the `lap_id` the point falls in and its
-`lap_percent` (NULL where the point gets none). Off-track points keep their row so
-the backend's nearest-point matching (below) sees them as NULL. The ideal lap is
-rebuilt each run and thrown away.
-
-The step uses the default step flow: `prepare` deletes the run's rows, `transform`
-computes `(run_id, time, lap_id, lap_percent)`, and `write` appends them. So a
-re-run replaces the values, and `estimated_car_state` is only ever written by
-`state_step`.
+The step's own table, `lap_progress`: one row per `estimated_car_state` row (same
+`run_id` and `time`), with the `lap_id` the point falls in and its `lap_percent`.
+The step uses the default step flow (`prepare` deletes the run's rows, `transform`
+computes them, `write` appends them), so a re-run replaces them. The ideal lap is
+rebuilt each run and not stored.
 
 ## 5. Backend
 
-The percentages are stored on positions (OrionDB), but graphs need them on sensor
-readings (Penelope), which have their own timestamps. The backend only matches the
-two by time; it computes and stores nothing.
+The percentages are on positions (OrionDB), but graphs need them on sensor readings
+(Penelope), which have their own timestamps. The backend only matches the two by
+time; it computes and stores nothing.
 
 `GET /runs/{run_id}/laps/sensors/data?sensors=...&lap_ids=3&lap_ids=5&start_percent=40&end_percent=80`
-returns one response per lap (the percents default to the whole lap). Each lap's
-window is the first and last time its `lap_percent` was in the range; the readings
-in it are read from Penelope as usual, and every sensor series gets two lists, one
-entry per reading:
+returns one response per lap, in the order given (the percents default to the whole
+lap). It reads `lap_progress` once for all the laps. Each lap's window is its first
+and last position in the range; the readings in it are read from Penelope as usual,
+and each reading gets the `lap_percent` of the position nearest in time (after the
+GPS time offset). A lap with no position in the range comes back with empty
+series and a null `start` and `end`; if none of the requested laps has one, it's
+a 404.
 
-- `lap_percent`: the `lap_percent` of the nearest point in `lap_progress`
-  (by time, after the GPS time offset). Null if no point is within 50 ms. The
-  nearest point is used even if its own value is NULL, so the reading is null too.
-- `lap_id`: the lap whose `[start_time, end_time)` contains the reading (the last
-  lap includes its end), or null. It comes from `laps` by time, so readings get a
-  lap even where the step wrote no `lap_progress` rows.
+The time-based `GET /runs/{run_id}/sensors/data` is unchanged.
 
-The time-based `GET /runs/{run_id}/sensors/data` is unchanged and has no lap
-fields. Matching is `attach_lap_progress` in `sensor_service.py` (pandas
-`merge_asof`). A lap with no `lap_percent` in the range is a 404.
+## Constants
 
-## Settings
+At the top of `lap_progress_utils.py`. They are starting values, checked on a
+handful of runs.
 
-All in `Settings` (`orion_core/settings.py`), each settable from `.env`:
-
-| Setting | Default | What it does |
+| Constant | Value | What it does |
 | --- | --- | --- |
-| `lap_progress_max_lap_time_ratio` | 1.5 | Slowest lap that may be chosen, × the median |
-| `lap_progress_spacing_m` | 1.0 | Distance between the ideal lap's points |
-| `lap_progress_smoothing_m` | 0.25 | How far smoothing may move the ideal lap |
-| `lap_progress_max_offtrack_m` | 15.0 | Further than this from the ideal lap: NULL |
-| `lap_progress_max_heading_diff_deg` | 60.0 | Turned further than this: NULL |
-| `lap_progress_min_speed_mps` | 1.0 | Slower than this: NULL |
-| `lap_progress_heading_weight_m` | 10.0 | How much heading counts when matching (a full turnaround = 2 × this, in meters) |
-| `lap_progress_gate_margin_m` | 20.0 | Near the line, a lap's first points read 0% and its last read 100% |
-| `lap_progress_max_speed_mps` | 40.0 | Fastest the car can go, for the jump check |
-| `lap_progress_jump_margin_m` | 10.0 | Slack in the jump check |
-| `lap_percent_match_tolerance_s` | 0.05 | Backend: furthest a reading may be from its nearest point |
-
-## Checking it by eye
-
-Both scripts read the local OrionDB (or `ORION_DATABASE_URL`):
-
-```bash
-# Every lap with a dot where it reached the slider's percentage; dots that sit
-# together (across the track from each other) mean the percentages line up.
-uv run python services/pipeline/scripts/lap_percent_viewer.py <run id>
-
-# The candidate ideal laps from the table above, drawn over the run's laps.
-uv run python services/pipeline/scripts/ideal_lap_viewer.py <run id>
-```
+| `SPACING_M` | 1.0 | Distance between the ideal lap's points |
+| `SMOOTHING_M` | 0.25 | How far smoothing may move the ideal lap (RMS) |
+| `MAX_LAP_LENGTH_RATIO` | 1.5 | Longest lap that may be the ideal lap, × the median |
+| `HEADING_WEIGHT_M` | 10.0 | How much heading counts when matching |
+| `MAX_SPEED_MPS` | 40.0 | Fastest the car can go, for the jump check |
+| `JUMP_MARGIN_M` | 10.0 | Slack in the jump check |
 
 ## Limitations
 
 - Runs with fewer than 3 laps get no percentages.
-- If lap detection merges most laps of a run (missed crossings), the median lap
-  time is itself a merged lap and merged laps can be chosen. Widening the lap gate
-  (`lap_gate_half_width_m`) fixed this on the runs we checked.
+- Pit, pre-lap and stopped points still get a percentage (from the nearest track
+  position), so they look odd in % charts.
+- Backend readings after a data gap take the nearest position's percentage, however
+  far away in time.
+- If lap detection merges most laps of a run, the median lap is itself a merged lap
+  and merged laps can be chosen.
 - With one usable lap, that lap is the ideal lap, however unusual it is.
 - Laps on very different lines (for example cutting across the infield) match less
-  of their points.
-- The numbers above are starting values, checked on a handful of runs.
+  well.
 
 ## Code
 
 | Where | What |
 | --- | --- |
-| `services/pipeline/src/orion_pipeline/steps/lap_progress_step/` | The step (`lap_progress_step.py`), lap choice and medoid (`ideal_lap.py`), matching and percentages (`lap_progress_utils.py`) |
+| `services/pipeline/src/orion_pipeline/steps/lap_progress_step/` | The step (`lap_progress_step.py`) and its helpers (`lap_progress_utils.py`) |
 | `packages/orion_core/src/orion_core/models/orion/lap_progress_model.py` | The `lap_progress` table |
-| `services/backend/src/orion_backend/services/sensor_service.py` | `attach_lap_progress` |
-| `services/pipeline/tests/test_ideal_lap.py`, `test_lap_progress_step.py`, `test_oriondb_client.py`, `services/backend/tests/test_sensor_lap_percent.py` | Tests |
+| `services/backend/src/orion_backend/services/sensor_service.py` | `get_lap_sensor_data` |
+| `services/pipeline/tests/test_lap_progress_utils.py`, `test_lap_progress_step.py`, `services/backend/tests/test_sensor_lap_percent.py` | Tests |

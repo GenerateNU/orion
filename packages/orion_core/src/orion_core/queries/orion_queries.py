@@ -5,7 +5,7 @@ from collections.abc import Iterable
 from datetime import datetime
 from typing import Any
 
-from sqlalchemy import Select, delete, exists, func, select, update
+from sqlalchemy import Select, delete, exists, select, update
 from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.sql.dml import ReturningDelete, ReturningInsert, ReturningUpdate
 
@@ -70,33 +70,19 @@ def select_estimated_positions_between(
     )
 
 
-def select_lap_percents_between(
-    run_id: str, start: datetime, end: datetime
-) -> Select[datetime, float | None]:
-    """`lap_percent` of each estimated position for one run in [start, end],
-    ordered by time. NULL where the lap progress step gave the point none."""
+def select_lap_percents(
+    run_id: str, lap_ids: Iterable[int], start_percent: float, end_percent: float
+) -> Select[int, datetime, float]:
+    """Every estimated position in the given laps of one run with `lap_percent` in
+    [start_percent, end_percent], ordered by lap, then time."""
     return (
-        select(LapProgress.time, LapProgress.lap_percent)
+        select(LapProgress.lap_id, LapProgress.time, LapProgress.lap_percent)
         .where(
             LapProgress.run_id == run_id,
-            LapProgress.time.between(start, end),
+            LapProgress.lap_id.in_(lap_ids),
+            LapProgress.lap_percent.between(start_percent, end_percent),
         )
-        .order_by(LapProgress.time)
-    )
-
-
-def select_times_by_lap_percent(
-    run_id: str, lap_id: int, start_percent: float, end_percent: float
-) -> Select[datetime | None, datetime | None]:
-    """First and last time in one lap of one run with `lap_percent` in
-    [start_percent, end_percent]. Both NULL if no position matches."""
-    return select(
-        func.min(LapProgress.time).label("start_time"),
-        func.max(LapProgress.time).label("end_time"),
-    ).where(
-        LapProgress.run_id == run_id,
-        LapProgress.lap_id == lap_id,
-        LapProgress.lap_percent.between(start_percent, end_percent),
+        .order_by(LapProgress.lap_id, LapProgress.time)
     )
 
 

@@ -17,5 +17,5 @@ class LapProgress(Base):
     time: Mapped[datetime] = mapped_column(DateTime, primary_key=True)
     # The `laps` row this position falls in.
     lap_id: Mapped[int] = mapped_column(Integer)
-    # 0-100 around the run's ideal lap, NULL off track.
-    lap_percent: Mapped[float | None] = mapped_column(FLOAT, nullable=True)
+    # 0-100 around the run's ideal lap.
+    lap_percent: Mapped[float] = mapped_column(FLOAT)

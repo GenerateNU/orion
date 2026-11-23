@@ -7,14 +7,8 @@ import pandas as pd
 import pytest
 
 from orion_pipeline.runner.run_context import RunContext
-from orion_pipeline.steps.lap_progress_step.ideal_lap import assign_lap_ids
 from orion_pipeline.steps.lap_progress_step.lap_progress_step import LapProgressStep
-from orion_pipeline.steps.lap_progress_step.lap_progress_utils import (
-    drop_forward_jumps,
-    lap_percentages,
-    match_to_ideal_lap,
-    resample,
-)
+from orion_pipeline.steps.lap_progress_step.lap_progress_utils import assign_lap_ids
 from orion_pipeline.steps.lap_step.lap_constants import EARTH_RADIUS_M
 from orion_pipeline.steps.lap_step.lap_utils import to_local_xy
 
@@ -124,17 +118,16 @@ def track_frame(x: np.ndarray, y: np.ndarray) -> pd.DataFrame:
     return pd.DataFrame({"time": time, "lattitude": lat, "longitude": lon})
 
 
-def run_step(positions: pd.DataFrame, laps: pd.DataFrame, **ctx_overrides):
+def run_step(positions: pd.DataFrame, laps: pd.DataFrame):
     """Run the step without a database.
 
     Returns (the frame written with `append`, or None if nothing was written;
     the writer mock).
     """
     reader = MagicMock()
-    reader.read_frame.side_effect = [positions, laps]
+    reader.read_frame.side_effect = [laps, positions]
     writer = MagicMock()
-    ctx = RunContext(run_id="run-1", **ctx_overrides)
-    LapProgressStep(reader=reader, writer=writer).run(ctx)
+    LapProgressStep(reader=reader, writer=writer).run(RunContext(run_id="run-1"))
     if not writer.append.called:
         return None, writer
     return writer.append.call_args.args[1], writer
@@ -222,34 +215,26 @@ def test_hairpin_parallel_sections_never_swap():
     assert percent[back].min() > 50
 
 
-def test_off_track_points_get_no_percentage():
+def test_every_point_gets_a_percentage_even_off_track_and_stopped():
     positions, laps, u = drive(VARIED_LAPS)
     x, y = to_local_xy(positions["lattitude"], positions["longitude"])
-    # In lap 3, ease 30 m off the track into a "pit lane" and back.
     lap3 = assign_lap_ids(positions["time"], laps) == 3
+    # In lap 3, ease 30 m off the track into a "pit lane" and back...
     detour = lap3 & (u > 0.02) & (u < 0.2)
     bump = np.sin(np.pi * (u - 0.02) / 0.18) ** 2
     y = np.where(detour, y - 30 * bump, y)
+    # ...then stop on track for a while.
+    stopped = np.flatnonzero(lap3 & (u > 0.3) & (u < 0.32))
+    x[stopped], y[stopped] = x[stopped[0]], y[stopped[0]]
     positions[["lattitude", "longitude"]] = np.column_stack(
         to_lat_lon(x, y, ORIGIN_LAT, ORIGIN_LON)
     )
     progress, _ = run_step(positions, laps)
 
-    percent = progress["lap_percent"]
-    far = detour & (30 * bump > 20)
-    assert far.any()
-    # NaN here; the client writes it as NULL (see test_oriondb_client.py).
-    assert percent[far].isna().all()
-    # Back on track afterwards, and everywhere off the detour.
-    assert percent[~detour].notna().all()
-
-
-def test_tunables_come_from_the_run_context():
-    # Every point is "too slow", so none gets a percentage.
-    positions, laps, _ = drive(VARIED_LAPS[:4])
-    progress, _ = run_step(positions, laps, lap_progress_min_speed_mps=1000.0)
-
-    assert progress["lap_percent"].isna().all()
+    assert len(progress) == len(positions)
+    assert progress["lap_percent"].notna().all()
+    lap = progress.loc[lap3, "lap_percent"].to_numpy()
+    assert (np.diff(lap) >= 0).all()
 
 
 def test_rerun_replaces_the_runs_rows():
@@ -284,59 +269,7 @@ def test_empty_run_writes_nothing():
     writer.append.assert_not_called()
 
 
-# Distances along a 100 m ideal lap -> percentages, all one lap unless noted.
-@pytest.mark.parametrize(
-    ("s", "expected"),
-    [
-        # Starts just before the gate: reads 0, not 99.5.
-        ([99.5, 0.5, 50.0, 99.0], [0.0, 0.5, 50.0, 99.0]),
-        # Never goes backwards.
-        ([30.0, 20.0], [30.0, 30.0]),
-        # Ends just past the gate: reads 100, not 0.5.
-        ([2.0, 50.0, 97.0, 0.5, 1.5], [2.0, 50.0, 97.0, 100.0, 100.0]),
-        # Two loops merged into one lap: wraps back to 0 at the gate.
-        ([10.0, 40.0, 70.0, 95.0, 5.0, 40.0], [10.0, 40.0, 70.0, 95.0, 5.0, 40.0]),
-        # Off-track points stay empty.
-        ([10.0, np.nan, 20.0], [10.0, np.nan, 20.0]),
-    ],
-)
-def test_lap_percentages(s, expected):
-    s = np.array(s)
-    percent = lap_percentages(s, np.ones(len(s), dtype=np.int64), 100.0, 5.0)
-    assert percent.tolist() == pytest.approx(expected, nan_ok=True)
-
-
 # ---- Bad matches ----------------------------------------------------------
-
-
-def jump_guard(s, time_s):
-    return drop_forward_jumps(
-        np.array(s, dtype=float),
-        np.array(time_s, dtype=float),
-        100.0,
-        max_speed_mps=10.0,
-        jump_margin_m=2.0,
-    )
-
-
-def test_drop_forward_jumps_rejects_a_point_too_far_ahead():
-    # 1 m per second; the 60 m point is far beyond 10 m/s * 1 s + 2 m.
-    s = jump_guard([10, 11, 60, 13, 14], [0, 1, 2, 3, 4])
-    assert s.tolist() == pytest.approx([10, 11, np.nan, 13, 14], nan_ok=True)
-
-
-def test_drop_forward_jumps_compares_to_the_furthest_point_not_the_last():
-    # The bad backward point (2 m) is kept, and the points after it aren't
-    # treated as jumps from it.
-    s = jump_guard([10, 11, 2, 13, 14], [0, 1, 2, 3, 4])
-    assert s.tolist() == pytest.approx([10, 11, 2, 13, 14])
-
-
-def test_drop_forward_jumps_allows_more_after_a_gap_and_across_the_gate():
-    # 40 m ahead is fine after 5 s (10 m/s * 5 s + 2 m). 98 -> 3 m is 5 m
-    # forward around the loop, not 95 m back.
-    s = jump_guard([10, np.nan, 50, 98, 3], [0, 2, 5, 10, 11])
-    assert s.tolist() == pytest.approx([10, np.nan, 50, 98, 3], nan_ok=True)
 
 
 def move_point(positions, index, to_u):
@@ -362,55 +295,12 @@ def test_one_bad_point_mid_lap_leaves_the_rest_of_the_lap_rising(at_u, to_u):
     clean, _ = run_step(positions, laps)
     progress, _ = run_step(move_point(positions, bad, to_u), laps)
 
-    # The bad point's neighbors take their heading from it, so they may be
-    # rejected as heading the wrong way. Every other point is untouched.
+    # The bad point's neighbors take their heading from it, so they may match
+    # oddly too. Every other point is untouched.
     near_bad = np.abs(np.arange(len(u)) - bad) <= 1
     others = np.flatnonzero(lap3 & ~near_bad)
     got = progress["lap_percent"].to_numpy()[others]
     expected = clean["lap_percent"].to_numpy()[others]
     assert got == pytest.approx(expected, abs=0.1)
     assert (np.diff(got) >= 0).all()
-
-
-# ---- Matching between ideal lap points --------------------------------------------
-
-
-def match_all(x, y, ideal):
-    return match_to_ideal_lap(
-        x,
-        y,
-        DT_S * np.arange(len(x), dtype=np.float64),
-        ideal,
-        min_speed_mps=0.0,
-        max_offtrack_m=15.0,
-        max_heading_diff_deg=60.0,
-        heading_weight_m=10.0,
-    )
-
-
-def test_matching_is_continuous_between_ideal_lap_points():
-    # Ideal lap points 2 m apart; positions every 0.1 m, 0.5 m off the line.
-    line_x, line_y = stadium(np.linspace(0, 1, 2000, endpoint=False))
-    ideal = resample(line_x, line_y, 2.0)
-    u = np.linspace(0.1, 0.15, 300)
-    x, y = stadium(u, 0.5)
-
-    s = match_all(x, y, ideal)
-
-    # On the straight, the distance follows the car, not the 2 m point spacing.
-    assert s == pytest.approx(u * PERIMETER_M, abs=0.05)
-
-
-@pytest.mark.parametrize("offset_m", [-4.0, 4.0])
-def test_matching_rises_steadily_through_bends_off_the_line(offset_m):
-    # Driving 4 m outside (and inside) the line all the way round, through both
-    # bends: the distance never holds still or steps back.
-    line_x, line_y = stadium(np.linspace(0, 1, 2000, endpoint=False))
-    ideal = resample(line_x, line_y, 1.0)
-    u = np.linspace(0.01, 0.99, 3000)
-    x, y = stadium(u, offset_m)
-
-    steps = np.diff(match_all(x, y, ideal))
-
-    assert (steps > 0).all()
-    assert steps.max() < 3 * steps.mean()
+    assert progress["lap_percent"].notna().all()

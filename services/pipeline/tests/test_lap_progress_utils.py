@@ -5,15 +5,14 @@ import numpy as np
 import pandas as pd
 import pytest
 
-from orion_pipeline.steps.lap_progress_step.ideal_lap import (
-    assign_lap_ids,
-    choose_laps,
-    find_medoid,
-    lap_durations,
-)
 from orion_pipeline.steps.lap_progress_step.lap_progress_utils import (
     IdealLap,
+    assign_lap_ids,
+    distance_along,
+    find_medoid,
+    lap_percents,
     mean_distance,
+    middle_laps,
     resample,
     smooth_loop,
 )
@@ -62,22 +61,21 @@ def drive(laps: list[dict[str, Any]]) -> tuple[pd.DataFrame, pd.DataFrame]:
     return positions, lap_rows
 
 
-def chosen(laps: list[dict[str, Any]], **tunables: float) -> list[int]:
+def middle_lap_lengths(laps: list[dict[str, Any]]) -> list[float]:
+    """The lengths of the laps `middle_laps` keeps, in meters."""
     positions, lap_rows = drive(laps)
     lap_ids = assign_lap_ids(positions["time"], lap_rows)
-    return choose_laps(
-        lap_durations(positions["time"], lap_ids),
-        **{"max_lap_time_ratio": 1.5, **tunables},
-    )
+    kept = middle_laps(positions["x"].to_numpy(), positions["y"].to_numpy(), lap_ids)
+    return [lap.length_m for lap in kept]
 
 
 def circle_lap(
     radius_m: float = RADIUS_M, wobble_m: float = 0.0, phase: float = 0.0
 ) -> IdealLap:
-    """A circle through the gate at (0, 0), heading +x, resampled 1 m apart.
+    """A circle through the line at (0, 0), heading +x, resampled 1 m apart.
 
     With `wobble_m`, the line weaves that far either side, five times a lap,
-    starting at `phase`. The weave fades to nothing at the gate.
+    starting at `phase`. The weave fades to nothing at the line.
     """
     theta = np.linspace(0, 2 * np.pi, 2000, endpoint=False)
     r = radius_m + wobble_m * np.sin(5 * theta + phase) * np.sin(theta / 2)
@@ -87,29 +85,27 @@ def circle_lap(
 # ---- Which laps the ideal lap is picked from -----------------------------------------
 
 
-def test_choose_laps_skips_the_first_and_last_laps():
-    assert chosen([{"secs": 50}] * 5) == [2, 3, 4]
+def test_middle_laps_skips_the_first_and_last_laps():
+    assert middle_lap_lengths([{"secs": 50}] * 5) == pytest.approx(
+        [LOOP_M] * 3, rel=0.01
+    )
 
 
-def test_choose_laps_skips_a_lap_with_a_long_stop():
-    laps = [{"secs": 50}, {"secs": 50}, {"secs": 900}, {"secs": 52}, {"secs": 49}]
-    assert chosen([*laps, {"secs": 50}]) == [2, 4, 5]
-
-
-def test_choose_laps_skips_merged_laps():
-    # Lap 3 is two loops merged into one by a missed gate crossing.
+def test_middle_laps_skips_merged_laps():
+    # Lap 3 is two loops merged into one by a missed crossing.
     laps = [{"secs": 50}, {"secs": 50}, {"secs": 100, "loops": 2}, {"secs": 51}]
-    assert chosen([*laps, {"secs": 49}, {"secs": 50}]) == [2, 4, 5]
+    lengths = middle_lap_lengths([*laps, {"secs": 49}, {"secs": 50}])
+    assert lengths == pytest.approx([LOOP_M] * 3, rel=0.01)
 
 
-def test_choose_laps_respects_its_tunables():
-    laps = [{"secs": 50}, {"secs": 50}, {"secs": 70}, {"secs": 50}, {"secs": 50}]
-    assert chosen(laps) == [2, 3, 4]
-    assert chosen(laps, max_lap_time_ratio=1.2) == [2, 4]
+def test_middle_laps_keeps_slow_laps():
+    # A long stop doesn't make a lap longer, so it can still be the ideal lap.
+    laps = [{"secs": 50}, {"secs": 50}, {"secs": 900}, {"secs": 50}, {"secs": 50}]
+    assert len(middle_lap_lengths(laps)) == 3
 
 
-def test_too_few_laps_choose_nothing():
-    assert chosen([{"secs": 50}, {"secs": 50}]) == []
+def test_too_few_laps_have_no_middle_laps():
+    assert middle_lap_lengths([{"secs": 50}, {"secs": 50}]) == []
 
 
 # ---- Picking the ideal lap ---------------------------------------------------
@@ -136,10 +132,10 @@ def test_smooth_loop_irons_out_jitter_without_moving_the_line():
         circle.s,
         circle.length_m,
     )
-    smooth = smooth_loop(jittery, spacing_m=1.0, smoothing_m=0.25)
+    smooth = smooth_loop(jittery)
 
     # Closer to the true line than the jittery points were, and evenly spaced
-    # from the gate around one loop. The jitter is a little more than the
+    # from the line around one loop. The jitter is a little more than the
     # smoothing allows for, so a trace of it (about 1% length) is left.
     assert mean_distance(circle, smooth.x, smooth.y) < mean_distance(
         circle, jittery.x, jittery.y
@@ -176,7 +172,7 @@ def test_mean_distance_measures_to_the_nearest_point():
     assert mean_distance(lap, x, y) == pytest.approx(3.0, abs=0.05)
 
 
-# ---- Lap ids --------------------------------------------------------------------
+# ---- Lap ids and matching -----------------------------------------------------------
 
 
 def test_assign_lap_ids_uses_half_open_laps():
@@ -187,11 +183,76 @@ def test_assign_lap_ids_uses_half_open_laps():
     assert assign_lap_ids(times, lap_rows).tolist() == [1, 1, 2, 2]
 
 
-def test_lap_durations_times_each_lap():
-    positions, lap_rows = drive([{"secs": 20}, {"secs": 30}, {"secs": 25}])
-    lap_ids = assign_lap_ids(positions["time"], lap_rows)
-    durations = lap_durations(positions["time"], lap_ids)
+def test_distance_along_follows_the_car_between_ideal_lap_points():
+    # Ideal lap points 1 m apart; the car every 1 cm, half a meter outside it.
+    theta = np.linspace(0.5, 0.6, 500)
+    r = RADIUS_M + 0.5
+    x, y = r * np.sin(theta), RADIUS_M - r * np.cos(theta)
 
-    assert durations.index.tolist() == [1, 2, 3]
-    # The last lap ends at the run's last point, one tick before its end.
-    assert durations.tolist() == pytest.approx([20, 30, 25 - DT_S])
+    s = distance_along(circle_lap(), x, y)
+
+    assert s == pytest.approx(RADIUS_M * theta, abs=0.05)
+
+
+# ---- Percentages -------------------------------------------------------------------
+
+
+def percents(s, time_s=None, lap_ids=None, length_m=100.0):
+    """`lap_percents` for one lap of a 100 m ideal lap (so meters = percent), with
+    points 100 s apart (so no match is too far ahead) unless `time_s` is given."""
+    s = np.array(s, dtype=float)
+    time_s = 100.0 * np.arange(len(s)) if time_s is None else time_s
+    times = pd.Series(START + pd.to_timedelta(time_s, unit="s"))
+    lap_ids = np.ones(len(s), dtype=np.int64) if lap_ids is None else lap_ids
+    return lap_percents(s, times, np.array(lap_ids, dtype=np.int64), length_m)
+
+
+@pytest.mark.parametrize(
+    ("s", "expected"),
+    [
+        # Starts just before the line: reads 0, not 99.5.
+        ([99.5, 0.5, 50.0, 99.0], [0.0, 0.5, 50.0, 99.0]),
+        # Never goes backwards.
+        ([30.0, 20.0], [30.0, 30.0]),
+        # Ends just past the line: reads 100, not 0.5.
+        ([2.0, 50.0, 97.0, 0.5, 1.5], [2.0, 50.0, 97.0, 100.0, 100.0]),
+        # Two loops merged into one lap: stays at 100 for the second loop.
+        ([10.0, 40.0, 70.0, 95.0, 5.0, 40.0], [10.0, 40.0, 70.0, 95.0, 100.0, 100.0]),
+    ],
+)
+def test_lap_percents(s, expected):
+    assert percents(s).tolist() == pytest.approx(expected)
+
+
+def test_each_lap_starts_again():
+    percent = percents([10.0, 50.0, 99.0, 1.0, 5.0], lap_ids=[1, 1, 1, 2, 2])
+    assert percent.tolist() == pytest.approx([10.0, 50.0, 99.0, 1.0, 5.0])
+
+
+def test_a_point_too_far_ahead_keeps_the_previous_percentage():
+    # 0.1 s apart: the 60 m point is far beyond 40 m/s * 0.1 s + 10 m.
+    percent = percents([10, 11, 60, 13, 14], time_s=[0, 0.1, 0.2, 0.3, 0.4])
+    assert percent.tolist() == pytest.approx([10, 11, 11, 13, 14])
+
+
+def test_a_bad_backward_point_keeps_the_previous_percentage():
+    # And the points after it aren't treated as jumps from it.
+    percent = percents([10, 11, 2, 13, 14], time_s=[0, 0.1, 0.2, 0.3, 0.4])
+    assert percent.tolist() == pytest.approx([10, 11, 11, 13, 14])
+
+
+def test_the_jump_check_allows_more_after_a_gap():
+    # On a 1 km lap: 30 m ahead after 0.1 s is too far (40 m/s * 0.1 s + 10 m),
+    # but 200 m ahead after 5 s isn't (40 m/s * 5 s + 10 m).
+    percent = percents([100, 130, 300], time_s=[0, 0.1, 5], length_m=1000.0)
+    assert percent.tolist() == pytest.approx([10, 10, 30])
+
+
+def test_a_bad_match_just_over_half_a_lap_ahead_doesnt_freeze_the_lap():
+    s = np.arange(0.0, 50.0, 2.5)
+    s[4] += 51.0
+    percent = percents(s, time_s=0.1 * np.arange(len(s)))
+
+    expected = np.arange(0.0, 50.0, 2.5)
+    expected[4] = expected[3]  # The bad point keeps the percentage before it.
+    assert percent.tolist() == pytest.approx(expected.tolist())

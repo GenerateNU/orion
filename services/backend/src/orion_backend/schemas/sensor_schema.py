@@ -41,25 +41,6 @@ class SensorSeries(BaseModel):
         ),
         examples=[[[42.3398, -71.0892], [42.3399, -71.0890]]],
     )
-    lap_id: list[int | None] | None = Field(
-        default=None,
-        description=(
-            "Only when queried by lap percent. The lap each reading falls in, from the "
-            "run's laps (`[start_time, end_time)`, the last lap's end included). Same "
-            "length as `time`; `null` outside every lap."
-        ),
-        examples=[[3, 3]],
-    )
-    lap_percent: list[float | None] | None = Field(
-        default=None,
-        description=(
-            "Only when queried by lap percent. How far around the run's ideal lap the "
-            "car was at each reading, 0-100, from the nearest estimated position within "
-            "`LAP_PERCENT_MATCH_TOLERANCE_S`. Same length as `time`; `null` when there's "
-            "no position that close or the car was off track there."
-        ),
-        examples=[[41.7, 41.9]],
-    )
 
 
 class SensorDataResponse(BaseModel):
@@ -83,4 +64,40 @@ class SensorDataResponse(BaseModel):
                 }
             }
         ],
+    )
+
+
+class LapSensorSeries(SensorSeries):
+    """One sensor's readings during one lap, with how far round the lap each was."""
+
+    lap_percent: list[float] = Field(
+        description=(
+            "How far round the run's ideal lap the car was at each reading, 0-100: the "
+            "`lap_percent` of the estimated position nearest in time. Same length as "
+            "`time`."
+        ),
+        examples=[[41.7, 41.9]],
+    )
+
+
+class LapSensorDataResponse(BaseModel):
+    """Every reading of the requested sensors while one lap was in a percent range."""
+
+    run_id: str = Field(description="Penelope run id.", examples=["run-123"])
+    lap_id: int = Field(description="The lap these readings are from.", examples=[3])
+    start: datetime | None = Field(
+        description=(
+            "First time the lap was in the percent range. `null` if it never was."
+        ),
+    )
+    end: datetime | None = Field(
+        description="Last time the lap was in the percent range. `null` if it never was.",
+    )
+    series: dict[str, LapSensorSeries] = Field(
+        default_factory=dict,
+        description=(
+            "One series per requested sensor, keyed by Penelope `dataTypeName`, each "
+            "with the `lap_percent` of every reading. A lap that was never in the "
+            "percent range comes back with empty series."
+        ),
     )
