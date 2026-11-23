@@ -33,6 +33,7 @@ import {
   windowPath,
 } from "@features/dashboard/utils/trackmap";
 import { cx } from "@utils/classNames";
+import { GpsTraceLayer } from "./GpsTraceLayer";
 import { TrackVisualization, type DragMode } from "./TrackVisualization";
 import {
   clampHalf,
@@ -114,6 +115,10 @@ export function TrackMap() {
       start: tickAt(track, anchorAt(track, track.firstTime), TICK_HALF_LENGTH),
     };
   }, [track]);
+
+  // Memoised per track, so drags (which re-render this component) don't
+  // re-render it, and the GPS switch never re-renders this component at all.
+  const gpsLayer = useMemo(() => (track ? <GpsTraceLayer track={track} /> : null), [track]);
 
   // The selection's layers, on every drag move.
   const shape = useMemo(() => {
@@ -392,6 +397,7 @@ export function TrackMap() {
         road={base.road}
         gaps={base.gaps}
         start={finishLine ?? base.start}
+        overlay={gpsLayer}
         window={shape.window}
         compareLaps={compareLaps}
         lapPaths={lapPaths}

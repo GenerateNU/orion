@@ -2,65 +2,139 @@
    Each component styles itself in a co-located CSS Module (Button.module.css
    next to Button.tsx) that reads the tokens defined here.
 
-   Tokens mirror the Figma variables of "NER Telemetry Dashboard"
-   (bg/canvas → --bg-canvas, status/loaded-tint → --status-loaded-tint, …).
-   Figma defines the dark theme; the light theme is derived for system light mode.
-   Components use only semantic tokens, never raw colors. */
+   Tokens mirror the variables of the Figma "Orion Style Guide" (Foundations page):
+   color/bg/surface → --bg-surface, color/brand/primary → --accent-red, … The
+   older names are kept; the comment on each group names its Figma collection.
+   Figma defines both themes: light here, dark under prefers-color-scheme.
+   Components use only these tokens, never raw colors. */
 
 :root {
   color-scheme: light dark;
 
-  /* Surfaces, from back to front */
-  --bg-canvas: #f4f5f7;
+  /* color/bg/*: surfaces, from back to front */
+  --bg-canvas: #f4f4f6;
   --bg-surface: #ffffff;
-  --bg-raised: #eef0f3;
-  --border-default: #dde1e6;
+  --bg-raised: #fafafb;
+  --bg-hover: #ededed;
+  --bg-active: #e4e4e8;
+  --bg-inverse: #0b0b0c;
 
-  /* Text */
-  --text-primary: #14171c;
-  --text-muted: #5b6370;
+  /* color/border/* */
+  --border-subtle: #e4e4e8;
+  --border-default: #d6d6dc;
+  --border-strong: #a3a3ab;
+  --border-accent: #a9803c;
+  --border-brand: #c8102e;
+
+  /* color/text/* */
+  --text-primary: #0b0b0c;
+  --text-secondary: #3a3a40;
+  --text-muted: #5a5a62;
+  --text-disabled: #a3a3ab;
+  --text-accent: #8a6a35;
+  --text-brand: #a00d25;
   --text-on-accent: #ffffff;
+  --text-inverse: #ffffff;
 
-  /* Brand */
-  --accent-red: #d71e25;
-  --accent-red-hover: #b9171d;
+  /* color/brand/* and color/accent/* */
+  --accent-red: #c8102e;
+  --accent-red-hover: #a00d25;
+  --accent-red-pressed: #820b1f;
+  --accent-red-subtle: #fbe3e6;
+  --accent-gold: #a9803c;
+  --accent-gold-subtle: #f6eedf;
 
-  /* Pipeline status: a foreground and a tint for its badge background */
-  --status-loaded: #15803d;
-  --status-loaded-tint: rgb(21 128 61 / 0.12);
-  --status-processing: #1d4ed8;
-  --status-processing-tint: rgb(29 78 216 / 0.12);
-  --status-queued: #a15c00;
-  --status-queued-tint: rgb(217 119 6 / 0.14);
-  --status-idle: #5b6370;
-  --status-idle-tint: rgb(91 99 112 / 0.12);
-  --status-failed: #c42020;
-  --status-failed-tint: rgb(220 38 38 / 0.12);
+  /* color/status/*: a foreground and a subtle background */
+  --status-success: #1e8a5c;
+  --status-success-subtle: #e3f6ec;
+  --status-warning: #b56e0b;
+  --status-warning-subtle: #fdf1dc;
+  --status-error: #c8102e;
+  --status-error-subtle: #fbe3e6;
+  --status-info: #2563c4;
+  --status-info-subtle: #e5eefc;
 
-  --focus-ring: var(--status-processing);
+  /* color/data/*: chart series, in order, and plot furniture */
+  --data-series-1: #a9803c;
+  --data-series-2: #c8102e;
+  --data-series-3: #222226;
+  --data-series-4: #2563c4;
+  --data-series-5: #138a78;
+  --data-series-6: #6e4fcf;
+  --data-series-7: #c9641a;
+  --data-series-8: #c2408a;
+  --data-grid: #e4e4e8;
+  --data-axis: #5a5a62;
+  --data-cursor: #0b0b0c;
+  --data-track: #c4c4c8;
+  --data-track-window: #c8102e;
+  --data-start-finish: #a9803c;
 
-  /* Type */
+  --focus-ring: #c8102e;
+
+  /* Elevation/* effects */
+  --shadow-card: 0 1px 2px rgb(0 0 0 / 0.35);
+  --shadow-popover: 0 8px 24px rgb(0 0 0 / 0.45);
+  --shadow-modal: 0 24px 64px rgb(0 0 0 / 0.6);
+  --shadow-glow-brand: 0 0 16px rgb(200 16 46 / 0.5);
+  /* Behind modals; paired with Blur/Backdrop (16px) */
+  --bg-scrim: rgb(11 11 12 / 0.6);
+
+  /* Type: families, then one `font` shorthand per Figma text style */
   --font-sans: "Inter", system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
-  --font-mono: "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, monospace;
+  --font-display: "Barlow Condensed", "Arial Narrow", var(--font-sans);
+  --font-mono: "Roboto Mono", ui-monospace, SFMono-Regular, Menlo, monospace;
 
-  /* Shape and spacing */
+  --type-display-xl: 700 64px/64px var(--font-display);
+  --type-display-l: 700 40px/44px var(--font-display);
+  --type-display-m: 700 28px/32px var(--font-display);
+  /* The "ORION" wordmark in the Top Bar logo (not a Figma text style) */
+  --type-wordmark: 700 22px/24px var(--font-display);
+  --type-heading-h1: 600 24px/32px var(--font-sans);
+  --type-heading-h2: 600 20px/28px var(--font-sans);
+  --type-heading-h3: 600 16px/24px var(--font-sans);
+  --type-heading-h4: 600 14px/20px var(--font-sans);
+  --type-body-l: 400 16px/24px var(--font-sans);
+  --type-body-m: 400 14px/20px var(--font-sans);
+  --type-body-m-medium: 500 14px/20px var(--font-sans);
+  --type-body-s: 400 12px/16px var(--font-sans);
+  --type-body-s-medium: 500 12px/16px var(--font-sans);
+  /* Labels are uppercase and tracked: pair with --tracking-label. */
+  --type-label-l: 600 14px/16px var(--font-display);
+  --type-label-m: 600 12px/14px var(--font-display);
+  --type-label-s: 600 11px/12px var(--font-display);
+  --tracking-label: 0.1em;
+  --type-data-readout-l: 500 28px/32px var(--font-mono);
+  --type-data-readout-m: 500 18px/24px var(--font-mono);
+  --type-data-value: 400 14px/20px var(--font-mono);
+  --type-data-code: 400 12px/16px var(--font-mono);
+  --type-data-axis: 400 11px/14px var(--font-mono);
+
+  /* radius/*: xs chart markers, sm badges/checkboxes, md buttons/inputs,
+     lg cards/panels, xl modals, pill chips/avatars */
   --radius-xs: 2px;
-  --radius-sm: 6px;
-  --radius-md: 10px;
+  --radius-sm: 4px;
+  --radius-md: 8px;
   --radius-lg: 12px;
+  --radius-xl: 16px;
   --radius-pill: 999px;
+
+  /* space/*: Figma's 4-pt scale (space/2 … space/64), indexed */
+  --space-0-5: 2px;
   --space-1: 4px;
   --space-2: 8px;
+  --space-2-5: 12px;
   --space-3: 16px;
+  --space-3-5: 20px;
   --space-4: 24px;
   --space-5: 32px;
   --space-6: 40px;
+  --space-7: 48px;
+  --space-8: 64px;
 
   --sidebar-width: 240px;
 
-  font-family: var(--font-sans);
-  font-size: 14px;
-  line-height: normal;
+  font: var(--type-body-m);
   color: var(--text-primary);
   background: var(--bg-canvas);
   -webkit-font-smoothing: antialiased;
@@ -68,28 +142,60 @@
 
 @media (prefers-color-scheme: dark) {
   :root {
-    --bg-canvas: #0b0d10;
-    --bg-surface: #14171c;
-    --bg-raised: #1c2027;
-    --border-default: #262b33;
+    --bg-canvas: #0b0b0c;
+    --bg-surface: #141416;
+    --bg-raised: #1c1c1f;
+    --bg-hover: #222226;
+    --bg-active: #2a2a2e;
+    --bg-inverse: #ffffff;
 
-    --text-primary: #e8eaed;
-    --text-muted: #8b929c;
+    --border-subtle: #2a2a2e;
+    --border-default: #3a3a40;
+    --border-strong: #5a5a62;
+    --border-accent: #c9a15f;
+    --border-brand: #c8102e;
+
+    --text-primary: #ffffff;
+    --text-secondary: #c4c4c8;
+    --text-muted: #8a8a90;
+    --text-disabled: #5a5a62;
+    --text-accent: #c9a15f;
+    --text-brand: #f0566a;
     --text-on-accent: #ffffff;
+    --text-inverse: #0b0b0c;
 
-    --accent-red: #e5242b;
-    --accent-red-hover: #f03a40;
+    --accent-red: #c8102e;
+    --accent-red-hover: #e0433a;
+    --accent-red-pressed: #a00d25;
+    --accent-red-subtle: #2a0409;
+    --accent-gold: #c9a15f;
+    --accent-gold-subtle: #2b2214;
 
-    --status-loaded: #22c55e;
-    --status-loaded-tint: rgb(34 197 94 / 0.16);
-    --status-processing: #3b82f6;
-    --status-processing-tint: rgb(59 130 246 / 0.16);
-    --status-queued: #f5a524;
-    --status-queued-tint: rgb(245 165 36 / 0.16);
-    --status-idle: #8b929c;
-    --status-idle-tint: rgb(139 146 156 / 0.16);
-    --status-failed: #ef4444;
-    --status-failed-tint: rgb(239 68 68 / 0.16);
+    --status-success: #2eb67d;
+    --status-success-subtle: #0e2e22;
+    --status-warning: #f2a93b;
+    --status-warning-subtle: #3a2a0e;
+    --status-error: #e0433a;
+    --status-error-subtle: #2a0409;
+    --status-info: #4f8fe8;
+    --status-info-subtle: #10233f;
+
+    --data-series-1: #c9a15f;
+    --data-series-2: #f0566a;
+    --data-series-3: #ededed;
+    --data-series-4: #4f8fe8;
+    --data-series-5: #2bb5a0;
+    --data-series-6: #9b7be8;
+    --data-series-7: #f08a3c;
+    --data-series-8: #e86bb0;
+    --data-grid: #222226;
+    --data-axis: #8a8a90;
+    --data-cursor: #ffffff;
+    --data-track: #3a3a40;
+    --data-track-window: #c8102e;
+    --data-start-finish: #c9a15f;
+
+    --focus-ring: #e0433a;
   }
 }
 
@@ -111,13 +217,22 @@ p {
   margin: 0;
 }
 
-button {
+button,
+input,
+select {
   font: inherit;
 }
 
+/* Icons (lucide-react): Figma draws them with a 1.5 stroke. */
+svg.lucide {
+  flex-shrink: 0;
+  stroke-width: 1.5;
+}
+
+/* Focus/Ring: a 3px ring at 60% of the focus color */
 :focus-visible {
-  outline: 2px solid var(--focus-ring);
-  outline-offset: 2px;
+  outline: 3px solid color-mix(in srgb, var(--focus-ring) 60%, transparent);
+  outline-offset: 0;
 }
 
 .sr-only {

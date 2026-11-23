@@ -6,8 +6,9 @@
   background: color-mix(in srgb, var(--text-primary) 12%, transparent);
 }
 
+/* Figma "Plot Line" cursor: a dashed line in the cursor color. */
 .chart :global(.u-cursor-x) {
-  border-right-color: var(--text-muted);
+  border-right: 1px dashed var(--data-cursor);
 }
 
 /* uPlot's legend, used as a tooltip: moved beside the cursor while hovering

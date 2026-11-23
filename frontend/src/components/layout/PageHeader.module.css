@@ -22,12 +22,11 @@
 }
 
 .title {
-  font-size: 28px;
-  font-weight: 600;
+  font: var(--type-heading-h1);
 }
 
 .description {
-  font-size: 14px;
+  font: var(--type-body-m);
   color: var(--text-muted);
 }
 
@@ -36,12 +35,10 @@
 }
 
 .entity .title {
-  font-family: var(--font-mono);
-  font-size: 24px;
-  font-weight: 500;
+  font: var(--type-data-readout-l);
   overflow-wrap: anywhere;
 }
 
 .entity .description {
-  font-size: 13px;
+  font: var(--type-body-s);
 }

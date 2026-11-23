@@ -1,21 +1,15 @@
+import { Check, Clock, CircleX, LoaderCircle, type LucideIcon } from "lucide-react";
 import type { RunStatus } from "@utils/runRows";
 import { cx } from "@utils/classNames";
 import styles from "./StatusBadge.module.css";
 
-const STATUS_LABEL: Record<RunStatus, string> = {
-  loaded: "Loaded",
-  processing: "Processing",
-  queued: "Queued",
-  "not-processed": "Not processed",
-  failed: "Failed",
-};
-
-const STATUS_CLASS: Record<RunStatus, string> = {
-  loaded: styles.loaded,
-  processing: styles.processing,
-  queued: styles.queued,
-  "not-processed": styles.notProcessed,
-  failed: styles.failed,
+const STATUS: Record<RunStatus, { label: string; className: string; Icon?: LucideIcon }> = {
+  loaded: { label: "Ready", className: styles.loaded, Icon: Check },
+  processing: { label: "Processing", className: styles.processing, Icon: LoaderCircle },
+  queued: { label: "Queued", className: styles.queued, Icon: Clock },
+  failed: { label: "Failed", className: styles.failed, Icon: CircleX },
+  // Figma draws a dot instead of an icon.
+  "not-processed": { label: "Not processed", className: styles.notProcessed },
 };
 
 type StatusBadgeProps = {
@@ -24,12 +18,13 @@ type StatusBadgeProps = {
   detail?: string;
 };
 
-// Figma "StatusBadge": the pipeline status of a run.
+// Figma "Status Badge": the pipeline status of a run.
 export default function StatusBadge({ status, detail }: StatusBadgeProps) {
+  const { label, className, Icon } = STATUS[status];
   return (
-    <span className={cx(styles.badge, STATUS_CLASS[status])} title={detail}>
-      <span className={styles.dot} aria-hidden="true" />
-      {STATUS_LABEL[status]}
+    <span className={cx(styles.badge, className)} title={detail}>
+      {Icon ? <Icon aria-hidden="true" /> : <span className={styles.dot} aria-hidden="true" />}
+      {label}
     </span>
   );
 }

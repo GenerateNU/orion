@@ -11,6 +11,8 @@ export type DashboardSearch = {
   p?: TimeWindow;
   // Selected lap ids, ascending.
   laps?: number[];
+  // Active graph tab id (state/graphViews.ts); wins over the saved active tab.
+  view?: string;
 };
 
 // Values arrive as strings from the URL, or as arrays from navigate().
@@ -49,5 +51,6 @@ export function validateDashboardSearch(search: Record<string, unknown>): Dashbo
     t: parseWindow(search.t),
     p: parsePercentWindow(search.p),
     laps: parseLaps(search.laps),
+    view: typeof search.view === "string" && search.view ? search.view : undefined,
   };
 }

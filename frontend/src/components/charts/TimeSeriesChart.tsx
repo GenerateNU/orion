@@ -3,34 +3,39 @@ import uPlot from "uplot";
 import "uplot/dist/uPlot.min.css";
 import type { RunTime, TimeWindow } from "@features/dashboard/utils/time";
 import { formatDuration } from "@utils/format";
+import type { Series } from "./series";
 import styles from "./TimeSeriesChart.module.css";
 
 const MIN_DRAG_PX = 4;
-// A series' line color when it doesn't set one.
-const DEFAULT_COLOR = "#d4b06a";
 
-// `time` is the x value of each point: RunTime, or lap percent when comparing laps.
+// The whole lap when xAxis is "track".
+const TRACK_RANGE: TimeWindow = [0, 100];
+
 export type ChartSeries = {
   id: string;
   label: string;
   unit: string;
+  // The x of each value: RunTime, or track % (0–100) when xAxis is "track".
   time: RunTime[];
   values: number[];
+  // Line color, the --data-series-N slot; 1 by default. Give compared laps different ones.
+  series?: Series;
+  // A line color that overrides `series` (e.g. a lap's color).
   color?: string;
 };
 
 export type TimeSeriesChartProps = {
   series: ChartSeries[];
   height?: number;
-  yLabel?: string;
-  xLabel?: string;
-  formatX?: (value: number) => string;
+  // Figma "Plot Line": "track" plots x as the lap's track percentage (0%–100%).
+  xAxis?: "time" | "track";
   // While hovering, a tooltip beside the cursor with every series' value at
   // that x (uPlot's legend, moved to the cursor).
   tooltip?: boolean;
   visibleWindow?: TimeWindow | null;
   onCommitWindow?: (window: TimeWindow) => void;
   onResetWindow?: () => void;
+  // The x under the cursor (RunTime, or track %), null when it leaves the chart.
   onHoverTime?: (time: RunTime | null) => void;
 };
 
@@ -42,7 +47,10 @@ type ChartCallbacks = Pick<
 const cssStyle = (chart: uPlot, name: string) =>
   getComputedStyle(chart.root).getPropertyValue(name).trim();
 
-const formatTime = (ms: number) => formatDuration(ms / 1000);
+const formatX = {
+  time: (ms: number) => formatDuration(ms / 1000),
+  track: (percent: number) => `${Math.round(percent)}%`,
+};
 
 const formatTicks = (ticks: number[], increment: number) => {
   const largest = Math.max(...ticks.map(Math.abs));
@@ -106,19 +114,19 @@ const applyWindow = (chart: uPlot, timeWindow: TimeWindow | null) => {
 export const TimeSeriesChart = ({
   series,
   height = 600,
-  yLabel = "",
-  xLabel = "Time",
-  formatX = formatTime,
+  xAxis = "time",
   tooltip = false,
   visibleWindow = null,
   onCommitWindow,
   onResetWindow,
   onHoverTime,
 }: TimeSeriesChartProps) => {
+  // A track chart always spans 0–100% unless zoomed, wherever the data starts and ends.
+  const shownWindow = visibleWindow ?? (xAxis === "track" ? TRACK_RANGE : null);
   const containerRef = useRef<HTMLDivElement>(null);
   const chartRef = useRef<uPlot | null>(null);
   const draggingRef = useRef(false);
-  const windowRef = useRef(visibleWindow);
+  const windowRef = useRef(shownWindow);
 
   const callbacksRef = useRef<ChartCallbacks>({});
   useEffect(() => {
@@ -131,8 +139,15 @@ export const TimeSeriesChart = ({
   );
   const dataRef = useRef(data);
 
-  const opts = useMemo(
-    (): uPlot.Options => ({
+  const opts = useMemo((): uPlot.Options => {
+    // Figma "Data/Axis" (400 11px mono); a canvas font can't read the CSS token itself.
+    const axisFont = `11px ${getComputedStyle(document.documentElement).getPropertyValue("--font-mono").trim()}`;
+    // Series `s`'s line color (1-based, like uPlot's series).
+    const lineColor = (chart: uPlot, s: number) => {
+      const { color, series: slot = 1 } = series[s - 1] ?? {};
+      return color ?? cssStyle(chart, `--data-series-${slot}`);
+    };
+    return {
       width: 0,
       height,
       legend: {
@@ -141,8 +156,8 @@ export const TimeSeriesChart = ({
         // A dot in each series' color (uPlot only colors a marker with a border).
         markers: {
           width: () => 1,
-          stroke: (_chart, s) => series[s - 1]?.color ?? DEFAULT_COLOR,
-          fill: (_chart, s) => series[s - 1]?.color ?? DEFAULT_COLOR,
+          stroke: lineColor,
+          fill: lineColor,
         },
       },
       scales: {
@@ -154,33 +169,40 @@ export const TimeSeriesChart = ({
           },
         },
       },
+      // Figma "Plot Line": horizontal grid lines only, no tick marks.
       axes: [
         {
-          label: xLabel,
-          values: (_chart, ticks) => ticks.map(formatX),
-          stroke: (chart) => cssStyle(chart, "--text-muted"),
-          grid: { stroke: (chart) => cssStyle(chart, "--border-default") },
-          ticks: { stroke: (chart) => cssStyle(chart, "--border-default") },
+          values: (_chart, ticks) => ticks.map(formatX[xAxis]),
+          // Track ticks every 25% (0, 25, 50…) when there's room, finer when zoomed in.
+          ...(xAxis === "track" ? { incrs: [1, 5, 25], space: 100 } : {}),
+          font: axisFont,
+          stroke: (chart) => cssStyle(chart, "--data-axis"),
+          grid: { show: false },
+          ticks: { show: false },
         },
         {
-          label: yLabel,
-          labelGap: 8,
-          size: 60,
+          // No label, no space reserved for one: callers show the unit themselves.
+          size: 48,
           values: (_chart, ticks, _axisIdx, _space, increment) => formatTicks(ticks, increment),
-          stroke: (chart) => cssStyle(chart, "--text-muted"),
-          grid: { stroke: (chart) => cssStyle(chart, "--border-default") },
-          ticks: { stroke: (chart) => cssStyle(chart, "--border-default") },
+          font: axisFont,
+          stroke: (chart) => cssStyle(chart, "--data-axis"),
+          grid: { stroke: (chart) => cssStyle(chart, "--data-grid") },
+          ticks: { show: false },
         },
       ],
       cursor: {
         y: false,
-        sync: { key: "dashboard-run" },
+        // Time and track charts sync only with their own kind: their x values differ.
+        sync: { key: `dashboard-${xAxis}` },
         drag: { x: true, y: false, setScale: false },
         bind: { dblclick: () => null },
       },
       series: [
-        { label: xLabel, value: (_chart, x) => (x == null ? "" : formatX(x)) },
-        ...series.map(({ label, color, unit }) => ({
+        {
+          label: xAxis === "track" ? "% of lap" : "Time",
+          value: (_chart, x) => (x == null ? "" : formatX[xAxis](x)),
+        },
+        ...series.map(({ label, unit }, i) => ({
           label,
           // The value read off the line at the hovered x (see valueAt), so every
           // series shows one even where its points don't line up with the others'.
@@ -188,7 +210,7 @@ export const TimeSeriesChart = ({
             const value = idx == null ? null : valueAt(chart, s, idx);
             return value == null ? "—" : `${value.toFixed(1)} ${unit}`;
           },
-          stroke: color ?? DEFAULT_COLOR,
+          stroke: (chart: uPlot) => lineColor(chart, i + 1),
           width: 1.5,
           // Joined series leave gaps at each other's x values; draw through them.
           spanGaps: true,
@@ -215,9 +237,8 @@ export const TimeSeriesChart = ({
           },
         ],
       },
-    }),
-    [height, yLabel, xLabel, formatX, tooltip, series],
-  );
+    };
+  }, [height, series, xAxis, tooltip]);
 
   useEffect(() => {
     dataRef.current = data;
@@ -261,11 +282,11 @@ export const TimeSeriesChart = ({
   }, [opts, height]);
 
   useEffect(() => {
-    windowRef.current = visibleWindow;
+    windowRef.current = shownWindow;
     if (draggingRef.current) return;
     const chart = chartRef.current;
-    if (chart) applyWindow(chart, visibleWindow);
-  }, [visibleWindow]);
+    if (chart) applyWindow(chart, shownWindow);
+  }, [shownWindow]);
 
   return <div ref={containerRef} className={styles.chart} />;
 };

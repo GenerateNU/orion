@@ -3,6 +3,8 @@ import { createRoot } from "react-dom/client";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { RouterProvider } from "@tanstack/react-router";
 import { runDataKeys } from "@api/queryKeys";
+import Toaster from "@components/ui/Toast";
+import { TooltipProvider } from "@components/ui/Tooltip";
 import { router } from "./router";
 import "./styles/global.css";
 
@@ -28,7 +30,10 @@ queryClient.setQueryDefaults(runDataKeys.root, {
 createRoot(document.getElementById("root")!).render(
   <StrictMode>
     <QueryClientProvider client={queryClient}>
-      <RouterProvider router={router} />
+      <TooltipProvider delayDuration={400}>
+        <RouterProvider router={router} />
+        <Toaster />
+      </TooltipProvider>
     </QueryClientProvider>
   </StrictMode>,
 );

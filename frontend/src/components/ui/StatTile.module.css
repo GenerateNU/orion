@@ -1,0 +1,47 @@
+/* Padding is Figma's minus the 1px border. */
+.tile {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: var(--space-2);
+  min-width: 200px;
+  padding: calc(var(--space-3) - 1px);
+  background: var(--bg-surface);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-lg);
+}
+
+.label {
+  font: var(--type-label-m);
+  letter-spacing: var(--tracking-label);
+  text-transform: uppercase;
+  color: var(--text-muted);
+}
+
+/* Data/Readout L is tracked −1%. */
+.value {
+  font: var(--type-data-readout-l);
+  letter-spacing: -0.01em;
+  color: var(--text-primary);
+}
+
+.delta {
+  padding: var(--space-0-5) var(--space-2);
+  font: var(--type-data-axis);
+  border-radius: var(--radius-sm);
+}
+
+.better {
+  color: var(--status-success);
+  background: var(--status-success-subtle);
+}
+
+.worse {
+  color: var(--status-error);
+  background: var(--status-error-subtle);
+}
+
+.note {
+  font: var(--type-body-s);
+  color: var(--text-accent);
+}

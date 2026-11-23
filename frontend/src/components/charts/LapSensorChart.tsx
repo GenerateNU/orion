@@ -15,8 +15,6 @@ type LapSensorChartProps = {
   lapIds: readonly number[];
 };
 
-const formatPercent = (percent: number) => `${Math.round(percent)}%`;
-
 // One sensor for the selected laps, overlaid by lap percent: one line per lap in
 // its lap color. Dragging zooms every chart to the same percent window.
 export default function LapSensorChart({ name, unit, height, lapIds }: LapSensorChartProps) {
@@ -50,9 +48,7 @@ export default function LapSensorChart({ name, unit, height, lapIds }: LapSensor
       <TimeSeriesChart
         series={series}
         height={height}
-        yLabel={unit}
-        xLabel="% of lap"
-        formatX={formatPercent}
+        xAxis="track"
         tooltip
         visibleWindow={percentWindow}
         onCommitWindow={commitPercentWindow}

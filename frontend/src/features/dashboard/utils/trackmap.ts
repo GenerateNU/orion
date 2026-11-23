@@ -32,6 +32,17 @@ export interface Track {
   lastTime: RunTime;
   // The drawing's size in SVG units (the longer side is 100).
   viewSize: { width: number; height: number };
+  // How lat/lon became SVG units, so other position sources (raw GPS) can be
+  // drawn in the same frame: see projectX / projectY.
+  projection: Projection;
+}
+
+// x = PAD + (lon - minLon) * lonScale * scale; y = PAD + (maxLat - lat) * scale.
+export interface Projection {
+  minLon: number;
+  maxLat: number;
+  lonScale: number;
+  scale: number;
 }
 
 // Samples further apart than this are a dropout: the line breaks there instead of
@@ -51,6 +62,10 @@ const MIN_MOVE_M = 1;
 // A GPS reading of [0, 0] (or NaN) means no fix, not a car in the Gulf of Guinea.
 const hasFix = (lat: number, lon: number) =>
   Number.isFinite(lat) && Number.isFinite(lon) && !(lat === 0 && lon === 0);
+
+const projectX = (p: Projection, lon: number) => PAD + (lon - p.minLon) * p.lonScale * p.scale;
+// SVG y grows downward: subtract from maxLat so north is up.
+const projectY = (p: Projection, lat: number) => PAD + (p.maxLat - lat) * p.scale;
 
 /**
  * Fit the track into a drawing whose longer side is 100 SVG units, north up,
@@ -87,15 +102,15 @@ export function makeTrack(
   const height = maxLat - minLat || 1e-9;
   // One scale for both axes, so the shape isn't stretched.
   const scale = (100 - 2 * PAD) / Math.max(width, height);
+  const projection: Projection = { minLon, maxLat, lonScale, scale };
 
   const xs = new Float32Array(latLon.length);
   const ys = new Float32Array(latLon.length);
   for (let i = 0; i < latLon.length; i++) {
     const [lat, lon] = latLon[i];
     if (hasFix(lat, lon)) {
-      xs[i] = PAD + (lon - minLon) * lonScale * scale;
-      // SVG y grows downward: subtract from maxLat so north is up.
-      ys[i] = PAD + (maxLat - lat) * scale;
+      xs[i] = projectX(projection, lon);
+      ys[i] = projectY(projection, lat);
     } else {
       xs[i] = NaN;
       ys[i] = NaN;
@@ -136,6 +151,7 @@ export function makeTrack(
     firstTime: time[first] - startMs,
     lastTime: time[last] - startMs,
     viewSize: { width: width * scale + 2 * PAD, height: height * scale + 2 * PAD },
+    projection,
   };
 }
 
@@ -179,6 +195,32 @@ function* samples(track: Track, from: number, to: number) {
 /** The whole run's path, broken at dropouts. */
 export function trackPath(track: Track): string {
   return pathThrough(samples(track, 0, track.time.length - 1));
+}
+
+/**
+ * Raw [lat, lon] readings (e.g. TPU/GPS/Location) as one dot per reading, in the
+ * track's SVG frame, so they overlay the road drawn from the state estimate.
+ * Readings without a fix are skipped; points outside the road's bounds fall
+ * outside the drawing and are clipped.
+ *
+ * One path of zero-length subpaths (`M x y h0`), not a circle per reading: with
+ * round linecaps each draws as a dot whose diameter is the stroke width, so a
+ * whole run is a single element and dots keep their screen size (non-scaling
+ * stroke) whatever size the map is drawn at.
+ */
+export function readingsDots(
+  track: Track,
+  values: readonly (readonly (number | null)[])[],
+): string {
+  const p = track.projection;
+  let d = "";
+  for (const reading of values) {
+    const lat = reading?.[0] ?? NaN;
+    const lon = reading?.[1] ?? NaN;
+    if (!hasFix(lat, lon)) continue;
+    d += `M${fmt(projectX(p, lon))} ${fmt(projectY(p, lat))}h0`;
+  }
+  return d;
 }
 
 /** Short straight segments across each dropout, drawn faintly so gaps read as gaps. */
