@@ -17,9 +17,6 @@ export const SensorSeriesSchema = z.object({
   time: EpochTimesSchema,
   // Penelope's `values[]` per reading, unnamed: TPU/GPS/Location is [lat, lon].
   values: z.array(z.array(z.number().nullable())),
-  // Only when queried by lap percent: how far around the ideal lap the car was at
-  // each reading (0-100), same length as `time`, null when unknown.
-  lap_percent: z.array(z.number().nullable()).nullish(),
 });
 
 // Mirrors SensorDataResponse: raw readings straight from Penelope, not downsampled.
@@ -31,8 +28,24 @@ export const SensorDataResponseSchema = z.object({
   series: z.record(z.string(), SensorSeriesSchema),
 });
 
-// Mirrors the lap percent sensor route's response: one SensorDataResponse per lap.
-export const LapSensorDataResponseSchema = z.array(SensorDataResponseSchema);
+// Mirrors LapSensorSeries: a SensorSeries with how far around the ideal lap the
+// car was at each reading (0-100), same length as `time`.
+export const LapSensorSeriesSchema = SensorSeriesSchema.extend({
+  lap_percent: z.array(z.number()),
+});
+
+// Mirrors the lap percent sensor route's response: one LapSensorDataResponse per
+// lap, in the order asked. A lap never in the percent range has null start/end
+// and empty series.
+export const LapSensorDataResponseSchema = z.array(
+  z.object({
+    run_id: z.string(),
+    lap_id: z.number().int(),
+    start: DateTimeSchema.nullable(),
+    end: DateTimeSchema.nullable(),
+    series: z.record(z.string(), LapSensorSeriesSchema),
+  }),
+);
 
 export type SensorSeries = z.infer<typeof SensorSeriesSchema>;
 export type SensorDataResponse = z.infer<typeof SensorDataResponseSchema>;

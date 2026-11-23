@@ -172,20 +172,24 @@ export const useLapSensorTraces = (sensor: string, lapIds: readonly number[]) =>
   const range = useMemo(() => ({ sensors: [sensor], lap_ids: [...lapIds] }), [sensor, lapIds]);
   const select = useCallback(
     (data: LapSensorDataResponse): LapTrace[] =>
-      data.flatMap((response, i): LapTrace[] => {
+      data.flatMap((response): LapTrace[] => {
         const series = response.series[sensor];
-        if (!series?.lap_percent) return [];
+        if (!series) return [];
         const points = series.values
-          .map((value, j) => [series.lap_percent?.[j], value[0]] as const)
+          .map((value, j) => [series.lap_percent[j], value[0]] as const)
           .filter(
             (point): point is readonly [number, number] => point[0] != null && point[1] != null,
           )
           .sort((a, b) => a[0] - b[0]);
         return [
-          { lapId: lapIds[i], percent: points.map((p) => p[0]), values: points.map((p) => p[1]) },
+          {
+            lapId: response.lap_id,
+            percent: points.map((p) => p[0]),
+            values: points.map((p) => p[1]),
+          },
         ];
       }),
-    [sensor, lapIds],
+    [sensor],
   );
   const { lapSensorData, lapSensorDataIsLoading, lapSensorDataError } = useLapSensorData(
     runId,
