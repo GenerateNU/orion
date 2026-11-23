@@ -2,10 +2,33 @@
    handles at the window's edges and the car at its centre. Colours come from the
    theme tokens in global.css, so it works in light and dark mode. */
 
+/* Fills its pane; the map shrinks to fit the height left over by the hint. */
 .container {
+  position: relative;
+  flex: 1;
+  min-height: 0;
   display: flex;
   flex-direction: column;
   gap: var(--space-3);
+}
+
+/* The lap percent window, in the map's top-right corner (Figma "Track position"). */
+.windowBadge {
+  position: absolute;
+  top: 0;
+  right: 0;
+  padding: calc(var(--space-1) - 1px) calc(var(--space-2-5) - 1px);
+  font: var(--type-label-m);
+  letter-spacing: var(--tracking-label);
+  text-transform: uppercase;
+  white-space: nowrap;
+  /* Red mixed toward the text color: a light pink-red on dark, deeper red on light. */
+  color: color-mix(in srgb, var(--accent-red) 70%, var(--text-primary));
+  background: var(--accent-red-subtle);
+  border: 1px solid var(--accent-red);
+  border-radius: var(--radius-pill);
+  text-shadow: 0 0 6px color-mix(in srgb, var(--accent-red) 50%, transparent);
+  pointer-events: none;
 }
 
 .stale {
@@ -18,9 +41,10 @@
   --track-casing: color-mix(in srgb, var(--text-muted) 14%, transparent);
   --track-window: var(--accent-red);
   --track-handle: var(--text-primary);
-  /* Same gold as the sensor chart lines. */
-  --track-start: #d4b06a;
+  --track-start: var(--data-start-finish);
 
+  flex: 1;
+  min-height: 0;
   width: 100%;
   display: block;
   user-select: none;
@@ -87,6 +111,22 @@
   stroke-width: 4;
 }
 
+/* Selected laps when comparing laps, each in its lap color; faded outside the
+   percent window when one is picked. */
+.lap path {
+  fill: none;
+  stroke-width: 2.5;
+  pointer-events: none;
+}
+
+.lapFaded {
+  opacity: 0.3;
+}
+
+.lap .lapPart {
+  stroke-width: 4;
+}
+
 /* Not committed yet (the default ±100 m when a run opens). */
 .pending .windowGlow {
   opacity: 0.1;
@@ -101,6 +141,11 @@
    dark outline so it stands out on the red window and the grey road. */
 .handle {
   cursor: grab;
+}
+
+/* The percent window's ends when comparing laps: handle bars, but display only. */
+.lapEdge {
+  pointer-events: none;
 }
 
 .handleOutline {
@@ -156,9 +201,9 @@
 
 .carBody {
   fill: var(--track-window);
-  stroke: #fff;
+  stroke: var(--text-on-accent);
   stroke-width: 1.75;
-  filter: drop-shadow(0 1px 2px rgb(0 0 0 / 0.5));
+  filter: drop-shadow(var(--shadow-card));
 }
 
 /* Hover time from other panels (charts). */
@@ -187,6 +232,6 @@
 
 .hint {
   margin: 0;
-  font-size: 12px;
+  font: var(--type-body-s);
   color: var(--text-muted);
 }

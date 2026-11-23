@@ -2,7 +2,7 @@ import { useEffect, useMemo, useRef } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { getRouteApi } from "@tanstack/react-router";
 import { useStore } from "zustand";
-import type { MetricsResponse } from "@schemas/metrics.schema";
+import type { LapsResponse } from "@schemas/lap.schema";
 import type { RunResponse } from "@schemas/run.schema";
 import { runDataKeys, runKeys } from "@api/queryKeys";
 import { useRun } from "@hooks/useRuns";
@@ -19,7 +19,7 @@ import {
 // The dashboard's state API. Panels read and change shared state only through
 // these hooks, so a field can move between the URL and the store without
 // touching any panel:
-//   URL search params  laps, committed window  (durable, shareable, back/forward)
+//   URL search params  laps, committed windows (durable, shareable, back/forward)
 //   dashboardStore     hover, draft window     (transient, up to once a frame)
 
 const dashboardRoute = getRouteApi("/runs/$runId/dashboard");
@@ -42,6 +42,11 @@ export const useSelectedLaps = (): readonly number[] =>
 export const useCommittedWindow = (): TimeWindow | null =>
   dashboardRoute.useSearch({ select: (search) => search.t ?? null });
 
+// The lap percent window (0-100) the charts show when comparing laps; null is the
+// whole lap.
+export const usePercentWindow = (): TimeWindow | null =>
+  dashboardRoute.useSearch({ select: (search) => search.p ?? null });
+
 // The window to draw: the brush being dragged if any, else the committed one.
 // For drawing and zooming only: draw it from data already loaded. Nothing takes
 // it to fetch, so a drag never sends requests; commitWindow on release does.
@@ -50,6 +55,11 @@ export const useVisibleWindow = (): TimeWindow | null => {
   const committed = useCommittedWindow();
   return draft ?? committed;
 };
+
+// The graph tab named in ?view=, if any. It may not exist (a stale link): callers
+// fall back to the saved active tab.
+export const useGraphView = (): string | undefined =>
+  dashboardRoute.useSearch({ select: (search) => search.view });
 
 // For React-rendered highlights (lap list rows). Fast-moving hover time has no
 // hook like this on purpose: use useHoverTimeSubscription.
@@ -91,10 +101,10 @@ export const useDashboardActions = () => {
     // The span of the laps; the current window when lap times aren't loaded.
     const windowForLaps = (lapIds: readonly number[], current: TimeWindow | undefined) => {
       if (lapIds.length === 0) return undefined;
-      const metrics = queryClient.getQueryData<MetricsResponse>(runDataKeys.metrics(runId));
+      const response = queryClient.getQueryData<LapsResponse>(runDataKeys.laps(runId));
       const runTimes = timeline();
-      if (!metrics || !runTimes) return current;
-      return lapsToWindow(lapsFromMetrics(metrics, runTimes), lapIds) ?? current;
+      if (!response || !runTimes) return current;
+      return lapsToWindow(lapsFromMetrics(response, runTimes), lapIds) ?? current;
     };
 
     // Lap changes add a history entry, so Back undoes them.
@@ -109,6 +119,7 @@ export const useDashboardActions = () => {
             t: windowForLaps(laps, prev.t),
           };
         },
+        resetScroll: false,
       });
     };
 
@@ -122,8 +133,25 @@ export const useDashboardActions = () => {
       navigate({
         search: (prev: DashboardSearch): DashboardSearch => ({ ...prev, t: t ?? undefined }),
         replace: true,
+        resetScroll: false,
       });
     };
+
+    // Percent window changes replace the history entry too, like setWindow.
+    const setPercentWindow = (window: TimeWindow | null) =>
+      navigate({
+        search: (prev: DashboardSearch): DashboardSearch => ({
+          ...prev,
+          // Clamped to 0-100 and rounded to 0.1% to keep the URL short.
+          p: window
+            ? [
+                Math.max(0, Math.round(window[0] * 10) / 10),
+                Math.min(100, Math.round(window[1] * 10) / 10),
+              ]
+            : undefined,
+        }),
+        replace: true,
+      });
 
     return {
       // Selecting laps also zooms to their span; an empty list shows the whole run.
@@ -137,6 +165,16 @@ export const useDashboardActions = () => {
       // On release: clamped, written to the URL, and the detail data fetched.
       commitWindow: (window: TimeWindow) => setWindow(window),
       resetWindow: () => setWindow(null),
+      // Comparing laps, the charts zoom in lap percent instead.
+      commitPercentWindow: (window: TimeWindow) => setPercentWindow(window),
+      resetPercentWindow: () => setPercentWindow(null),
+      // Switching graph tabs replaces the history entry, like a window change.
+      setGraphView: (view: string) =>
+        navigate({
+          search: (prev: DashboardSearch): DashboardSearch => ({ ...prev, view }),
+          replace: true,
+          resetScroll: false,
+        }),
       setHoverTime: (time: RunTime | null) => store.getState().setHoverTime(time),
       setHoverLap: (lap: number | null) => store.getState().setHoverLap(lap),
     };

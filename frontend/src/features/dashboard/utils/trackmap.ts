@@ -10,7 +10,8 @@
  * The cached `time` array is read in place, never copied or mutated.
  */
 
-import type { RunTime } from "@features/dashboard/utils/time";
+import type { Lap } from "@features/dashboard/utils/laps";
+import type { RunTime, TimeWindow } from "@features/dashboard/utils/time";
 
 export type Point = { x: number; y: number };
 
@@ -389,4 +390,77 @@ export function nearestSample(
     }
   }
   return best < 0 ? null : { time: time[best] - startMs, dist: bestDist };
+}
+
+/**
+ * The lap percent of the position nearest (x, y), among the positions in the
+ * index `ranges` that have one. With `maxDist` (SVG units), only positions that
+ * close count. Null if none qualifies.
+ */
+export function nearestLapPercent(
+  track: Track,
+  x: number,
+  y: number,
+  lapPercent: readonly (number | null)[],
+  ranges: readonly (readonly [number, number])[],
+  maxDist = Infinity,
+): number | null {
+  const { xs, ys } = track;
+  let best: number | null = null;
+  let bestDist = maxDist;
+  for (const [from, to] of ranges) {
+    for (let i = from; i < to; i++) {
+      const percent = lapPercent[i];
+      if (percent == null || Number.isNaN(xs[i])) continue;
+      const dist = Math.hypot(x - xs[i], y - ys[i]);
+      if (dist <= bestDist) {
+        bestDist = dist;
+        best = percent;
+      }
+    }
+  }
+  return best;
+}
+
+/**
+ * The RunTimes where `lap` was first and last inside the percent window, from
+ * each position's `lapPercent`. Null if it never was.
+ */
+export function lapPercentSpan(
+  track: Track,
+  lap: Lap,
+  [fromPercent, toPercent]: TimeWindow,
+  lapPercent: readonly (number | null)[],
+): TimeWindow | null {
+  const { time, startMs } = track;
+  let first: number | null = null;
+  let last: number | null = null;
+  const [from, to] = lapIndexRange(track, lap);
+  for (let i = from; i < to; i++) {
+    const percent = lapPercent[i];
+    if (percent == null || percent < fromPercent || percent > toPercent) continue;
+    first ??= time[i] - startMs;
+    last = time[i] - startMs;
+  }
+  return first === null || last === null || last <= first ? null : [first, last];
+}
+
+/** The indexes [from, to) of the positions inside `lap`. */
+export function lapIndexRange(track: Track, lap: Lap): readonly [from: number, to: number] {
+  return [
+    firstIndexAtOrAfter(track.time, lap.window[0] + track.startMs),
+    firstIndexAtOrAfter(track.time, lap.window[1] + track.startMs),
+  ];
+}
+
+// First index whose time is >= `at` (epoch ms), or the length if none.
+function firstIndexAtOrAfter(time: Float64Array, at: number): number {
+  let lo = 0;
+  let hi = time.length;
+  while (lo < hi) {
+    const mid = (lo + hi) >> 1;
+    if (time[mid] < at) lo = mid + 1;
+    else hi = mid;
+  }
+  return lo;
 }

@@ -6,9 +6,11 @@
 
 .page {
   min-width: 28px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
   padding: 3px 9px; /* 4px 10px in Figma, minus the 1px border */
-  font-family: var(--font-mono);
-  font-size: 12px;
+  font: var(--type-data-code);
   color: var(--text-muted);
   background: none;
   border: 1px solid transparent;
@@ -26,6 +28,11 @@
   border-color: var(--border-default);
 }
 
+.page svg {
+  width: 16px;
+  height: 16px;
+}
+
 .page:disabled {
   opacity: 0.4;
   cursor: not-allowed;
@@ -33,7 +40,6 @@
 
 .gap {
   padding: 0 var(--space-1);
-  font-family: var(--font-mono);
-  font-size: 12px;
+  font: var(--type-data-code);
   color: var(--text-muted);
 }

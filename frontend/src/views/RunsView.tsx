@@ -1,4 +1,5 @@
 import { useCallback, useState } from "react";
+import { Route } from "lucide-react";
 import EmptyState from "@components/ui/EmptyState";
 import ErrorState from "@components/ui/ErrorState";
 import LoadingState from "@components/ui/LoadingState";
@@ -49,7 +50,11 @@ export default function RunsView() {
   ) : runRowsError ? (
     <ErrorState error={runRowsError} />
   ) : runRows.length === 0 ? (
-    <EmptyState message="No runs yet. Runs recorded in Penelope will appear here." />
+    <EmptyState
+      icon={<Route />}
+      title="No runs yet"
+      message="Runs recorded in Penelope will appear here."
+    />
   ) : undefined;
 
   return (
@@ -60,24 +65,25 @@ export default function RunsView() {
       />
 
       {!runRowsError && penelopeRunsError && (
-        <Notice tone="warning">
-          Penelope is unavailable, so only processed runs are listed.{" "}
-          {describeError(penelopeRunsError)}
+        <Notice tone="warning" title="Penelope is unavailable">
+          Only processed runs are listed. {describeError(penelopeRunsError)}
         </Notice>
       )}
       {!runRowsError && runsError && (
-        <Notice tone="warning">
-          Processed runs couldn't be loaded, so dashboards can't be opened.{" "}
-          {describeError(runsError)}
+        <Notice tone="warning" title="Processed runs couldn't be loaded">
+          Dashboards can't be opened. {describeError(runsError)}
         </Notice>
       )}
       {pipelineRunsError && (
-        <Notice tone="warning">
-          Pipeline jobs couldn't be loaded, so statuses may be out of date.{" "}
-          {describeError(pipelineRunsError)}
+        <Notice tone="warning" title="Pipeline jobs couldn't be loaded">
+          Statuses may be out of date. {describeError(pipelineRunsError)}
         </Notice>
       )}
-      {triggerPipelineError && <Notice tone="error">{describeError(triggerPipelineError)}</Notice>}
+      {triggerPipelineError && (
+        <Notice tone="error" title="Couldn't queue the pipeline">
+          {describeError(triggerPipelineError)}
+        </Notice>
+      )}
 
       <RunsTable
         rows={pageItems}

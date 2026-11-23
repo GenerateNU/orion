@@ -28,6 +28,25 @@ export const SensorDataResponseSchema = z.object({
   series: z.record(z.string(), SensorSeriesSchema),
 });
 
+// Mirrors LapSensorSeries: a SensorSeries with how far around the ideal lap the
+// car was at each reading (0-100), same length as `time`.
+export const LapSensorSeriesSchema = SensorSeriesSchema.extend({
+  lap_percent: z.array(z.number()),
+});
+
+// Mirrors the lap percent sensor route's response: one LapSensorDataResponse per
+// lap, in the order asked. A lap never in the percent range has null start/end
+// and empty series.
+export const LapSensorDataResponseSchema = z.array(
+  z.object({
+    run_id: z.string(),
+    lap_id: z.number().int(),
+    start: DateTimeSchema.nullable(),
+    end: DateTimeSchema.nullable(),
+    series: z.record(z.string(), LapSensorSeriesSchema),
+  }),
+);
+
 export type SensorSeries = z.infer<typeof SensorSeriesSchema>;
 export type SensorDataResponse = z.infer<typeof SensorDataResponseSchema>;
 
@@ -35,4 +54,11 @@ export type SensorDataQuery = {
   sensors: string[];
   start: string;
   end: string;
+};
+
+export type LapSensorDataResponse = z.infer<typeof LapSensorDataResponseSchema>;
+
+export type LapSensorDataQuery = {
+  sensors: string[];
+  lap_ids: number[];
 };

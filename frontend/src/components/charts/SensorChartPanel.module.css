@@ -1,58 +1,255 @@
+/* Fills its pane: the tab bar on top, the graphs scrolling in the rest. */
 .panel {
+  container-type: inline-size;
+  flex: 1;
+  min-height: 0;
   display: flex;
   flex-direction: column;
-  gap: var(--space-3);
   width: 100%;
-  align-self: stretch;
 }
 
+/* One row: tabs on the left, layout and the tab menu on the right. */
 .header {
-  display: flex;
-  justify-content: flex-end;
-}
-
-.grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(420px, 1fr));
-  gap: var(--space-4);
-  align-items: start;
-}
-
-.chart {
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-2);
-  min-width: 0;
-}
-
-.chartHeader {
+  flex: none;
   display: flex;
   align-items: center;
-  gap: var(--space-2);
+  gap: var(--space-3);
+  margin-top: calc(-1 * var(--space-2));
+  border-bottom: 1px solid var(--border-default);
 }
 
-.chartHeader .picker {
+/* Scrolls on its own, so nothing shows above or beside the tab bar. The negative
+   margin puts the scrollbar in the pane's padding instead of over the cards. */
+/* The compared laps' chips, between the tab bar and the charts. */
+.lapChips {
+  flex: none;
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+  margin: 0;
+  padding: var(--space-3) 0 0;
+  list-style: none;
+}
+
+.body {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  padding: var(--space-3) var(--space-3) var(--space-1) 0;
+  margin-right: calc(-1 * var(--space-3));
+}
+
+/* Narrow screens: the dashboard stacks and the page scrolls instead. Same
+   breakpoint as DashboardView. */
+@media (max-width: 960px) {
+  .body {
+    overflow: visible;
+  }
+}
+
+.tabs {
   flex: 1;
   min-width: 0;
+  display: flex;
+  align-items: stretch;
+  overflow-x: auto;
+  scrollbar-width: none;
 }
 
-.remove {
-  padding: 0 var(--space-2);
+/* A tab is its label plus a × that shows on hover, like a browser tab. */
+.tab {
+  position: relative;
+  flex: none;
+  display: flex;
+  align-items: center;
+  border-bottom: 2px solid transparent;
+  margin-bottom: -1px;
+}
+
+.tab.active {
+  border-bottom-color: var(--accent-red);
+}
+
+.tabLabel {
+  padding: var(--space-2) var(--space-1) var(--space-2) var(--space-3);
   border: none;
   background: transparent;
   color: var(--text-muted);
-  font-size: 1.25rem;
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.tab:hover .tabLabel,
+.active .tabLabel {
+  color: var(--text-primary);
+}
+
+.closeTab {
+  display: grid;
+  place-items: center;
+  width: 18px;
+  height: 18px;
+  margin-right: var(--space-2);
+  border: none;
+  border-radius: var(--radius-xs);
+  background: transparent;
+  color: var(--text-muted);
+  font-size: 14px;
+  line-height: 1;
+  cursor: pointer;
+  opacity: 0;
+}
+
+.tab:hover .closeTab,
+.tab:focus-within .closeTab,
+.active .closeTab {
+  opacity: 1;
+}
+
+.closeTab:hover {
+  background: var(--bg-raised);
+  color: var(--text-primary);
+}
+
+.tabInput {
+  width: 140px;
+  margin: var(--space-1) var(--space-1) var(--space-1) var(--space-2);
+  padding: 3px var(--space-2);
+  border: 1px solid var(--focus-ring);
+  border-radius: var(--radius-sm);
+  background: var(--bg-raised);
+  color: var(--text-primary);
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.newTab {
+  flex: none;
+  align-self: center;
+  width: 28px;
+  height: 28px;
+  margin-left: var(--space-1);
+  border: none;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--text-muted);
+  font-size: 18px;
   line-height: 1;
   cursor: pointer;
 }
 
-.remove:hover {
+.newTab:hover {
+  background: var(--bg-raised);
   color: var(--text-primary);
 }
 
+.tools {
+  flex: none;
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  padding-block: var(--space-1);
+}
+
+.textButton {
+  padding: var(--space-1) var(--space-2);
+  border: none;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--text-muted);
+  font-size: 13px;
+  cursor: pointer;
+}
+
+.textButton:hover {
+  background: var(--bg-raised);
+  color: var(--text-primary);
+}
+
+.select {
+  height: 28px;
+  padding: 0 var(--space-2);
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-sm);
+  background: var(--bg-raised);
+  color: var(--text-primary);
+  font-size: 13px;
+  cursor: pointer;
+}
+
+.grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: var(--space-3);
+  align-items: start;
+}
+
+/* Two columns only where each card still gets a readable width; a narrower pane
+   keeps one. */
+@container (min-width: 480px) {
+  .twoColumns {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+.card {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+  min-width: 0;
+  padding: var(--space-2) var(--space-2) var(--space-1) var(--space-3);
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-md);
+  background: var(--bg-canvas);
+}
+
+.cardHeader {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-2);
+  min-height: 32px;
+}
+
+.cardTitle {
+  display: flex;
+  align-items: baseline;
+  gap: var(--space-2);
+  min-width: 0;
+  padding: var(--space-1) var(--space-2);
+  margin-left: calc(-1 * var(--space-2));
+  border: none;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--text-primary);
+  font-size: 14px;
+  font-weight: 600;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  cursor: pointer;
+}
+
+.cardTitle:hover {
+  background: var(--bg-raised);
+}
+
+.unit {
+  color: var(--text-muted);
+  font-size: 12px;
+  font-weight: 400;
+}
+
 .picker {
-  justify-self: start;
-  min-width: 240px;
+  flex: 1;
+  min-width: 0;
+  max-width: 360px;
   padding: var(--space-1) var(--space-2);
   border: 1px solid var(--border-default);
   border-radius: var(--radius-sm);
@@ -60,40 +257,46 @@
   color: var(--text-primary);
 }
 
-.addSlot {
+/* A slim bar under the cards, across every column; taller when the tab is empty. */
+.addCard {
+  grid-column: 1 / -1;
   display: flex;
+  flex-direction: column;
   align-items: center;
   justify-content: center;
+  gap: var(--space-2);
   padding: var(--space-3);
   border: 1px dashed var(--border-default);
   border-radius: var(--radius-md);
 }
 
-.add {
-  width: 40px;
-  height: 40px;
-  border: 1px solid var(--border-default);
-  border-radius: var(--radius-sm);
-  background: transparent;
-  color: var(--text-muted);
-  font-size: 1.25rem;
-  cursor: pointer;
+.emptyTab {
+  padding-block: var(--space-6);
 }
 
-.add:disabled {
-  cursor: default;
-}
-
-.reset {
-  padding: var(--space-1) var(--space-3);
+.addButton {
+  padding: var(--space-2) var(--space-3);
   border: 1px solid var(--border-default);
   border-radius: var(--radius-sm);
   background: var(--bg-raised);
   color: var(--text-primary);
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
   cursor: pointer;
 }
 
-.reset:disabled {
+.addButton:hover:not(:disabled) {
+  border-color: var(--text-muted);
+}
+
+.addButton:disabled {
   color: var(--text-muted);
   cursor: default;
+}
+
+.hint {
+  color: var(--text-muted);
+  font-size: 12px;
 }

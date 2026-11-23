@@ -1,27 +1,40 @@
-import { useEffect, useMemo, useRef } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import uPlot from "uplot";
 import "uplot/dist/uPlot.min.css";
 import type { RunTime, TimeWindow } from "@features/dashboard/utils/time";
 import { formatDuration } from "@utils/format";
+import ChartTooltip from "./ChartTooltip";
+import type { Series } from "./series";
 import styles from "./TimeSeriesChart.module.css";
 
 const MIN_DRAG_PX = 4;
+
+// The whole lap when xAxis is "track".
+const TRACK_RANGE: TimeWindow = [0, 100];
 
 export type ChartSeries = {
   id: string;
   label: string;
   unit: string;
+  // The x of each value: RunTime, or track % (0–100) when xAxis is "track".
   time: RunTime[];
   values: number[];
+  // Line color, the --data-series-N slot; 1 by default. Give compared laps different ones.
+  series?: Series;
 };
 
 export type TimeSeriesChartProps = {
   series: ChartSeries[];
   height?: number;
-  yLabel?: string;
+  // Figma "Plot Line": "track" plots x as the lap's track percentage (0%–100%).
+  xAxis?: "time" | "track";
+  // While hovering, a ChartTooltip beside the cursor with every series' value at
+  // that x.
+  tooltip?: boolean;
   visibleWindow?: TimeWindow | null;
   onCommitWindow?: (window: TimeWindow) => void;
   onResetWindow?: () => void;
+  // The x under the cursor (RunTime, or track %), null when it leaves the chart.
   onHoverTime?: (time: RunTime | null) => void;
 };
 
@@ -33,7 +46,10 @@ type ChartCallbacks = Pick<
 const cssStyle = (chart: uPlot, name: string) =>
   getComputedStyle(chart.root).getPropertyValue(name).trim();
 
-const formatTime = (ms: number) => formatDuration(ms / 1000);
+const formatX = {
+  time: (ms: number) => formatDuration(ms / 1000),
+  track: (percent: number) => `${Math.round(percent)}%`,
+};
 
 const formatTicks = (ticks: number[], increment: number) => {
   const largest = Math.max(...ticks.map(Math.abs));
@@ -53,6 +69,23 @@ const selectionToWindow = (chart: uPlot): TimeWindow | null => {
   return [start, end];
 };
 
+// Series `s`'s value at the hovered x, read off its line: interpolated between
+// its nearest points either side, since joined series rarely share x values.
+// Null outside the series' range.
+const valueAt = (chart: uPlot, s: number, idx: number): number | null => {
+  const xs = chart.data[0];
+  const ys = chart.data[s];
+  if (ys[idx] != null) return ys[idx];
+  let before = idx - 1;
+  while (before >= 0 && ys[before] == null) before--;
+  let after = idx + 1;
+  while (after < xs.length && ys[after] == null) after++;
+  if (before < 0 || after >= xs.length) return null;
+  const y0 = ys[before] as number;
+  const y1 = ys[after] as number;
+  return y0 + ((y1 - y0) * (xs[idx] - xs[before])) / (xs[after] - xs[before]);
+};
+
 const clearSelection = (chart: uPlot) => {
   chart.setSelect({ left: 0, top: 0, width: 0, height: 0 }, false);
 };
@@ -67,16 +100,24 @@ const applyWindow = (chart: uPlot, timeWindow: TimeWindow | null) => {
 export const TimeSeriesChart = ({
   series,
   height = 600,
-  yLabel = "",
+  xAxis = "time",
+  tooltip = false,
   visibleWindow = null,
   onCommitWindow,
   onResetWindow,
   onHoverTime,
 }: TimeSeriesChartProps) => {
+  // A track chart always spans 0–100% unless zoomed, wherever the data starts and ends.
+  const shownWindow = visibleWindow ?? (xAxis === "track" ? TRACK_RANGE : null);
   const containerRef = useRef<HTMLDivElement>(null);
   const chartRef = useRef<uPlot | null>(null);
   const draggingRef = useRef(false);
-  const windowRef = useRef(visibleWindow);
+  // Whether the mouse is over this chart. Synced charts move their cursors
+  // together, but only the one being hovered shows the tooltip.
+  const pointerInsideRef = useRef(false);
+  const windowRef = useRef(shownWindow);
+  // Where the cursor is while hovering, for the tooltip; null off the plot.
+  const [hover, setHover] = useState<{ idx: number; left: number; top: number } | null>(null);
 
   const callbacksRef = useRef<ChartCallbacks>({});
   useEffect(() => {
@@ -89,8 +130,10 @@ export const TimeSeriesChart = ({
   );
   const dataRef = useRef(data);
 
-  const opts = useMemo(
-    (): uPlot.Options => ({
+  const opts = useMemo((): uPlot.Options => {
+    // Figma "Data/Axis" (400 11px mono); a canvas font can't read the CSS token itself.
+    const axisFont = `11px ${getComputedStyle(document.documentElement).getPropertyValue("--font-mono").trim()}`;
+    return {
       width: 0,
       height,
       legend: { show: false },
@@ -103,36 +146,42 @@ export const TimeSeriesChart = ({
           },
         },
       },
+      // Figma "Plot Line": horizontal grid lines only, no tick marks.
       axes: [
         {
-          label: "Time",
-          values: (_chart, ticks) => ticks.map(formatTime),
-          stroke: (chart) => cssStyle(chart, "--text-muted"),
-          grid: { stroke: (chart) => cssStyle(chart, "--border-default") },
-          ticks: { stroke: (chart) => cssStyle(chart, "--border-default") },
+          values: (_chart, ticks) => ticks.map(formatX[xAxis]),
+          // Track ticks every 25% (0, 25, 50…) when there's room, finer when zoomed in.
+          ...(xAxis === "track" ? { incrs: [1, 5, 25], space: 100 } : {}),
+          font: axisFont,
+          stroke: (chart) => cssStyle(chart, "--data-axis"),
+          grid: { show: false },
+          ticks: { show: false },
         },
         {
-          label: yLabel,
-          labelGap: 8,
-          size: 60,
+          // No label, no space reserved for one: callers show the unit themselves.
+          size: 48,
           values: (_chart, ticks, _axisIdx, _space, increment) => formatTicks(ticks, increment),
-          stroke: (chart) => cssStyle(chart, "--text-muted"),
-          grid: { stroke: (chart) => cssStyle(chart, "--border-default") },
-          ticks: { stroke: (chart) => cssStyle(chart, "--border-default") },
+          font: axisFont,
+          stroke: (chart) => cssStyle(chart, "--data-axis"),
+          grid: { stroke: (chart) => cssStyle(chart, "--data-grid") },
+          ticks: { show: false },
         },
       ],
       cursor: {
         y: false,
-        sync: { key: "dashboard-run" },
+        // Time and track charts sync only with their own kind: their x values differ.
+        sync: { key: `dashboard-${xAxis}` },
         drag: { x: true, y: false, setScale: false },
         bind: { dblclick: () => null },
       },
       series: [
         {},
-        ...series.map(({ label }) => ({
+        ...series.map(({ label, series: slot = 1 }) => ({
           label,
-          stroke: "#d4b06a",
+          stroke: (chart: uPlot) => cssStyle(chart, `--data-series-${slot}`),
           width: 1.5,
+          // Joined series leave gaps at each other's x values; draw through them.
+          spanGaps: true,
         })),
       ],
       hooks: {
@@ -148,16 +197,19 @@ export const TimeSeriesChart = ({
         ],
         setCursor: [
           (chart) => {
-            const idx = chart.cursor.idx;
+            const { idx, left = -1, top = -1 } = chart.cursor;
+            if (tooltip) {
+              const shown = pointerInsideRef.current && idx != null && left >= 0;
+              setHover(shown ? { idx, left, top } : null);
+            }
             callbacksRef.current.onHoverTime?.(
               idx == null ? null : (chart.data[0][idx] as RunTime),
             );
           },
         ],
       },
-    }),
-    [height, yLabel, series],
-  );
+    };
+  }, [height, series, xAxis, tooltip]);
 
   useEffect(() => {
     dataRef.current = data;
@@ -183,6 +235,16 @@ export const TimeSeriesChart = ({
     };
     const onDoubleClick = () => callbacksRef.current.onResetWindow?.();
 
+    const onEnter = () => {
+      pointerInsideRef.current = true;
+    };
+    const onLeave = () => {
+      pointerInsideRef.current = false;
+      setHover(null);
+    };
+
+    chart.over.addEventListener("mouseenter", onEnter);
+    chart.over.addEventListener("mouseleave", onLeave);
     chart.over.addEventListener("mousedown", onDown);
     chart.over.addEventListener("dblclick", onDoubleClick);
     window.addEventListener("mouseup", onUp);
@@ -201,11 +263,45 @@ export const TimeSeriesChart = ({
   }, [opts, height]);
 
   useEffect(() => {
-    windowRef.current = visibleWindow;
+    windowRef.current = shownWindow;
     if (draggingRef.current) return;
     const chart = chartRef.current;
-    if (chart) applyWindow(chart, visibleWindow);
-  }, [visibleWindow]);
+    if (chart) applyWindow(chart, shownWindow);
+  }, [shownWindow]);
 
-  return <div ref={containerRef} className={styles.chart} />;
+  const chart = chartRef.current;
+  return (
+    <div className={styles.wrapper}>
+      <div ref={containerRef} className={styles.chart} />
+      {hover && chart && (
+        <div
+          className={styles.tooltip}
+          style={{
+            left: chart.over.offsetLeft + hover.left,
+            top: chart.over.offsetTop + hover.top,
+          }}
+          // Past the middle of the plot it sits left of the cursor, so it stays inside.
+          data-flip={hover.left > chart.over.clientWidth / 2 || undefined}
+        >
+          <ChartTooltip
+            title={
+              xAxis === "track"
+                ? `${(chart.data[0][hover.idx] ?? 0).toFixed(1)}%`
+                : formatX.time(chart.data[0][hover.idx] ?? 0)
+            }
+            // Each series' value read off its line at the hovered x (see valueAt), so
+            // every series shows one even where its points don't line up.
+            rows={series.map(({ label, unit, series: slot = 1 }, i) => {
+              const value = valueAt(chart, i + 1, hover.idx);
+              return {
+                series: slot,
+                label,
+                value: value == null ? "—" : `${value.toFixed(1)} ${unit}`,
+              };
+            })}
+          />
+        </div>
+      )}
+    </div>
+  );
 };

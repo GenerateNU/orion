@@ -1,7 +1,7 @@
 import { TimeSeriesChart, type TimeSeriesChartProps } from "@components/charts/TimeSeriesChart";
 import { useDashboardActions, useVisibleWindow } from "@features/dashboard/state/useDashboard";
 
-type DashboardTimeSeriesChartProps = Pick<TimeSeriesChartProps, "series" | "height" | "yLabel">;
+type DashboardTimeSeriesChartProps = Pick<TimeSeriesChartProps, "series" | "height">;
 
 export default function DashboardTimeSeriesChart(props: DashboardTimeSeriesChartProps) {
   const visibleWindow = useVisibleWindow();

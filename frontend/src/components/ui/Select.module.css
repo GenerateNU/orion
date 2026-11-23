@@ -1,0 +1,74 @@
+.trigger {
+  width: 100%;
+  text-align: left;
+  cursor: pointer;
+}
+
+.value {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.trigger[data-placeholder] .value {
+  color: var(--text-muted);
+}
+
+.trigger:disabled .value {
+  color: var(--text-disabled);
+}
+
+.chevron {
+  transition: transform 150ms;
+}
+
+.trigger[data-state="open"] .chevron {
+  transform: rotate(180deg);
+}
+
+/* The open list: same surface as Menu. */
+.content {
+  width: var(--radix-select-trigger-width);
+  max-height: var(--radix-select-content-available-height);
+  padding: var(--space-1);
+  background: var(--bg-raised);
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-popover);
+  z-index: 100;
+}
+
+.item {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  padding: var(--space-2) var(--space-2-5);
+  font: var(--type-body-m);
+  color: var(--text-primary);
+  border-radius: var(--radius-sm);
+  outline: none;
+  cursor: pointer;
+  user-select: none;
+}
+
+.item[data-highlighted] {
+  background: var(--bg-hover);
+}
+
+.item[data-disabled] {
+  color: var(--text-disabled);
+  cursor: not-allowed;
+}
+
+.indicator {
+  display: inline-flex;
+  margin-left: auto;
+  color: var(--text-accent);
+}
+
+.indicator svg {
+  width: 16px;
+  height: 16px;
+}

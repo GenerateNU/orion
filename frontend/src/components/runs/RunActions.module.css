@@ -12,7 +12,6 @@
 }
 
 .meta {
-  font-family: var(--font-mono);
-  font-size: 12px;
+  font: var(--type-data-code);
   color: var(--text-muted);
 }

@@ -1,13 +1,21 @@
 import { useCallback, useMemo } from "react";
 import { keepPreviousData } from "@tanstack/react-query";
-import type { MetricsResponse } from "@schemas/metrics.schema";
-import type { SensorDataResponse, SensorSeries } from "@schemas/sensor.schema";
+import type { LapsResponse } from "@schemas/lap.schema";
+import type {
+  LapSensorDataResponse,
+  SensorDataResponse,
+  SensorSeries,
+} from "@schemas/sensor.schema";
 import type { StateDataResponse } from "@schemas/state.schema";
-import { useMetrics } from "@hooks/useMetrics";
-import { useSensorData } from "@hooks/useSensors";
+import { useRunLaps } from "@hooks/useRunLaps";
+import { useLapSensorData, useSensorData } from "@hooks/useSensors";
 import { useStateEstimation } from "@hooks/useStateEstimation";
-import { useCommittedWindow, useDashboardRun } from "@features/dashboard/state/useDashboard";
-import { lapsFromMetrics, type Lap } from "@features/dashboard/utils/laps";
+import {
+  useCommittedWindow,
+  useDashboardRun,
+  useSelectedLaps,
+} from "@features/dashboard/state/useDashboard";
+import { lapsFromMetrics, MIN_LAPS_TO_COMPARE, type Lap } from "@features/dashboard/utils/laps";
 import { snapWindow, toIsoRange, type TimeWindow } from "@features/dashboard/utils/time";
 
 // The data panels draw, for the opened run. Each hook wraps an API hook from
@@ -50,14 +58,26 @@ const useFetchWindow = (scope: DataScope): TimeWindow | null => {
 export const useLaps = () => {
   const { runId, timeline } = useDashboardRun();
   const select = useCallback(
-    (metrics: MetricsResponse): Lap[] => (timeline ? lapsFromMetrics(metrics, timeline) : []),
+    (response: LapsResponse): Lap[] => (timeline ? lapsFromMetrics(response, timeline) : []),
     [timeline],
   );
-  const { metrics, metricsIsLoading, metricsError } = useMetrics(runId, {
-    select,
-    enabled: !!timeline,
-  });
-  return { laps: metrics, lapsIsLoading: metricsIsLoading, lapsError: metricsError };
+  const { laps, lapsIsLoading, lapsError } = useRunLaps(runId, { select, enabled: !!timeline });
+  return { laps, lapsIsLoading, lapsError };
+};
+
+// True when the run has enough laps to compare them by lap percent: the charts
+// then plot the selected laps against % of lap instead of time.
+export const useCompareLaps = (): boolean => {
+  const { laps } = useLaps();
+  return (laps?.length ?? 0) >= MIN_LAPS_TO_COMPARE;
+};
+
+// True when the run has laps but none is selected: the panels then show
+// NO_LAPS_MESSAGE (utils/laps.ts) instead of data.
+export const useNoLapsSelected = (): boolean => {
+  const { laps } = useLaps();
+  const selectedLaps = useSelectedLaps();
+  return !!laps?.length && selectedLaps.length === 0;
 };
 
 export type RunPositions = {
@@ -67,6 +87,8 @@ export type RunPositions = {
   time: Float64Array;
   // [latitude, longitude], same length as `time`.
   positions: [number, number][];
+  // Lap percent (0-100) of each position, same length as `time`; null off track.
+  lapPercent: (number | null)[];
 };
 
 export const useRunPositions = (scope: DataScope) => {
@@ -83,11 +105,12 @@ export const useRunPositions = (scope: DataScope) => {
       startMs,
       time: data.time,
       positions: data.positions,
+      lapPercent: data.lap_percent,
     }),
     [startMs],
   );
   const { stateData, stateDataIsLoading, stateDataIsPlaceholderData, stateDataError } =
-    useStateEstimation(runId, range, { select, placeholderData: keepPreviousData });
+    useStateEstimation(runId, range, { select });
   return {
     positions: stateData,
     positionsIsLoading: stateDataIsLoading,
@@ -131,5 +154,51 @@ export const useSensorTrace = (sensors: readonly string[], scope: DataScope) => 
     traceIsLoading: sensorDataIsLoading,
     traceIsPlaceholderData: sensorDataIsPlaceholderData,
     traceError: sensorDataError,
+  };
+};
+
+// One lap's readings of a sensor by lap percent: `values[i]` at `percent[i]`,
+// ascending, readings with no percent (off track) left out.
+export type LapTrace = {
+  lapId: number;
+  percent: number[];
+  values: number[];
+};
+
+// Each of `lapIds`' readings of `sensor` (its first value) by lap percent, for
+// comparing laps. Keep `lapIds` stable (a memo or the URL's list).
+export const useLapSensorTraces = (sensor: string, lapIds: readonly number[]) => {
+  const { runId } = useDashboardRun();
+  const range = useMemo(() => ({ sensors: [sensor], lap_ids: [...lapIds] }), [sensor, lapIds]);
+  const select = useCallback(
+    (data: LapSensorDataResponse): LapTrace[] =>
+      data.flatMap((response): LapTrace[] => {
+        const series = response.series[sensor];
+        if (!series) return [];
+        const points = series.values
+          .map((value, j) => [series.lap_percent[j], value[0]] as const)
+          .filter(
+            (point): point is readonly [number, number] => point[0] != null && point[1] != null,
+          )
+          .sort((a, b) => a[0] - b[0]);
+        return [
+          {
+            lapId: response.lap_id,
+            percent: points.map((p) => p[0]),
+            values: points.map((p) => p[1]),
+          },
+        ];
+      }),
+    [sensor],
+  );
+  const { lapSensorData, lapSensorDataIsLoading, lapSensorDataError } = useLapSensorData(
+    runId,
+    range,
+    { select },
+  );
+  return {
+    traces: lapSensorData ?? [],
+    tracesIsLoading: lapSensorDataIsLoading,
+    tracesError: lapSensorDataError,
   };
 };

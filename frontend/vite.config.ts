@@ -24,7 +24,7 @@ export default defineConfig(({ mode }) => {
     resolve: { alias },
     server: {
       host: true,
-      port: 5173,
+      port: 3000,
       proxy: {
         "/api": { target: apiTarget, changeOrigin: true },
       },

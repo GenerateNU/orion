@@ -18,7 +18,17 @@ export interface TrackVisualizationProps {
   road: string;
   gaps: string;
   window: string;
-  // A line across the track where the run starts.
+  // Comparing laps: only `lapPaths` are drawn, not the whole run, the window, its
+  // handles or the car.
+  compareLaps: boolean;
+  // Each selected lap in its lap color: the whole lap, and the stretch in the
+  // percent window if there is one (the whole lap is then drawn faintly).
+  lapPaths: readonly { lapId: number; color: string; whole: string; part: string | null }[];
+  // Comparing laps: bars across the track at the percent window's ends, if there
+  // is one. Display only: dragging along a lap picks the window.
+  percentEdges: readonly [Tick, Tick] | null;
+  // A line across the track where the run starts, or the start/finish line when
+  // comparing laps.
   start: Tick;
   // The car, pointing in its direction of travel (degrees, SVG rotation), and
   // the radius of its grab circle (SVG units): small enough not to cover the
@@ -64,6 +74,9 @@ export const TrackVisualization = memo(function TrackVisualization({
   road,
   gaps,
   window,
+  compareLaps,
+  lapPaths,
+  percentEdges,
   start,
   car,
   edges,
@@ -91,9 +104,13 @@ export const TrackVisualization = memo(function TrackVisualization({
       onPointerCancel={onPointerCancel}
       onLostPointerCapture={onLostPointerCapture}
     >
-      <path className={styles.roadCasing} d={road} />
-      <path className={styles.road} d={road} />
-      <path className={styles.gap} d={gaps} />
+      {!compareLaps && (
+        <>
+          <path className={styles.roadCasing} d={road} />
+          <path className={styles.road} d={road} />
+          <path className={styles.gap} d={gaps} />
+        </>
+      )}
 
       <g className={styles.start}>
         <line x1={start.x1} y1={start.y1} x2={start.x2} y2={start.y2} />
@@ -105,26 +122,56 @@ export const TrackVisualization = memo(function TrackVisualization({
         </text>
       </g>
 
-      <g className={cx(styles.window, pending && styles.pending)}>
-        <path className={styles.windowGlow} d={window} />
-        <path className={styles.windowLine} d={window} />
+      {!compareLaps && (
+        <g className={cx(styles.window, pending && styles.pending)}>
+          <path className={styles.windowGlow} d={window} />
+          <path className={styles.windowLine} d={window} />
+        </g>
+      )}
+
+      <g className={styles.lap}>
+        {lapPaths.map(({ lapId, color, whole, part }) => (
+          <g key={lapId} style={{ stroke: color }}>
+            <path d={whole} className={cx(part !== null && styles.lapFaded)} />
+            {part !== null && <path d={part} className={styles.lapPart} />}
+          </g>
+        ))}
       </g>
 
-      <EdgeHandle tick={edges[0]} role="start" />
-      <EdgeHandle tick={edges[1]} role="end" />
+      {percentEdges?.map((tick, i) => (
+        <g key={i} className={styles.lapEdge}>
+          <line
+            className={styles.handleOutline}
+            x1={tick.x1}
+            y1={tick.y1}
+            x2={tick.x2}
+            y2={tick.y2}
+          />
+          <line className={styles.handleBar} x1={tick.x1} y1={tick.y1} x2={tick.x2} y2={tick.y2} />
+        </g>
+      ))}
+
+      {!compareLaps && (
+        <>
+          <EdgeHandle tick={edges[0]} role="start" />
+          <EdgeHandle tick={edges[1]} role="end" />
+        </>
+      )}
 
       <circle ref={ghostRef} className={styles.ghost} r={1.3} visibility="hidden" />
 
-      <g
-        className={styles.car}
-        data-handle="car"
-        transform={`translate(${car.x} ${car.y}) rotate(${car.heading})`}
-      >
-        <title>Drag to move the window</title>
-        <circle className={styles.carHalo} r={3.8} />
-        <path className={styles.carBody} d={CAR_ARROW} />
-        <circle className={styles.hitArea} r={car.hitRadius} />
-      </g>
+      {!compareLaps && (
+        <g
+          className={styles.car}
+          data-handle="car"
+          transform={`translate(${car.x} ${car.y}) rotate(${car.heading})`}
+        >
+          <title>Drag to move the window</title>
+          <circle className={styles.carHalo} r={3.8} />
+          <path className={styles.carBody} d={CAR_ARROW} />
+          <circle className={styles.hitArea} r={car.hitRadius} />
+        </g>
+      )}
     </svg>
   );
 });
