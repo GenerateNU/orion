@@ -15,14 +15,7 @@ const PAGE_SIZE = 8;
 
 // Figma "Runs — Landing": every run, its pipeline status and the next action.
 export default function RunsView() {
-  const {
-    runRows,
-    runRowsIsLoading,
-    runRowsError,
-    penelopeRunsError,
-    runsError,
-    pipelineRunsError,
-  } = useRunRows();
+  const { runRows, runRowsIsLoading, runRowsError, pipelineRunsError } = useRunRows();
   const { triggerPipeline, triggerPipelineError } = usePipelineMutations();
   const { page, pageCount, pageItems, setPage, firstItem, lastItem } = usePagination(
     runRows,
@@ -49,7 +42,7 @@ export default function RunsView() {
   ) : runRowsError ? (
     <ErrorState error={runRowsError} />
   ) : runRows.length === 0 ? (
-    <EmptyState message="No runs yet. Runs recorded in Penelope will appear here." />
+    <EmptyState message="No runs yet. Sync runs from Penelope (POST /runs/sync) to list them here." />
   ) : undefined;
 
   return (
@@ -59,18 +52,6 @@ export default function RunsView() {
         description="Queue a pipeline to process or re-process a run. Open a loaded run to view its dashboard."
       />
 
-      {!runRowsError && penelopeRunsError && (
-        <Notice tone="warning">
-          Penelope is unavailable, so only processed runs are listed.{" "}
-          {describeError(penelopeRunsError)}
-        </Notice>
-      )}
-      {!runRowsError && runsError && (
-        <Notice tone="warning">
-          Processed runs couldn't be loaded, so dashboards can't be opened.{" "}
-          {describeError(runsError)}
-        </Notice>
-      )}
       {pipelineRunsError && (
         <Notice tone="warning">
           Pipeline jobs couldn't be loaded, so statuses may be out of date.{" "}

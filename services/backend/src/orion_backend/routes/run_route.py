@@ -7,7 +7,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from orion_backend.core.database import get_optional_penelope_db, get_orion_db
 from orion_backend.core.openapi import error_responses
-from orion_backend.schemas.run_schema import RunResponse
+from orion_backend.schemas.run_schema import RunResponse, RunSyncResponse
 from orion_backend.services.run_service import RunService
 
 router = APIRouter(prefix="/runs", tags=["runs"])
@@ -28,9 +28,24 @@ async def list_runs(
     ] = False,
     service: RunService = Depends(get_run_service),
 ) -> list[RunResponse]:
-    """Every run OrionDB knows about, newest first. `run_time` comes from Penelope and is
-    `null` when it's unreachable."""
+    """Every run OrionDB knows about, newest first. Reads OrionDB only: run
+    `POST /runs/sync` to pick up new Penelope runs."""
     return await service.list_runs(processed)
+
+
+@router.post(
+    "/sync",
+    response_model=RunSyncResponse,
+    summary="Sync runs from Penelope",
+    responses=error_responses(502, 503),
+)
+async def sync_runs(
+    service: RunService = Depends(get_run_service),
+) -> RunSyncResponse:
+    """Copy Penelope's run list into OrionDB: adds runs OrionDB hasn't seen and
+    refreshes `run_time` on the rest. Pipeline output is never touched. Safe to call
+    repeatedly. 502 if Penelope is unreachable, 503 if it isn't configured."""
+    return await service.sync_from_penelope()
 
 
 @router.get(

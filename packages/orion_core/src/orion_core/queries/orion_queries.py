@@ -1,7 +1,7 @@
 """OrionDB statement builders. They build statements but never run them, so the
 async backend and the sync pipeline can share them."""
 
-from collections.abc import Iterable
+from collections.abc import Iterable, Sequence
 from datetime import datetime
 from typing import Any
 
@@ -136,6 +136,25 @@ def insert_run(
         .on_conflict_do_nothing(index_elements=[Run.run_id])
         .returning(Run)
     )
+
+
+def upsert_run_times(
+    rows: Sequence[tuple[str, datetime | None]],
+) -> ReturningInsert[str]:
+    """Insert `(run_id, run_time)` rows, or set `run_time` on runs that already exist.
+
+    Leaves every other column alone (`start_time`/`end_time` belong to the pipeline).
+    Returns the ids of rows that were inserted or whose `run_time` changed, so an
+    unchanged run comes back as no row.
+    """
+    stmt = insert(Run).values(
+        [{"run_id": run_id, "run_time": run_time} for run_id, run_time in rows]
+    )
+    return stmt.on_conflict_do_update(
+        index_elements=[Run.run_id],
+        set_={"run_time": stmt.excluded.run_time},
+        where=Run.run_time.is_distinct_from(stmt.excluded.run_time),
+    ).returning(Run.run_id)
 
 
 def update_run(run_id: str, **values: datetime | None) -> ReturningUpdate[Run]:

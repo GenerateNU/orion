@@ -1,5 +1,3 @@
-import asyncio
-import logging
 from datetime import datetime
 
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -8,22 +6,17 @@ from orion_backend.core.exceptions import (
     AlreadyExistsError,
     DomainError,
     NotFoundError,
-    UpstreamError,
+    ServiceUnavailableError,
 )
 from orion_backend.repositories.penelope_run_repository import PenelopeRunRepository
 from orion_backend.repositories.run_repository import RunRepository
 from orion_backend.schemas.run_schema import (
     RunCreateRequest,
     RunResponse,
+    RunSyncResponse,
     RunUpdateRequest,
 )
-
-
-logger = logging.getLogger(__name__)
-
-# Penelope run times are a nice-to-have on the run list. Off VPN a connect attempt can
-# hang for a long time, so give up quickly and return the list without them.
-PENELOPE_LABEL_TIMEOUT_S = 3
+from orion_core.models.orion import Run
 
 
 class RunService:
@@ -36,42 +29,40 @@ class RunService:
         )
 
     async def list_runs(self, processed: bool = False) -> list[RunResponse]:
-        """Every run (or only processed ones), labelled from Penelope when reachable."""
+        """Every run (or only processed ones), read from OrionDB alone. `run_time` is
+        whatever the last Penelope sync stored."""
         runs = await (
             self.repository.list_processed_runs()
             if processed
             else self.repository.list_runs()
         )
-        return await self._with_penelope_labels(
-            [RunResponse.model_validate(run) for run in runs]
-        )
+        processed_ids = await self.repository.list_processed_run_ids()
+        return [_to_response(run, processed_ids) for run in runs]
 
-    async def _with_penelope_labels(self, runs: list[RunResponse]) -> list[RunResponse]:
-        """Fill `run_time` from Penelope. Leaves it `null` if Penelope isn't
-        configured, is unreachable, or doesn't answer in time."""
-        if self.penelope_repository is None or not runs:
-            return runs
-        try:
-            async with asyncio.timeout(PENELOPE_LABEL_TIMEOUT_S):
-                rows = await self.penelope_repository.list_runs_by_ids(
-                    [run.run_id for run in runs]
-                )
-        except (UpstreamError, TimeoutError) as exc:
-            logger.warning("listing runs without Penelope labels: %r", exc)
-            return runs
-        times = {row.run_id: row.time for row in rows}
-        return [
-            run.model_copy(update={"run_time": times[run.run_id]})
-            if run.run_id in times
-            else run
-            for run in runs
+    async def sync_from_penelope(self) -> RunSyncResponse:
+        """Copy every Penelope run (id and `run.time`) into OrionDB. Safe to repeat:
+        new runs are added, existing ones only get `run_time` refreshed."""
+        if self.penelope_repository is None:
+            raise ServiceUnavailableError(
+                "Penelope is not configured (PENELOPE_DATABASE_URL unset)"
+            )
+        penelope_runs = [
+            (str(row.run_id), row.time)
+            for row in await self.penelope_repository.list_runs()
         ]
+        existing = await self.repository.list_run_ids()
+        changed = await self.repository.upsert_run_times(penelope_runs)
+        return RunSyncResponse(
+            total=len(penelope_runs),
+            added=len(changed - existing),
+            updated=len(changed & existing),
+        )
 
     async def get_run(self, run_id: str) -> RunResponse:
         run = await self.repository.get_run(run_id)
         if run is None:
             raise NotFoundError("Run", run_id)
-        return RunResponse.model_validate(run)
+        return _to_response(run, await self.repository.list_processed_run_ids())
 
     # ------------------------------------------------------------------------
     # DEPRECATED: User currently has no reason to create or update run
@@ -110,6 +101,12 @@ class RunService:
             raise DomainError(f"Run '{run_id}' has pipeline jobs and cannot be deleted")
         if not await self.repository.delete_run(run_id):
             raise NotFoundError("Run", run_id)
+
+
+def _to_response(run: Run, processed_ids: set[str]) -> RunResponse:
+    return RunResponse.model_validate(run).model_copy(
+        update={"processed": run.run_id in processed_ids}
+    )
 
 
 def _check_bounds(start_time: datetime | None, end_time: datetime | None) -> None:

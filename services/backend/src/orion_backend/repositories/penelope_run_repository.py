@@ -1,4 +1,4 @@
-from collections.abc import Collection, Sequence
+from collections.abc import Sequence
 from typing import Any
 
 from sqlalchemy import Executable, Result, Row
@@ -6,10 +6,7 @@ from sqlalchemy.exc import InterfaceError, OperationalError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from orion_backend.core.exceptions import UpstreamError
-from orion_core.queries.penelope_queries import (
-    select_penelope_runs,
-    select_penelope_runs_by_ids,
-)
+from orion_core.queries.penelope_queries import select_penelope_runs
 
 
 class PenelopeRunRepository:
@@ -20,11 +17,6 @@ class PenelopeRunRepository:
 
     async def list_runs(self) -> Sequence[Row[*tuple[Any, ...]]]:
         return (await self._execute(select_penelope_runs())).all()
-
-    async def list_runs_by_ids(
-        self, run_ids: Collection[str]
-    ) -> Sequence[Row[*tuple[Any, ...]]]:
-        return (await self._execute(select_penelope_runs_by_ids(run_ids))).all()
 
     async def _execute(self, stmt: Executable) -> Result[*tuple[Any, ...]]:
         # Penelope is externally managed, so a failure is an upstream error (502).

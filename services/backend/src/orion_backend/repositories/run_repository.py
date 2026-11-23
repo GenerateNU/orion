@@ -1,6 +1,7 @@
 from collections.abc import Sequence
 from datetime import datetime
 
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from orion_core.models.orion import Run
@@ -13,7 +14,11 @@ from orion_core.queries.orion_queries import (
     select_run_has_pipeline_runs,
     select_runs,
     update_run,
+    upsert_run_times,
 )
+
+# Two bind parameters per row; Postgres allows 32767 per statement.
+UPSERT_CHUNK_SIZE = 1000
 
 
 class RunRepository:
@@ -58,6 +63,20 @@ class RunRepository:
     async def update_run(self, run_id: str, **values: datetime | None) -> Run | None:
         """None if the run doesn't exist."""
         return await self.db.scalar(update_run(run_id, **values))
+
+    async def list_run_ids(self) -> set[str]:
+        return set((await self.db.scalars(select(Run.run_id))).all())
+
+    async def upsert_run_times(
+        self, rows: Sequence[tuple[str, datetime | None]]
+    ) -> set[str]:
+        """Ids of runs inserted or whose `run_time` changed. Writes in chunks to stay
+        under Postgres's bind-parameter limit."""
+        changed: set[str] = set()
+        for start in range(0, len(rows), UPSERT_CHUNK_SIZE):
+            chunk = rows[start : start + UPSERT_CHUNK_SIZE]
+            changed.update((await self.db.scalars(upsert_run_times(chunk))).all())
+        return changed
 
     async def delete_run(self, run_id: str) -> bool:
         """False if the run doesn't exist."""

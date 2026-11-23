@@ -70,8 +70,3 @@ def select_penelope_runs() -> Select[*tuple[Any, ...]]:
     return select(run_table.c.id.label("run_id"), run_table.c.time).order_by(
         run_table.c.time.desc().nulls_last(), run_table.c.id
     )
-
-
-def select_penelope_runs_by_ids(run_ids: Collection[str]) -> Select[*tuple[Any, ...]]:
-    """`select_penelope_runs`, limited to the given run ids."""
-    return select_penelope_runs().where(run_table.c.id.in_(list(run_ids)))

@@ -15,6 +15,9 @@ class Run(Base):
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now()
     )
+    # Penelope `run.time`: when the run was recorded. Copied from Penelope so the run
+    # list doesn't need Penelope to show it. NULL until the run has been synced.
+    run_time: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     # Bounds of the run's readings, written by the clean step. NULL until it has run.
     start_time: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     end_time: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))

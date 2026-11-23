@@ -36,10 +36,17 @@ class RunResponse(BaseModel):
     run_time: datetime | None = Field(
         default=None,
         description=(
-            "Penelope `run.time`: when the run was recorded (UTC). `null` if Penelope "
-            "is not configured or unreachable."
+            "Penelope `run.time`: when the run was recorded (UTC), as stored by the "
+            "last `POST /runs/sync`. `null` until the run has been synced."
         ),
         examples=["2026-07-11T16:42:18Z"],
+    )
+    processed: bool = Field(
+        default=False,
+        description=(
+            "True if the run has a pipeline job that succeeded with no error, so its "
+            "dashboard can be opened. Processed runs can still be processed again."
+        ),
     )
 
     # mypy can't type a decorator over @property; this is pydantic's documented fix.
@@ -52,6 +59,17 @@ class RunResponse(BaseModel):
         if self.start_time is None or self.end_time is None:
             return None
         return (self.end_time - self.start_time).total_seconds()
+
+
+class RunSyncResponse(BaseModel):
+    """Result of `POST /runs/sync`: copying Penelope's run list into OrionDB."""
+
+    total: int = Field(description="Runs read from Penelope.", examples=[120])
+    added: int = Field(description="Runs OrionDB didn't have before.", examples=[3])
+    updated: int = Field(
+        description="Runs already in OrionDB whose `run_time` was set or changed.",
+        examples=[1],
+    )
 
 
 # ----------------------------------------------------------------------------
