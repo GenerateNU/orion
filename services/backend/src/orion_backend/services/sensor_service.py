@@ -16,7 +16,8 @@ from orion_core.settings import get_settings
 class SensorService:
     def __init__(self, penelope_db: AsyncSession):
         self.repository = SensorRepository(penelope_db)
-        self.offset = timedelta(seconds=get_settings().gps_time_offset_s)
+        # GPS rows are stamped late by this much; corrected time = stamped - lag.
+        self.lag = timedelta(seconds=get_settings().gps_time_offset_s)
         self.lagged = lagged_raw_tags()
 
     async def list_sensors(self) -> list[SensorResponse]:
@@ -33,8 +34,9 @@ class SensorService:
     ) -> SensorDataResponse:
         """Every reading of `sensors` in `[start, end]`, one series per sensor.
 
-        With `gps_offset_on`, `gps_time_offset_s` is added to the times of lagged
-        sensors (see `sensor_catalog`), and the window applies to the shifted times.
+        With `gps_offset_on`, `gps_time_offset_s` is subtracted from the times of
+        lagged sensors (see `sensor_catalog`), matching the pipeline's
+        `correct_gps_time`, and the window applies to the corrected times.
         A sensor with no rows in the range (or an unknown run) comes back empty.
         """
         sensors = list(dict.fromkeys(sensors))
@@ -47,13 +49,13 @@ class SensorService:
 
         series = {name: SensorSeries(time=[], values=[]) for name in sensors}
         rows = await self.repository.list_readings(
-            run_id, sensors, start, end, lagged, self.offset
+            run_id, sensors, start, end, lagged, -self.lag
         )
         for row in rows:
             reading = row._mapping
             time = reading["time"]
             if reading["raw_tag"] in lagged:
-                time += self.offset
+                time -= self.lag
             series[reading["raw_tag"]].time.append(time)
             series[reading["raw_tag"]].values.append(reading["values"])
 

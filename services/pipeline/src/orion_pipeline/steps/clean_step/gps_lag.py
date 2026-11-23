@@ -235,7 +235,11 @@ def _segments(
         else:
             segments.append(
                 Segment(
-                    float(lo[k]), float(hi[k]), float(hop_lag[k]), int(counts[k]), quality
+                    float(lo[k]),
+                    float(hi[k]),
+                    float(hop_lag[k]),
+                    int(counts[k]),
+                    quality,
                 )
             )
     return segments

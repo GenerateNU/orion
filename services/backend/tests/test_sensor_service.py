@@ -11,7 +11,8 @@ from orion_backend.services import sensor_service
 from orion_backend.services.sensor_service import SensorService
 from orion_core.db.sensor_catalog import lagged_raw_tags, lagged_sensors
 from orion_core.queries.penelope_queries import select_readings_between
-from orion_pipeline.steps.clean_step.clean_utils import shift_sensor_time
+from orion_pipeline.steps.clean_step.clean_utils import correct_gps_time
+from orion_pipeline.steps.clean_step.gps_lag import Segment
 
 GPS = "TPU/GPS/Location"
 OTHER = "BMS/Pack/SoC"
@@ -74,9 +75,9 @@ def get_data(monkeypatch, offset_s=OFFSET.total_seconds(), **kwargs):
 
 def test_shifts_only_lagged_sensors(monkeypatch):
     response, args = get_data(monkeypatch)
-    assert response.series[GPS].time == [START + OFFSET]
+    assert response.series[GPS].time == [START - OFFSET]
     assert response.series[OTHER].time == [START]
-    assert args[-2:] == (lagged_raw_tags(), OFFSET)
+    assert args[-2:] == (lagged_raw_tags(), -OFFSET)
 
 
 @pytest.mark.parametrize(("offset_s", "kwargs"), [(2.0, {"gps_offset_on": False}), (0.0, {})])
@@ -89,9 +90,10 @@ def test_correction_can_be_turned_off(monkeypatch, offset_s, kwargs):
 
 def test_backend_matches_pipeline(monkeypatch):
     response, _ = get_data(monkeypatch)
-    cleaned = shift_sensor_time(
-        pd.DataFrame({"time": [START], "sensor": ["gps_location"]}),
-        lagged_sensors(),
-        OFFSET.total_seconds(),
+    df = pd.DataFrame({"time": [START], "sensor": ["gps_location"]})
+    cleaned = correct_gps_time(
+        df,
+        df["sensor"].isin(lagged_sensors()),
+        [Segment(0.0, float("inf"), OFFSET.total_seconds(), 0, "default")],
     )
     assert cleaned["time"].iloc[0] == response.series[GPS].time[0]
