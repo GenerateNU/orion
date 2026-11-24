@@ -12,7 +12,7 @@ type RunActionsProps = {
   onQueue: (runId: string) => void;
 };
 
-// The action column of the Runs table: what the user can do next, by status.
+// The selected run's next action in the day panel (SelectedRunDetails), by status.
 export default function RunActions({ row, isPending, onQueue }: RunActionsProps) {
   switch (row.status) {
     case "processing":

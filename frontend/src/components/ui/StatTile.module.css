@@ -45,3 +45,14 @@
   font: var(--type-body-s);
   color: var(--text-accent);
 }
+
+/* size="sm" */
+.sm {
+  gap: var(--space-1);
+  min-width: 0;
+  padding: calc(var(--space-2-5) - 1px);
+}
+
+.sm .value {
+  font: var(--type-data-readout-m);
+}

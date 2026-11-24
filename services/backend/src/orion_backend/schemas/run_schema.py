@@ -54,6 +54,31 @@ class RunResponse(BaseModel):
         return (self.end_time - self.start_time).total_seconds()
 
 
+class RunLapSummaryResponse(BaseModel):
+    """A run's lap count and fastest lap, from OrionDB `laps`, as returned by
+    `GET /runs/{run_id}/laps/summary`."""
+
+    run_id: str = Field(description="Penelope run id.", examples=["run-123"])
+    lap_count: int = Field(
+        description="Laps the lap step detected. `0` until it has run.",
+        examples=[15],
+    )
+    best_lap_id: int | None = Field(
+        description=(
+            "`lap_id` of the fastest lap (the earliest on a tie). `null` when there "
+            "are no laps."
+        ),
+        examples=[3],
+    )
+    best_lap_time_s: float | None = Field(
+        description=(
+            "The fastest lap's `end_time - start_time` in seconds. `null` when there "
+            "are no laps."
+        ),
+        examples=[39.93],
+    )
+
+
 # ----------------------------------------------------------------------------
 # DEPRECATED: User currently has no reason to create or update run
 # information. This is handled by pipeline

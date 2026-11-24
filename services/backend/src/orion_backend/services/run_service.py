@@ -14,6 +14,7 @@ from orion_backend.repositories.penelope_run_repository import PenelopeRunReposi
 from orion_backend.repositories.run_repository import RunRepository
 from orion_backend.schemas.run_schema import (
     RunCreateRequest,
+    RunLapSummaryResponse,
     RunResponse,
     RunUpdateRequest,
 )
@@ -72,6 +73,23 @@ class RunService:
         if run is None:
             raise NotFoundError("Run", run_id)
         return RunResponse.model_validate(run)
+
+    async def get_lap_summary(self, run_id: str) -> RunLapSummaryResponse:
+        """Lap count and fastest lap. A run the lap step hasn't processed has no laps
+        (count 0, best `null`); an unknown run is a NotFoundError."""
+        if await self.repository.get_run(run_id) is None:
+            raise NotFoundError("Run", run_id)
+        laps = await self.repository.list_laps(run_id)
+        # Laps come in lap order, so min() keeps the earliest lap on a tie.
+        best = min(laps, key=lambda lap: lap.end_time - lap.start_time, default=None)
+        return RunLapSummaryResponse(
+            run_id=run_id,
+            lap_count=len(laps),
+            best_lap_id=best.lap_id if best else None,
+            best_lap_time_s=(
+                (best.end_time - best.start_time).total_seconds() if best else None
+            ),
+        )
 
     # ------------------------------------------------------------------------
     # DEPRECATED: User currently has no reason to create or update run

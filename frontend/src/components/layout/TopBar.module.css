@@ -1,5 +1,9 @@
 /* Figma "Top Bar": canvas background with Blur/Backdrop, so it can sit over scrolling content. */
 .topBar {
+  /* Its own layer above the page, so popups from it (search results, menus) open
+     over content that makes its own layer, like the Runs day panel. */
+  position: relative;
+  z-index: 10;
   display: flex;
   align-items: center;
   gap: var(--space-3);

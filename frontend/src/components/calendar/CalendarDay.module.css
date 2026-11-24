@@ -1,0 +1,77 @@
+/* Figma calendar day cell. In-month days are raised tiles; neighbouring months' days
+   have no tile and muted dates. Selected is the brand outline (1.5px in Figma). */
+.day {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: var(--space-1);
+  min-width: 0;
+  padding: calc(var(--space-2) - 1.5px);
+  overflow: hidden;
+  text-align: left;
+  color: var(--text-primary);
+  background: var(--bg-raised);
+  border: 1.5px solid transparent;
+  border-radius: var(--radius-md);
+  cursor: pointer;
+}
+
+.day:hover {
+  background: var(--bg-hover);
+}
+
+.outside {
+  background: none;
+}
+
+.outside:hover {
+  background: var(--bg-raised);
+}
+
+.selected,
+.selected:hover {
+  background: var(--accent-red-subtle);
+  border-color: var(--border-brand);
+}
+
+/* Data/Value */
+.date {
+  font: var(--type-data-value);
+}
+
+.outside .date {
+  color: var(--text-disabled);
+}
+
+/* Not in the Figma frame: marks today without competing with the selection. */
+.today {
+  color: var(--text-brand);
+  font-weight: 600;
+}
+
+/* Body/S */
+.run {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  max-width: 100%;
+  font: var(--type-body-s);
+  color: var(--text-secondary);
+  white-space: nowrap;
+}
+
+/* Narrow cells cut the time short rather than overflow. */
+.time {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.more {
+  max-width: 100%;
+  overflow: hidden;
+  font: var(--type-body-s);
+  color: var(--text-muted);
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}

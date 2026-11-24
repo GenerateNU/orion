@@ -6,15 +6,17 @@ import styles from "./TopBar.module.css";
 
 type TopBarProps = {
   // Left, after the logo: a TopBarNav (Figma Context=Library) or a Breadcrumb (Context=Run).
-  children: ReactNode;
+  // Leave out for just the logo (Figma Runs · Calendar).
+  children?: ReactNode;
   // Right-aligned: e.g. Search and Avatar, or a Share Button and Avatar.
   actions?: ReactNode;
+  className?: string;
 };
 
 // Figma "Top Bar": the Orion logo, then page navigation, then actions.
-export default function TopBar({ children, actions }: TopBarProps) {
+export default function TopBar({ children, actions, className }: TopBarProps) {
   return (
-    <header className={styles.topBar}>
+    <header className={cx(styles.topBar, className)}>
       <span className={styles.logo}>
         <img src={logoUrl} alt="" width={33} height={18} />
         Orion

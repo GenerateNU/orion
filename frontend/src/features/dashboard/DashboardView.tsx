@@ -1,4 +1,3 @@
-import { useEffect } from "react";
 import { getRouteApi } from "@tanstack/react-router";
 import EmptyState from "@components/ui/EmptyState";
 import ErrorState from "@components/ui/ErrorState";
@@ -11,7 +10,6 @@ import { ApiError } from "@api/client";
 import { cx } from "@utils/classNames";
 import { formatDate, formatDuration } from "@utils/format";
 import DashboardStoreProvider from "@features/dashboard/state/DashboardStoreProvider";
-import { useLastRunStore } from "@features/dashboard/state/lastRunStore";
 import { useDashboardRun } from "@features/dashboard/state/useDashboard";
 import styles from "./DashboardView.module.css";
 import GpsToggle from "@features/dashboard/panels/GpsToggle";
@@ -35,11 +33,6 @@ export default function DashboardView() {
 // state/useDashboard.ts and data through data/useDashboardData.ts.
 function RunDashboard() {
   const { runId, run, runIsLoading, runError } = useDashboardRun();
-
-  const setLastRunId = useLastRunStore((state) => state.setLastRunId);
-  useEffect(() => {
-    if (run) setLastRunId(run.run_id);
-  }, [run, setLastRunId]);
 
   const breadcrumb = (
     <Breadcrumb>

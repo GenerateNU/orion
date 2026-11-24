@@ -37,7 +37,7 @@ Every component also accepts the props of the element it renders (`onClick`, `di
 | `ErrorState`                          | –            | `error` (any thrown value; shown via `describeError`).                                                                               |
 | `Pagination`                          | –            | `page`, `pageCount`, `onPageChange`, `label`.                                                                                        |
 | `ProgressBar`                         | –            | `label` (accessible name), `value` (0–1; leave out for indeterminate).                                                               |
-| `StatTile`                            | Stat Tile    | `label`, `value`, `delta` (`{ text, better }`: green or red) or `note` (gold, e.g. "Session best").                                  |
+| `StatTile`                            | Stat Tile    | `label`, `value`, `delta` (`{ text, better }`: green or red) or `note` (gold, e.g. "Session best"); `size="sm"` for narrow panels.   |
 
 Run-specific components built on these live next to their feature, e.g.
 `components/runs/StatusBadge` (Figma "Status Badge": `status`, `detail`). The rest of the
@@ -58,11 +58,37 @@ Figma "Runs, Laps & Signals" and "Data Viz" pieces:
   under the cursor). Charts with the same `xAxis` share one cursor. The dashboard still plots time
   until it has per-sample track %. Memoize `series`: a new array rebuilds the chart.
 
-Not built as components: Run Row (`components/runs/RunsTable` is the runs list), Session
-Timeline and the Track Map pieces (chart/map work).
-Page chrome lives in `components/layout`, e.g. `TopBar` (Figma "Top Bar"): children are a
-`TopBarNav` of `TopBarLink`s (Context=Library) or a `Breadcrumb` (Context=Run); `actions` go on
-the right (Search, Avatar, a Share Button…). The app shell still uses `Sidebar`.
+The Runs calendar page (`views/RunsView`, Figma "Runs · Calendar") is built from these. Dates are
+local `"YYYY-MM-DD"` day keys and `"YYYY-MM"` month keys (`utils/calendar.ts`).
+
+- `components/calendar/MonthCalendar` (Calendar): `month`, `runsByDay` (from `groupRunsByDay`),
+  `selectedDay`, `today`, `onSelectDay`, `onMonthChange` (±1), `onToday`. Month header with
+  previous/next and Today, then a Monday-first grid of six weeks.
+- `components/calendar/CalendarDay` (a Month grid cell): `day`, `runs`, `selected`, `isToday`,
+  `lineCount`, `onSelect`. The date, then each run's start time with a status dot, as many as
+  `lineCount` allows; when they don't all fit, the last line is "+N more".
+- `components/runs/RunStatusDot` (calendar "Ellipse"): `status`. A 6px dot in the status color: the
+  compact form of StatusBadge.
+- `components/runs/DayRunsPanel` (Runs on the selected day): `day`, `runs`, `selectedRunId`,
+  `pendingRunId`, `onSelectRun`, `onQueue`, `onClose`. The day's runs by time (scrolls past about
+  four), then the selected run's `SelectedRunDetails`.
+- `components/runs/DayRunRow` (Run Row): `row`, `selected`, `onSelect`. Route icon, date-time with
+  the full run id in an ⓘ tooltip, short run name, duration, StatusBadge. The whole row is a button.
+- `components/runs/SelectedRunDetails` (Selected run): `row`, `isPending`, `onQueue`. Run name with
+  Re-run (loaded runs), Duration / Laps / Best lap StatTiles (`useRunLapSummary`), then Open
+  dashboard, or RunActions' Queue/Retry pipeline for runs that aren't loaded.
+- `components/runs/RunSearch` (Search in the Runs top bar): `rows`, `onSelect`, `className`. Top 20
+  matches by run name and/or date (`utils/runSearch.ts`) in a scrolling listbox; ⌘K focuses it.
+
+Not built as components: Session Timeline and the Track Map pieces (chart/map work).
+Page chrome lives in `components/layout`:
+
+- `TopBar` (Figma "Top Bar"): children are a `TopBarNav` of `TopBarLink`s (Context=Library), a
+  `Breadcrumb` (Context=Run), or nothing for just the logo; `actions` go on the right (Search,
+  Avatar, a Share Button…); `className`.
+- `ResizeHandle` (–): `label`, `value`, `min`, `max`, `onResizeStart`, `onResize` (px dragged since
+  the start), `onReset` (double-click). A vertical splitter between two panes: drag it, or focus it
+  and use ←/→. The parent owns and clamps the size, e.g. the Runs day panel's width.
 
 ## Which button?
 

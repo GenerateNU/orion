@@ -12,6 +12,7 @@ from sqlalchemy.sql.dml import ReturningDelete, ReturningInsert, ReturningUpdate
 from orion_core.models.orion import (
     CleanedData,
     EstimatedCarState,
+    Lap,
     PipelineRun,
     PipelineStatus,
     Run,
@@ -119,6 +120,11 @@ def select_active_pipeline_run(run_id: str) -> Select[PipelineRun]:
 def select_run(run_id: str) -> Select[Run]:
     """One run by id."""
     return select(Run).where(Run.run_id == run_id)
+
+
+def select_laps(run_id: str) -> Select[Lap]:
+    """One run's detected laps, in lap order."""
+    return select(Lap).where(Lap.run_id == run_id).order_by(Lap.lap_id)
 
 
 def select_run_has_pipeline_runs(run_id: str) -> Select[bool]:
