@@ -24,6 +24,15 @@ export function formatDuration(seconds: number | null): string {
   return hours > 0 ? `${hours}:${rest}` : rest;
 }
 
+// "00:39.93" (mm:ss.cc): a lap time, to the hundredth. Minutes padded like formatDuration.
+export function formatLapTime(seconds: number | null): string {
+  if (seconds === null) return "—";
+  const hundredths = Math.round(seconds * 100);
+  const minutes = Math.floor(hundredths / 6000);
+  const rest = (hundredths % 6000) / 100;
+  return `${pad2(minutes)}:${rest.toFixed(2).padStart(5, "0")}`;
+}
+
 // "00d5d5a4-b368-4452-b6c7-278311190931 · Jul 11, 2026". The id is Penelope's
 // run.id, which every part of Orion uses (Penelope's numeric runId isn't unique).
 export function formatRunLabel(run: { run_id: string; time: string | null }): string {

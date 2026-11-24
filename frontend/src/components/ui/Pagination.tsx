@@ -1,3 +1,4 @@
+import { ChevronLeft, ChevronRight } from "lucide-react";
 import { cx } from "@utils/classNames";
 import styles from "./Pagination.module.css";
 
@@ -41,7 +42,7 @@ export default function Pagination({
         disabled={page <= 1}
         onClick={() => onPageChange(page - 1)}
       >
-        ←
+        <ChevronLeft aria-hidden="true" />
       </button>
       {pageSlots(page, pageCount).map((slot) =>
         typeof slot === "number" ? (
@@ -68,7 +69,7 @@ export default function Pagination({
         disabled={page >= pageCount}
         onClick={() => onPageChange(page + 1)}
       >
-        →
+        <ChevronRight aria-hidden="true" />
       </button>
     </nav>
   );

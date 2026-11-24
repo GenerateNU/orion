@@ -1,0 +1,58 @@
+/* Figma "Runs on the selected day": a surface card filling its grid cell in
+   RunsView; if its content doesn't fit, it scrolls. Padding is Figma's minus the
+   1px border. */
+.panel {
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  min-width: 0;
+  padding: calc(var(--space-4) - 1px);
+  background: var(--bg-surface);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-lg);
+}
+
+.header {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-2);
+}
+
+.text {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  gap: var(--space-1);
+  min-width: 0;
+}
+
+/* Heading/H2, tracked −0.5%. */
+.heading {
+  margin: 0;
+  font: var(--type-heading-h2);
+  letter-spacing: -0.005em;
+  color: var(--text-primary);
+}
+
+/* Body/S */
+.description {
+  margin: 0;
+  font: var(--type-body-s);
+  color: var(--text-muted);
+}
+
+/* Grows into the panel's height and scrolls past it, keeping at least one and a
+   half DayRunRows (60px each) visible. */
+.runs {
+  display: flex;
+  flex-direction: column;
+  flex: 0 1 auto;
+  gap: var(--space-2);
+  min-height: calc(1.5 * 60px + var(--space-2));
+  margin: 0;
+  padding: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  list-style: none;
+}

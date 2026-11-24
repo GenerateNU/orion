@@ -3,10 +3,11 @@ from datetime import datetime
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from orion_core.models.orion import Run
+from orion_core.models.orion import Lap, Run
 from orion_core.queries.orion_queries import (
     delete_run,
     insert_run,
+    select_laps,
     select_run,
     select_processed_run_ids,
     select_processed_runs,
@@ -37,6 +38,9 @@ class RunRepository:
 
     async def get_run(self, run_id: str) -> Run | None:
         return (await self.db.scalars(select_run(run_id))).one_or_none()
+
+    async def list_laps(self, run_id: str) -> Sequence[Lap]:
+        return (await self.db.scalars(select_laps(run_id))).all()
 
     async def has_pipeline_runs(self, run_id: str) -> bool:
         return bool(await self.db.scalar(select_run_has_pipeline_runs(run_id)))

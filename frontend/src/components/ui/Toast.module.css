@@ -1,0 +1,52 @@
+.viewport {
+  position: fixed;
+  right: var(--space-4);
+  bottom: var(--space-4);
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: var(--space-2);
+  max-width: min(480px, calc(100vw - 2 * var(--space-4)));
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  outline: none;
+  z-index: 200;
+}
+
+/* Right padding is smaller: the close button brings its own. */
+.toast {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2-5);
+  padding: calc(var(--space-2-5) - 1px) calc(var(--space-2) - 1px) calc(var(--space-2-5) - 1px)
+    calc(var(--space-3) - 1px);
+  background: var(--bg-raised);
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-popover);
+}
+
+.icon {
+  width: 20px;
+  height: 20px;
+}
+
+/* Types: class names match ToastType. */
+.success {
+  color: var(--status-success);
+}
+
+.error {
+  color: var(--status-error);
+}
+
+.info {
+  color: var(--status-info);
+}
+
+.message {
+  flex: 1;
+  font: var(--type-body-m);
+  color: var(--text-primary);
+}

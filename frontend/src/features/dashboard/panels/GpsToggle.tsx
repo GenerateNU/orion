@@ -1,4 +1,4 @@
-import Switch from "@components/ui/Switch";
+import Toggle from "@components/ui/Toggle";
 import { useDashboardActions, useShowGps } from "@features/dashboard/state/useDashboard";
 
 // Shows or hides the raw GPS readings on the track map (GpsTraceLayer). Only
@@ -7,5 +7,11 @@ export default function GpsToggle() {
   const showGps = useShowGps();
   const { setShowGps } = useDashboardActions();
 
-  return <Switch checked={showGps} onCheckedChange={setShowGps} label="Show GPS data" />;
+  return (
+    <Toggle
+      checked={showGps}
+      onChange={(e) => setShowGps(e.target.checked)}
+      label="Show GPS data"
+    />
+  );
 }

@@ -1,0 +1,29 @@
+/* Colors match StatusBadge's text color for each status. */
+.dot {
+  flex-shrink: 0;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--text-muted);
+}
+
+/* Status classes: names match RunStatus. */
+.loaded {
+  background: var(--status-success);
+}
+
+.processing {
+  background: var(--status-info);
+}
+
+.queued {
+  background: var(--text-secondary);
+}
+
+.failed {
+  background: var(--status-error);
+}
+
+.not-processed {
+  background: var(--text-muted);
+}

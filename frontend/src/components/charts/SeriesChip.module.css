@@ -1,0 +1,41 @@
+/* Padding is Figma's minus the 1px border. */
+.chip {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  padding: calc(var(--space-1) - 1px) calc(var(--space-2) - 1px);
+  font: var(--type-body-s-medium);
+  white-space: nowrap;
+  color: var(--text-primary);
+  background: var(--bg-raised);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-pill);
+}
+
+.swatch {
+  flex-shrink: 0;
+  width: 8px;
+  height: 8px;
+  border-radius: var(--radius-pill);
+}
+
+/* 12px icon in Figma; the padding and negative margin enlarge the click target only. */
+.remove {
+  display: inline-flex;
+  margin: calc(-1 * var(--space-1));
+  padding: var(--space-1);
+  color: var(--text-muted);
+  background: none;
+  border: 0;
+  border-radius: var(--radius-pill);
+  cursor: pointer;
+}
+
+.remove:hover {
+  color: var(--text-primary);
+}
+
+.remove > svg {
+  width: 12px;
+  height: 12px;
+}
