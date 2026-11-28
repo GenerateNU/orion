@@ -86,15 +86,6 @@ def select_lap_percents(
     )
 
 
-def select_laps(run_id: str) -> Select[int, datetime, datetime]:
-    """One run's laps, in order."""
-    return (
-        select(Lap.lap_id, Lap.start_time, Lap.end_time)
-        .where(Lap.run_id == run_id)
-        .order_by(Lap.lap_id)
-    )
-
-
 def select_runs() -> Select[Run]:
     """Every run, newest drive first."""
     return select(Run).order_by(Run.start_time.desc(), Run.run_id)
