@@ -1,0 +1,57 @@
+.overlay {
+  position: fixed;
+  inset: 0;
+  background: var(--bg-scrim);
+  backdrop-filter: blur(16px);
+  z-index: 100;
+}
+
+.modal {
+  position: fixed;
+  top: 50%;
+  left: 50%;
+  translate: -50% -50%;
+  display: flex;
+  flex-direction: column;
+  width: min(560px, calc(100vw - 2 * var(--space-4)));
+  max-height: calc(100vh - 2 * var(--space-4));
+  overflow: hidden;
+  background: var(--bg-surface);
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-xl);
+  box-shadow: var(--shadow-modal);
+  z-index: 100;
+}
+
+/* Right padding is smaller: the close button brings its own. */
+.header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-2);
+  padding: var(--space-3) var(--space-2-5) var(--space-3) var(--space-3-5);
+}
+
+.title {
+  margin: 0;
+  font: var(--type-heading-h2);
+  letter-spacing: -0.5px;
+  color: var(--text-primary);
+}
+
+.body {
+  min-height: 160px;
+  overflow-y: auto;
+  padding: var(--space-4) var(--space-3-5);
+  font: var(--type-body-m);
+  color: var(--text-secondary);
+  background: var(--bg-canvas);
+  border-block: 1px solid var(--border-subtle);
+}
+
+.footer {
+  display: flex;
+  justify-content: flex-end;
+  gap: var(--space-2);
+  padding: var(--space-3) var(--space-3-5);
+}

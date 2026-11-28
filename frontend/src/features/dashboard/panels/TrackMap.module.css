@@ -2,7 +2,10 @@
    handles at the window's edges and the car at its centre. Colours come from the
    theme tokens in global.css, so it works in light and dark mode. */
 
+/* Fills its pane; the map shrinks to fit the height left over by the hint. */
 .container {
+  flex: 1;
+  min-height: 0;
   display: flex;
   flex-direction: column;
   gap: var(--space-3);
@@ -18,9 +21,11 @@
   --track-casing: color-mix(in srgb, var(--text-muted) 14%, transparent);
   --track-window: var(--accent-red);
   --track-handle: var(--text-primary);
-  /* Same gold as the sensor chart lines. */
-  --track-start: #d4b06a;
+  --track-start: var(--data-start-finish);
+  --track-gps: var(--status-info);
 
+  flex: 1;
+  min-height: 0;
   width: 100%;
   display: block;
   user-select: none;
@@ -67,6 +72,26 @@
   stroke-width: 1.5;
   stroke-dasharray: 1 5;
   opacity: 0.35;
+}
+
+/* Raw GPS readings over the road (GpsTraceLayer), shown with the GPS switch. */
+.gps {
+  pointer-events: none;
+}
+
+/* One dot per reading: zero-length subpaths, so the round linecap (set on every
+   .stage path above) is the dot and the stroke width its diameter in px. */
+.gpsDots {
+  fill: none;
+  stroke: var(--track-gps);
+  stroke-width: 3;
+  opacity: 0.7;
+}
+
+.gpsStatus {
+  fill: var(--text-muted);
+  font-size: 2.4px;
+  dominant-baseline: middle;
 }
 
 /* The selected window. */
@@ -156,9 +181,9 @@
 
 .carBody {
   fill: var(--track-window);
-  stroke: #fff;
+  stroke: var(--text-on-accent);
   stroke-width: 1.75;
-  filter: drop-shadow(0 1px 2px rgb(0 0 0 / 0.5));
+  filter: drop-shadow(var(--shadow-card));
 }
 
 /* Hover time from other panels (charts). */
@@ -187,6 +212,6 @@
 
 .hint {
   margin: 0;
-  font-size: 12px;
+  font: var(--type-body-s);
   color: var(--text-muted);
 }

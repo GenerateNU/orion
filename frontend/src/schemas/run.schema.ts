@@ -14,6 +14,17 @@ export const RunResponseSchema = z.object({
 
 export type RunResponse = z.infer<typeof RunResponseSchema>;
 
+// Mirrors RunLapSummaryResponse in services/backend/.../schemas/run_schema.py.
+// Before the lap step has run: lap_count 0 and both best-lap fields null.
+export const RunLapSummaryResponseSchema = z.object({
+  run_id: z.string(),
+  lap_count: z.number().int(),
+  best_lap_id: z.number().int().nullable(),
+  best_lap_time_s: z.number().nullable(),
+});
+
+export type RunLapSummaryResponse = z.infer<typeof RunLapSummaryResponseSchema>;
+
 export type RunListFilters = {
   // Only runs with a pipeline job that succeeded with no error.
   processed?: boolean;

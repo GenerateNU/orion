@@ -1,3 +1,4 @@
+import { ArrowRight } from "lucide-react";
 import Button, { ButtonLink } from "@components/ui/Button";
 import ProgressBar from "@components/ui/ProgressBar";
 import type { RunRow } from "@utils/runRows";
@@ -11,7 +12,7 @@ type RunActionsProps = {
   onQueue: (runId: string) => void;
 };
 
-// The action column of the Runs table: what the user can do next, by status.
+// The selected run's next action in the day panel (SelectedRunDetails), by status.
 export default function RunActions({ row, isPending, onQueue }: RunActionsProps) {
   switch (row.status) {
     case "processing":
@@ -70,7 +71,7 @@ export default function RunActions({ row, isPending, onQueue }: RunActionsProps)
             disabled={!row.canOpen}
             aria-label={`Open dashboard for run ${row.runId}`}
           >
-            Open dashboard <span aria-hidden="true">→</span>
+            Open dashboard <ArrowRight aria-hidden="true" />
           </ButtonLink>
         </div>
       );

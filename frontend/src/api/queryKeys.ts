@@ -27,6 +27,7 @@ export const runDataKeys = {
   root: ["run-data"] as const,
   all: (runId: string | undefined) => [...runDataKeys.root, runId] as const,
   metrics: (runId: string | undefined) => [...runDataKeys.all(runId), "metrics"] as const,
+  lapSummary: (runId: string | undefined) => [...runDataKeys.all(runId), "lap-summary"] as const,
   state: (runId: string | undefined, range: object | undefined) =>
     [...runDataKeys.all(runId), "state", range] as const,
   sensors: (runId: string | undefined, range: object | undefined) =>

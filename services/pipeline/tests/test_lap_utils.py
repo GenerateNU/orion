@@ -348,3 +348,42 @@ def test_gate_is_crossed_once_per_lap(path, expected):
     assert gate is not None
     crossings = [at(i / 10) for i in find_crossings(x, y, gate)]
     assert len(apply_min_lap_time(at(0), crossings, CTX.lap_min_lap_time_s)) == expected
+
+
+def with_line_drift(loops: float, offsets_m: list[float]):
+    """An oval where lap k drives the bottom straight `offsets_m[k]` meters off y = 0.
+
+    Real drivers (and the state estimate) don't take the same line every lap.
+    Each lap's offset blends into the next one's along the top straight, so
+    the path stays continuous, and the bottom straight (where the gate is) is
+    driven at a constant offset.
+    """
+    x, y = oval(loops)
+    driven = 50.0 + np.arange(len(x))
+    lap = (driven // PERIMETER_M).astype(int)
+    along = driven % PERIMETER_M
+    half_turn = np.pi * TURN_RADIUS_M
+    top_start = STRAIGHT_M + half_turn
+    blend = np.clip((along - top_start) / STRAIGHT_M, 0.0, 1.0)
+    offsets = np.asarray(offsets_m)
+    return x, y + offsets[lap] + blend * (offsets[lap + 1] - offsets[lap])
+
+
+def test_default_gate_counts_laps_on_different_lines():
+    # Run 80a58216-3dae-4c3d-ac69-f4afff3f928f: the car's line spread about
+    # 20 m across the track at the gate, and a 10 m gate counted 3 of 8 passes.
+    # The first two laps share a line, so the gate is placed at the start.
+    offsets = [0.0, 0.0, -9.0, 8.0, -6.0, 9.0, 0.0]
+    x, y = with_line_drift(5.5, offsets)
+    gate = gate_search(x, y)
+    assert gate is not None
+    assert (gate.x, gate.y) == pytest.approx((0.0, 0.0))
+
+    crossings = find_crossings(x, y, gate)
+    assert len(crossings) == 5
+    # The lateral offset of each pass is the lap's line.
+    assert y[crossings].tolist() == pytest.approx(offsets[1:6])
+
+    # The old 10 m gate only caught the passes on the first lap's line.
+    narrow = Gate(gate.x, gate.y, gate.heading_x, gate.heading_y, half_width_m=5.0)
+    assert len(find_crossings(x, y, narrow)) == 1

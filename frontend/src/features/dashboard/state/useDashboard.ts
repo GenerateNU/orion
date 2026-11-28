@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef } from "react";
+import { useCallback, useEffect, useMemo, useRef } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { getRouteApi } from "@tanstack/react-router";
 import { useStore } from "zustand";
@@ -51,6 +51,11 @@ export const useVisibleWindow = (): TimeWindow | null => {
   return draft ?? committed;
 };
 
+// The graph tab named in ?view=, if any. It may not exist (a stale link): callers
+// fall back to the saved active tab.
+export const useGraphView = (): string | undefined =>
+  dashboardRoute.useSearch({ select: (search) => search.view });
+
 // For React-rendered highlights (lap list rows). Fast-moving hover time has no
 // hook like this on purpose: use useHoverTimeSubscription.
 export const useHoverLap = (): number | null =>
@@ -72,6 +77,28 @@ export const useHoverTimeSubscription = (onChange: (time: RunTime | null) => voi
       }),
     [store],
   );
+};
+
+// For the GPS switch itself. The map layer it controls uses
+// useShowGpsSubscription instead, so toggling never re-renders the map.
+export const useShowGps = (): boolean => useStore(useDashboardStoreApi(), (state) => state.showGps);
+
+// Calls `onChange` when the GPS switch is toggled, without re-rendering. Read
+// the current value with the returned getter (e.g. for the first render).
+export const useShowGpsSubscription = (onChange: (show: boolean) => void) => {
+  const store = useDashboardStoreApi();
+  const onChangeRef = useRef(onChange);
+  useEffect(() => {
+    onChangeRef.current = onChange;
+  });
+  useEffect(
+    () =>
+      store.subscribe((state, previous) => {
+        if (state.showGps !== previous.showGps) onChangeRef.current(state.showGps);
+      }),
+    [store],
+  );
+  return useCallback(() => store.getState().showGps, [store]);
 };
 
 // Stable callbacks that change the shared state. They read run and lap data from
@@ -109,6 +136,7 @@ export const useDashboardActions = () => {
             t: windowForLaps(laps, prev.t),
           };
         },
+        resetScroll: false,
       });
     };
 
@@ -122,6 +150,7 @@ export const useDashboardActions = () => {
       navigate({
         search: (prev: DashboardSearch): DashboardSearch => ({ ...prev, t: t ?? undefined }),
         replace: true,
+        resetScroll: false,
       });
     };
 
@@ -137,8 +166,16 @@ export const useDashboardActions = () => {
       // On release: clamped, written to the URL, and the detail data fetched.
       commitWindow: (window: TimeWindow) => setWindow(window),
       resetWindow: () => setWindow(null),
+      // Switching graph tabs replaces the history entry, like a window change.
+      setGraphView: (view: string) =>
+        navigate({
+          search: (prev: DashboardSearch): DashboardSearch => ({ ...prev, view }),
+          replace: true,
+          resetScroll: false,
+        }),
       setHoverTime: (time: RunTime | null) => store.getState().setHoverTime(time),
       setHoverLap: (lap: number | null) => store.getState().setHoverLap(lap),
+      setShowGps: (show: boolean) => store.getState().setShowGps(show),
     };
   }, [runId, navigate, store, queryClient]);
 };

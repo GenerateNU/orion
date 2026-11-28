@@ -1,4 +1,3 @@
-import { useEffect } from "react";
 import { getRouteApi } from "@tanstack/react-router";
 import EmptyState from "@components/ui/EmptyState";
 import ErrorState from "@components/ui/ErrorState";
@@ -8,11 +7,12 @@ import PageHeader from "@components/layout/PageHeader";
 import StatusBadge from "@components/runs/StatusBadge";
 import { ButtonLink } from "@components/ui/Button";
 import { ApiError } from "@api/client";
+import { cx } from "@utils/classNames";
 import { formatDate, formatDuration } from "@utils/format";
 import DashboardStoreProvider from "@features/dashboard/state/DashboardStoreProvider";
-import { useLastRunStore } from "@features/dashboard/state/lastRunStore";
 import { useDashboardRun } from "@features/dashboard/state/useDashboard";
 import styles from "./DashboardView.module.css";
+import GpsToggle from "@features/dashboard/panels/GpsToggle";
 import { TrackMap } from "@features/dashboard/panels/TrackMap";
 import SensorChartsPanel from "@components/charts/SensorChartPanel";
 
@@ -33,11 +33,6 @@ export default function DashboardView() {
 // state/useDashboard.ts and data through data/useDashboardData.ts.
 function RunDashboard() {
   const { runId, run, runIsLoading, runError } = useDashboardRun();
-
-  const setLastRunId = useLastRunStore((state) => state.setLastRunId);
-  useEffect(() => {
-    if (run) setLastRunId(run.run_id);
-  }, [run, setLastRunId]);
 
   const breadcrumb = (
     <Breadcrumb>
@@ -87,13 +82,16 @@ function RunDashboard() {
 
       <div className={styles.layout}>
         <section className={styles.panel} aria-labelledby="track-map-heading">
-          <h2 id="track-map-heading" className={styles.panelHeading}>
-            Track position
-          </h2>
+          <div className={styles.panelHeader}>
+            <h2 id="track-map-heading" className={styles.panelHeading}>
+              Track position
+            </h2>
+            <GpsToggle />
+          </div>
           <TrackMap />
         </section>
-        <section className={styles.panel} aria-labelledby="sensor-charts-heading">
-          <h2 id="sensor-charts-heading" className={styles.panelHeading}>
+        <section className={cx(styles.panel, styles.right)} aria-labelledby="sensor-charts-heading">
+          <h2 id="sensor-charts-heading" className={styles.visuallyHidden}>
             Sensors
           </h2>
           <SensorChartsPanel />

@@ -1,0 +1,67 @@
+/* Shared by Input and Select: Figma's label + field + helper stack. */
+
+.wrapper {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  min-width: 0;
+}
+
+.label {
+  font: var(--type-label-m);
+  letter-spacing: var(--tracking-label);
+  text-transform: uppercase;
+  color: var(--text-muted);
+}
+
+/* The bordered box. Padding is Figma's minus the 1px border. */
+.field {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  min-height: 36px;
+  padding: calc(var(--space-2-5) - 1px) calc(var(--space-3) - 1px);
+  font: var(--type-body-m);
+  color: var(--text-primary);
+  background: var(--bg-surface);
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-md);
+}
+
+.field svg {
+  width: 20px;
+  height: 20px;
+  color: var(--text-muted);
+}
+
+.field:focus-within,
+.field[data-state="open"] {
+  border-color: var(--focus-ring);
+}
+
+/* Focus/Ring on the box instead of the bare input inside it. */
+.field:has(:focus-visible),
+.field:focus-visible {
+  outline: 3px solid color-mix(in srgb, var(--focus-ring) 60%, transparent);
+}
+
+.field:has([aria-invalid="true"]) {
+  border-color: var(--status-error);
+}
+
+.field:has(:disabled),
+.field:disabled {
+  color: var(--text-disabled);
+  background: var(--bg-raised);
+  border-color: var(--border-subtle);
+  cursor: not-allowed;
+}
+
+.helper {
+  font: var(--type-body-s);
+  color: var(--text-muted);
+}
+
+.error {
+  color: var(--status-error);
+}

@@ -1,0 +1,28 @@
+/* The bare <input> inside a Field box (Input, Search). */
+.input {
+  flex: 1;
+  min-width: 0;
+  padding: 0;
+  color: inherit;
+  background: none;
+  border: none;
+  outline: none;
+}
+
+/* The ring goes on the surrounding box (Field, Search), not the bare input. Needs
+   the extra specificity: global.css loads last, so its :focus-visible would win. */
+.input:focus-visible {
+  outline: none;
+}
+
+.input::placeholder {
+  color: var(--text-muted);
+}
+
+.input:disabled {
+  cursor: not-allowed;
+}
+
+.timestamp {
+  font: var(--type-data-value);
+}

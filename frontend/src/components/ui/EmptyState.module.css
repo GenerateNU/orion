@@ -1,0 +1,42 @@
+.empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--space-2-5);
+  padding: var(--space-3);
+  text-align: center;
+}
+
+/* Figma "Empty State" card. Padding is Figma's minus the 1px border. */
+.card {
+  padding: calc(var(--space-6) - 1px) calc(var(--space-5) - 1px);
+  border: 1px dashed var(--border-default);
+  border-radius: var(--radius-lg);
+}
+
+.icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 48px;
+  height: 48px;
+  color: var(--text-brand);
+  background: var(--accent-red-subtle);
+  border-radius: var(--radius-lg);
+}
+
+.icon svg {
+  width: 24px;
+  height: 24px;
+}
+
+.title {
+  font: var(--type-heading-h3);
+  color: var(--text-primary);
+}
+
+.message {
+  max-width: 40ch;
+  font: var(--type-body-m);
+  color: var(--text-muted);
+}

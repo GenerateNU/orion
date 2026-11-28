@@ -1,0 +1,28 @@
+/* Overrides Checkbox's inline layout (this module loads after Checkbox's). */
+.row {
+  display: flex;
+  gap: var(--space-2-5);
+  padding: var(--space-2) var(--space-2-5);
+  font: var(--type-data-value);
+  border-radius: var(--radius-md);
+}
+
+.row:hover {
+  background: var(--bg-hover);
+}
+
+.row:has(:checked) {
+  background: var(--bg-active);
+}
+
+.name {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.unit {
+  color: var(--text-muted);
+}

@@ -1,0 +1,66 @@
+/* Figma "Calendar · <Month>": a surface card. Padding is Figma's minus the 1px border. */
+.calendar {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  min-width: 0;
+  padding: calc(var(--space-4) - 1px);
+  background: var(--bg-surface);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-lg);
+  overflow: hidden;
+}
+
+.header {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+/* Heading/H2, tracked −0.5%. A fixed width and tabular digits, so the arrows
+   after it don't move as the month changes. */
+.heading {
+  min-width: 5em;
+  font-variant-numeric: tabular-nums;
+  margin: 0 var(--space-1) 0 0;
+  font: var(--type-heading-h2);
+  letter-spacing: -0.005em;
+  color: var(--text-primary);
+}
+
+.today {
+  margin-left: auto;
+}
+
+/* Label/S */
+.weekdays,
+.grid {
+  display: grid;
+  grid-template-columns: repeat(7, minmax(0, 1fr));
+  gap: var(--space-2);
+}
+
+/* The weeks share the card's height equally, however short the window. */
+.grid {
+  flex: 1;
+  min-height: 0;
+  grid-auto-rows: minmax(0, 1fr);
+}
+
+.weekdays {
+  font: var(--type-label-s);
+  letter-spacing: var(--tracking-label);
+  text-transform: uppercase;
+  color: var(--text-muted);
+}
+
+@media (max-width: 768px) {
+  .calendar {
+    padding: calc(var(--space-3) - 1px);
+  }
+
+  .weekdays,
+  .grid {
+    gap: var(--space-1);
+  }
+}

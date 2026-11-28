@@ -1,0 +1,12 @@
+/* Matches the user's light/dark theme (a raised surface) rather than Figma's
+   inverted tooltip. Padding is the design's minus the 1px border. */
+.tooltip {
+  padding: calc(var(--space-1) - 1px) calc(var(--space-2) - 1px);
+  font: var(--type-body-s-medium);
+  color: var(--text-primary);
+  background: var(--bg-raised);
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-sm);
+  box-shadow: var(--shadow-popover);
+  z-index: 100;
+}

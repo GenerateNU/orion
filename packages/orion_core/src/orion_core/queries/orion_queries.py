@@ -148,6 +148,11 @@ def select_run(run_id: str) -> Select[Run]:
     return select(Run).where(Run.run_id == run_id)
 
 
+def select_laps(run_id: str) -> Select[Lap]:
+    """One run's detected laps, in lap order."""
+    return select(Lap).where(Lap.run_id == run_id).order_by(Lap.lap_id)
+
+
 def select_run_has_pipeline_runs(run_id: str) -> Select[bool]:
     """Whether any pipeline job references the run (its FK blocks a delete)."""
     return select(exists().where(PipelineRun.run_id == run_id))

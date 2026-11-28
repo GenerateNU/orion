@@ -1,18 +1,18 @@
+/* Left-aligned under the selected run's stats (day panel). */
 .actions {
   display: inline-flex;
   align-items: center;
-  justify-content: flex-end;
+  justify-content: flex-start;
   gap: var(--space-2);
 }
 
 .stacked {
   flex-direction: column;
-  align-items: flex-end;
+  align-items: flex-start;
   gap: 6px;
 }
 
 .meta {
-  font-family: var(--font-mono);
-  font-size: 12px;
+  font: var(--type-data-code);
   color: var(--text-muted);
 }
