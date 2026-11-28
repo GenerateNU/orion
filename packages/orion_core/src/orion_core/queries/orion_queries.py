@@ -75,10 +75,12 @@ def select_runs() -> Select[Run]:
 
 
 def select_processed_run_ids() -> Select[str]:
-    """Ids of runs with at least one pipeline job that succeeded without an error."""
+    """Ids of runs with at least one whole-pipeline job that succeeded without an
+    error. Single-step jobs don't count: one step alone doesn't process a run."""
     return (
         select(PipelineRun.run_id)
         .where(
+            PipelineRun.step.is_(None),
             PipelineRun.status == PipelineStatus.SUCCEEDED,
             PipelineRun.error.is_(None),
         )

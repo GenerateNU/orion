@@ -11,6 +11,8 @@ export const PipelineRunResponseSchema = z.object({
   // Pipeline job id, not the Penelope run id.
   id: z.number().int(),
   run_id: z.string(),
+  // The step this job started from (it and every later step ran); null for the whole pipeline.
+  step: z.string().nullable(),
   status: PipelineStatusSchema,
   error: z.string().nullable(),
   queued_at: DateTimeSchema,

@@ -22,6 +22,9 @@ class PipelineRun(Base):
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
     run_id: Mapped[str] = mapped_column(ForeignKey("runs.run_id"))
+    # The step this job starts from (e.g. "state_step"); it and every later step
+    # run. None runs the whole pipeline.
+    step: Mapped[str | None] = mapped_column(String)
     status: Mapped[str] = mapped_column(String, default=PipelineStatus.QUEUED)
     # Failure message; None until a job fails.
     error: Mapped[str | None] = mapped_column(String)

@@ -5,7 +5,7 @@ import LoadingState from "@components/ui/LoadingState";
 import Breadcrumb, { BreadcrumbCurrent, BreadcrumbLink } from "@components/layout/Breadcrumb";
 import PageHeader from "@components/layout/PageHeader";
 import StatusBadge from "@components/runs/StatusBadge";
-import { ButtonLink } from "@components/ui/Button";
+import Button, { ButtonLink } from "@components/ui/Button";
 import { ApiError } from "@api/client";
 import { cx } from "@utils/classNames";
 import { formatDate, formatDuration } from "@utils/format";
@@ -14,6 +14,7 @@ import { useDashboardRun } from "@features/dashboard/state/useDashboard";
 import styles from "./DashboardView.module.css";
 import GpsToggle from "@features/dashboard/panels/GpsToggle";
 import { TrackMap } from "@features/dashboard/panels/TrackMap";
+import { useRunPipeline } from "@hooks/useRunPipeline";
 import SensorChartsPanel from "@components/charts/SensorChartPanel";
 
 const dashboardRoute = getRouteApi("/runs/$runId/dashboard");
@@ -33,6 +34,7 @@ export default function DashboardView() {
 // state/useDashboard.ts and data through data/useDashboardData.ts.
 function RunDashboard() {
   const { runId, run, runIsLoading, runError } = useDashboardRun();
+  const pipeline = useRunPipeline(runId);
 
   const breadcrumb = (
     <Breadcrumb>
@@ -74,9 +76,14 @@ function RunDashboard() {
         badge={<StatusBadge status="loaded" />}
         description={`${formatDate(run.run_time ?? run.start_time)} · ${formatDuration(run.duration_s)}`}
         actions={
-          <ButtonLink variant="secondary" to="/runs">
-            <span aria-hidden="true">←</span> Back to runs
-          </ButtonLink>
+          <div className={styles.actions}>
+            <Button disabled={pipeline.isBusy} onClick={pipeline.runPipeline}>
+              {pipeline.isBusy ? "Running…" : "Run pipeline"}
+            </Button>
+            <ButtonLink variant="secondary" to="/runs">
+              <span aria-hidden="true">←</span> Back to runs
+            </ButtonLink>
+          </div>
         }
       />
 

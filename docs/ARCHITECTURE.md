@@ -220,7 +220,8 @@ for page in extract(ctx):
 
 Steps register themselves with `@register_step` and are imported in
 `steps/__init__.py`. `PipelineRunner.run_all` runs them in topological order of
-`depends_on` (`graphlib.TopologicalSorter`). Each step gets a `RunContext`
+`depends_on` (`graphlib.TopologicalSorter`); `run_from` runs one step and every
+step after it in that order. Each step gets a `RunContext`
 (the `run_id` plus per-run config such as `gps_time_offset_s`) instead of a bare
 id, so new per-run settings don't change every step's signature.
 
@@ -360,9 +361,6 @@ How the dashboard handles data:
 
 Things that are missing or behave in surprising ways in the current code:
 
-- **Only the clean step exists.** State estimation, lap detection and metrics
-  are not built. `PipelineRunner.run_step` and `run_from` raise
-  `NotImplementedError`, so every job runs every step.
 - **`runs.start_time` / `end_time` are never written.** The model and API docs
   say the clean step fills them, but it doesn't, so they stay `NULL` and
   `duration_s` is always `null`.

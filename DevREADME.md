@@ -153,8 +153,8 @@ All three entry points are in one CLI, `orion-pipeline`:
 | Command                          | What it does                                                       |
 | -------------------------------- | ------------------------------------------------------------------ |
 | `orion-pipeline api`             | Thin async FastAPI app: enqueue a job, list/get jobs. Never runs pandas. |
-| `orion-pipeline worker`          | Sync loop: claim the oldest queued job, run every step, mark it finished/failed |
-| `orion-pipeline run <run_id>`    | Run the whole pipeline for one run in the foreground (debugging, backfills). `make pipeline-run RUN_ID=…` |
+| `orion-pipeline worker`          | Sync loop: claim the oldest queued job, run its steps, mark it finished/failed |
+| `orion-pipeline run <run_id> [--from <step>]` | Run the pipeline for one run in the foreground (debugging, backfills); `--from` starts at that step. `make pipeline-run RUN_ID=…` |
 
 ```
 api/       trigger/status API (pipeline_api.py + routes/)
@@ -171,7 +171,8 @@ How a job flows:
    the pipeline API inserts a `queued` row into `pipeline_runs`. If the run
    already has a queued or running job, it returns 409 instead.
 2. The worker claims the job with `SELECT … FOR UPDATE SKIP LOCKED` and marks it `running`.
-3. `PipelineRunner` runs every registered step in topological order.
+3. `PipelineRunner` runs the steps in topological order: all of them, or, if the job
+   has a `step`, that step and every step after it (`run_from`).
 4. The job is marked `succeeded`, or `failed` with the error message. The frontend polls its status.
 
 **Steps** subclass `PipelineStep` and are registered with `@register_step`. Each
@@ -180,6 +181,11 @@ idempotent), then `extract` → `transform` → `write` one page at a time
 (`PIPELINE_PAGE_SIZE` rows), so a run never has to fit in memory. Steps never
 hand DataFrames to each other. Each step writes its output table, and the next
 step reads that table back, so any step can be re-run on its own.
+
+Re-running a step always re-runs the steps after it too, since they read its
+output. The dashboard's **Run pipeline** button re-runs everything; to start
+from a later step, `POST /runs` with `{"run_id": …, "step": "state_step"}` or use
+`orion-pipeline run <run_id> --from state_step`.
 
 | Step         | Reads                  | Writes                | Status          |
 | ------------ | ---------------------- | --------------------- | --------------- |
