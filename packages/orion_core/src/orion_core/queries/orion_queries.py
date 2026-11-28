@@ -13,6 +13,7 @@ from orion_core.models.orion import (
     CleanedData,
     EstimatedCarState,
     Lap,
+    LapProgress,
     PipelineRun,
     PipelineStatus,
     Run,
@@ -66,6 +67,22 @@ def select_estimated_positions_between(
             EstimatedCarState.time.between(start, end),
         )
         .order_by(EstimatedCarState.time)
+    )
+
+
+def select_lap_percents(
+    run_id: str, lap_ids: Iterable[int], start_percent: float, end_percent: float
+) -> Select[int, datetime, float]:
+    """Every estimated position in the given laps of one run with `lap_percent` in
+    [start_percent, end_percent], ordered by lap, then time."""
+    return (
+        select(LapProgress.lap_id, LapProgress.time, LapProgress.lap_percent)
+        .where(
+            LapProgress.run_id == run_id,
+            LapProgress.lap_id.in_(lap_ids),
+            LapProgress.lap_percent.between(start_percent, end_percent),
+        )
+        .order_by(LapProgress.lap_id, LapProgress.time)
     )
 
 

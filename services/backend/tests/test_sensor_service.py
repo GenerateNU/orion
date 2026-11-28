@@ -66,7 +66,7 @@ def get_data(monkeypatch, offset_s=OFFSET.total_seconds(), **kwargs):
         calls.append(args)
         return [SimpleNamespace(_mapping=row) for row in rows]
 
-    service = SensorService(MagicMock())
+    service = SensorService(MagicMock(), MagicMock())
     monkeypatch.setattr(service.repository, "list_readings", list_readings)
     response = asyncio.run(service.get_sensor_data("run", [GPS, OTHER], START, END, **kwargs))
     return response, calls[0]

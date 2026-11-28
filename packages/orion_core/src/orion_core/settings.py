@@ -10,7 +10,9 @@ ENV_FILE = ".env"
 
 
 class Settings(BaseSettings):
-    model_config = SettingsConfigDict(env_file=ENV_FILE, extra="ignore")
+    model_config = SettingsConfigDict(
+        env_file=ENV_FILE, extra="ignore", env_ignore_empty=True
+    )
 
     # OrionDB: ours, read/write. Engines add the driver (+asyncpg / +psycopg).
     orion_database_url: str
